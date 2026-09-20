@@ -1,0 +1,30 @@
+# Render Blueprint: creates the web service and a Postgres database in one click.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: get-secure-crm
+    runtime: docker
+    plan: starter
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: get-secure-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: APP_TIMEZONE
+        value: Pacific/Auckland
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_ADMIN_NAME
+        value: Admin
+
+databases:
+  - name: get-secure-db
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "16"

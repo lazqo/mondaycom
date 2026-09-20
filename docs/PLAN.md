@@ -1,10 +1,11 @@
-# Git Secure CRM — Build Plan
+# Get Secure CRM — Build Plan
 
-A monday.com-style CRM built from scratch for Git Secure, with lead ingestion from
+A monday.com-style CRM built from scratch for Get Secure, with lead ingestion from
 Titan email, AI lead classification, Plaud transcript capture, Apple Calendar sync,
 a native calendar, and a dispatch system.
 
-Status: **plan only, nothing built yet.** Repo is empty as of this document.
+Status: **v0.1 in progress.** See "Build log" at the end for what exists today and how it deviates
+from the original plan.
 
 ---
 
@@ -21,7 +22,7 @@ One web app with four pillars:
 
 ### Assumptions (change these and the plan changes)
 
-- Git Secure is a security services / installs business: leads come in by email, work is done on site by field staff, so "dispatch" means assigning jobs to people with a time window and a location.
+- Get Secure is a security services / installs business: leads come in by email, work is done on site by field staff, so "dispatch" means assigning jobs to people with a time window and a location.
 - Small team at launch (1–10 users), single company tenant. Multi-tenant SaaS is out of scope; the schema keeps a `workspace_id` so it can be added later.
 - Timezone: Pacific/Auckland. All storage in UTC, all display in the user's timezone.
 - One Titan mailbox to start (e.g. `info@…` or `sales@…`); more mailboxes later is a config change, not a rebuild.
@@ -318,3 +319,40 @@ Questions to answer before Phase 0 (defaults in bold if unanswered):
 ## 10. Next step
 
 Start Phase 0: scaffold the monorepo, schema, auth, Docker Compose, and CI on this branch, then begin Phase 1's board engine.
+
+
+---
+
+## Build log
+
+### v0.1 — core workflow slice (2026-09-20)
+
+Scope was deliberately narrowed to the Get Secure workflow **Lead → Customer → Quote → Job → Calendar**
+instead of the full board engine. What shipped:
+
+- Login (email + password, signed cookie sessions), admin user management.
+- Leads board with the columns Lead | Company | Phone | Email | Service | Site | Status | Assigned To |
+  Follow-up | Last Contact | Source, grouped by status (New → Contacted → Site Visit → Quote Required →
+  Quote Sent → Won / Lost), inline cell editing, and a drag-and-drop kanban view.
+- Lead detail page with full edit form, activity log, and **Convert** (new or existing customer, optional
+  job, optional draft quote, optional mark-as-won).
+- Customers (contacts) list/detail with linked leads, quotes and jobs.
+- Quotes with line items and GST; marking a quote sent/accepted/declined moves the originating lead to
+  Quote Sent / Won / Lost, and accepting creates the job if none exists.
+- Jobs with status flow and a **Schedule** card that creates/updates a calendar event.
+- Built-in calendar (month + week), standalone events, job events link back to the job.
+- PostgreSQL schema via Drizzle migrations; Dockerfile; Railway/Render configs; GitHub Actions CI
+  running lint, typecheck, unit tests and a Playwright e2e of the whole flow.
+
+Deviations from the plan, and why:
+
+- **Typed tables instead of the generic board engine.** Leads/contacts/quotes/jobs are ordinary tables
+  with fixed columns. This got a usable CRM out in one slice; the generic column/board engine is still
+  the plan for later phases and the typed tables become its "system columns" when it lands.
+- **Server actions instead of tRPC**, single Next.js app instead of a monorepo. Less scaffolding for
+  the same result at this size. The worker for email ingestion will be a second entry point in this
+  repo, sharing `src/db` and `src/lib`.
+- **No Redis yet.** Nothing needs a queue until IMAP ingestion arrives.
+
+Next: Titan email ingestion (IMAP IDLE worker → inbox → Claude classification → lead created with the
+original email attached), then dedupe against existing contacts.
