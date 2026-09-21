@@ -12,7 +12,7 @@ process.env.AI_PROVIDER = "rules";
 process.env.AI_LEAD_CONFIDENCE_THRESHOLD = "0.75";
 
 const { db } = await import("@/db");
-const { mailboxes, emails, emailThreads, leads, contacts } = await import("@/db/schema");
+const { mailboxes, emails, emailThreads, leads, contacts, users } = await import("@/db/schema");
 const { encryptSecret } = await import("@/lib/crypto");
 const { ingestRawMessage } = await import("@/lib/email/store");
 const { processEmail, createLeadFromEmail } = await import("@/lib/email/pipeline");
@@ -46,9 +46,16 @@ const dovecotUp = await (async () => {
 })();
 
 let mailboxId: string;
+let userId: string;
 const createdLeadIds: string[] = [];
 
 beforeAll(async () => {
+  // A user to attribute replies to (CI runs this suite before the seed).
+  const [u] = await db
+    .insert(users)
+    .values({ email: `it-${RUN}@test.local`, name: "Integration Tester", passwordHash: "x", role: "member" })
+    .returning({ id: users.id });
+  userId = u.id;
   const [m] = await db
     .insert(mailboxes)
     .values({
@@ -74,6 +81,7 @@ afterAll(async () => {
   const ours = rows.filter((r) => r.emailThreadId && threadIds.has(r.emailThreadId)).map((r) => r.id).concat(createdLeadIds);
   if (ours.length) await db.delete(leads).where(inArray(leads.id, ours));
   await db.delete(mailboxes).where(eq(mailboxes.id, mailboxId));
+  await db.delete(users).where(eq(users.id, userId));
 });
 
 describe("store + classify", () => {
@@ -243,7 +251,7 @@ describe.skipIf(!dovecotUp)("IMAP + SMTP against local Dovecot", () => {
         to: [addr("sarah@harbourview.co.nz")],
         subject: "Re: CCTV quote for apartment block",
         text: "Hi Sarah, Tuesday 2pm works for us. See you then.",
-        sentById: (await db.query.users.findFirst())!.id,
+        sentById: userId,
         fromName: "Get Secure",
       });
       expect(sink.messages).toHaveLength(1);
