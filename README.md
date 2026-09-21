@@ -27,8 +27,12 @@ lead → site visit → quote → job, one-click decisions on the Needs-review l
 login throttling, private attachment/photo routes, a health endpoint and System status page, backup
 scripts and runbooks, and a production `.env` checklist.
 
-See [docs/PLAN.md](docs/PLAN.md) for the roadmap, [docs/DEPLOY.md](docs/DEPLOY.md) for staging
-deployment, [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for connecting a mailbox,
+**Going live? Start with [docs/DEPLOYMENT_HANDOFF.md](docs/DEPLOYMENT_HANDOFF.md)** — one document
+covering hosting, services, every environment variable, first login, the Titan mailbox, the Anthropic
+key, verification, backups, health and rollback.
+
+See also [docs/PLAN.md](docs/PLAN.md) for the roadmap, [docs/DEPLOY.md](docs/DEPLOY.md) for other
+hosting options, [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for mailbox detail,
 and [docs/runbooks/staging-checkpoint.md](docs/runbooks/staging-checkpoint.md) for the real-mailbox + live-AI checkpoint.
 
 ## Stack
@@ -45,6 +49,7 @@ docker compose up -d           # Postgres on localhost:5432 (or use your own)
 cp .env.example .env           # then set AUTH_SECRET and SEED_ADMIN_PASSWORD
 pnpm db:migrate                # apply SQL migrations in ./drizzle
 pnpm db:seed -- --sample       # optional: example leads (or just open /setup to create the admin)
+pnpm secrets:check             # fails if any credential is tracked by git
 pnpm dev                       # http://localhost:3000
 ```
 

@@ -32,6 +32,8 @@ jobs:
       AI_PROVIDER: rules
     steps:
       - uses: actions/checkout@v4
+      - name: Check that no secrets are committed
+        run: bash scripts/check-secrets.sh
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
