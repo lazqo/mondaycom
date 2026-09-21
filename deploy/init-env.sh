@@ -45,7 +45,9 @@ set_var() {
 
 set_var DOMAIN "$DOMAIN"
 set_var APP_URL "https://$DOMAIN"
-set_var POSTGRES_PASSWORD "$(openssl rand -base64 32)"
+# Hex, not base64: this one is embedded in postgres://user:PASSWORD@host, and base64's "/"
+# terminates the authority section, producing an unparseable URL. 64 hex chars = 256 bits.
+set_var POSTGRES_PASSWORD "$(openssl rand -hex 32)"
 set_var AUTH_SECRET "$(openssl rand -base64 32)"
 set_var ENCRYPTION_KEY "$(openssl rand -base64 32)"
 set_var HEALTH_TOKEN "$(openssl rand -hex 16)"
