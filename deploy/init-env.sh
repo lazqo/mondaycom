@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create /opt/getsecure/.env from the template, with strong secrets generated on this machine.
 #
-#   bash deploy/init-env.sh crm.getsecure.co.nz
+#   bash deploy/init-env.sh hermes.aucklandsecuritysystems.co.nz
 #
 # Safe to read: it never prints the secrets. Refuses to overwrite an existing .env, because
 # regenerating AUTH_SECRET signs everyone out and regenerating ENCRYPTION_KEY makes the stored
@@ -11,11 +11,11 @@ set -euo pipefail
 DOMAIN="${1:-}"
 if [ -z "$DOMAIN" ]; then
   echo "Usage: bash deploy/init-env.sh <domain>" >&2
-  echo "Example: bash deploy/init-env.sh crm.getsecure.co.nz" >&2
+  echo "Example: bash deploy/init-env.sh hermes.aucklandsecuritysystems.co.nz" >&2
   exit 1
 fi
 case "$DOMAIN" in
-  http*|*/*) echo "Give the bare domain, not a URL: crm.getsecure.co.nz" >&2; exit 1 ;;
+  http*|*/*) echo "Give the bare domain, not a URL: hermes.aucklandsecuritysystems.co.nz" >&2; exit 1 ;;
   *.*) : ;;
   *) echo "'$DOMAIN' does not look like a domain name." >&2; exit 1 ;;
 esac

@@ -10,7 +10,7 @@ real values. `pnpm env:check` validates a local `.env` against this list.
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://user:pass@host:5432/getsecure?sslmode=require` | PostgreSQL 16. Holds everything: customers, leads, emails, attachments, job photos. Managed hosts inject this. |
 | `AUTH_SECRET` | `openssl rand -base64 32` | Signs login cookies. Changing it signs everyone out. Keep it out of logs. |
-| `APP_URL` | `https://crm.getsecure.co.nz` | Public URL, used in staff notification emails and links. |
+| `APP_URL` | `https://hermes.aucklandsecuritysystems.co.nz` | Public URL, used in staff notification emails and links. |
 | `APP_TIMEZONE` | `Pacific/Auckland` | "Today", follow-up dates, business hours and reminder timing all use this. |
 
 ## Email ingestion (Titan)

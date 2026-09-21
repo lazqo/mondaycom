@@ -46,9 +46,10 @@ backups. Sections 11 and 12 cover those and are not optional.
    That installs Docker and Docker Compose for you. A plain Ubuntu 24.04 works too; you would then
    install Docker yourself from docs.docker.com.
 3. Set the root password (or better, add your SSH key) during setup, and note the server's IP address.
-4. **Point your domain at it.** In whatever manages DNS for `getsecure.co.nz`, add an `A` record for
-   `crm` pointing to the VPS IP address. Wait until `ping crm.getsecure.co.nz` answers with that IP
-   before doing section 3, because the HTTPS certificate cannot be issued until DNS resolves.
+4. **Point your domain at it.** In whatever manages DNS for `aucklandsecuritysystems.co.nz`, add an
+   `A` record for `hermes` pointing to the VPS IP address. Wait until
+   `ping hermes.aucklandsecuritysystems.co.nz` answers with that IP before doing section 3, because
+   the HTTPS certificate cannot be issued until DNS resolves.
 5. In hPanel → VPS → **Firewall**, allow inbound `22` (SSH), `80` (HTTP) and `443` (HTTPS), and
    nothing else. PostgreSQL must never be reachable from the internet; the Compose file already keeps
    it on an internal network only.
@@ -65,7 +66,7 @@ git clone https://github.com/lazqo/mondaycom.git /opt/getsecure
 cd /opt/getsecure
 git checkout claude/pensive-wright-jjs01m     # or main, once this branch is merged
 
-bash deploy/init-env.sh crm.getsecure.co.nz    # your domain
+bash deploy/init-env.sh hermes.aucklandsecuritysystems.co.nz    # your domain
 ```
 
 That writes `.env` with the four secrets generated on the server and permissions set to 600. It
@@ -104,8 +105,8 @@ be committed. `deploy/env.example` is the template you copied.
 
 | Variable | Value to enter | Where it comes from |
 | --- | --- | --- |
-| `DOMAIN` | `crm.getsecure.co.nz` | Your domain from step 2.4. Caddy gets the certificate for exactly this name. |
-| `APP_URL` | `https://crm.getsecure.co.nz` | The same name with `https://`. Used in links and staff notifications. |
+| `DOMAIN` | `hermes.aucklandsecuritysystems.co.nz` | Your domain from step 2.4. Caddy gets the certificate for exactly this name. |
+| `APP_URL` | `https://hermes.aucklandsecuritysystems.co.nz` | The same name with `https://`. Used in links and staff notifications. |
 | `POSTGRES_PASSWORD` | run `openssl rand -base64 32` | Generate on the server. The database password; nothing else needs to know it. |
 | `AUTH_SECRET` | run `openssl rand -base64 32` | Generate on the server. Signs login cookies; changing it signs everyone out. |
 | `ENCRYPTION_KEY` | run `openssl rand -base64 32` | Generate on the server. Encrypts the Titan mailbox password stored in the database. |
@@ -185,7 +186,7 @@ To restart without rebuilding: `docker compose -f docker-compose.prod.yml restar
 
 ## 8. First login, setup, and the Titan mailbox
 
-Open `https://crm.getsecure.co.nz/` in a browser. With no users in the database it lands on
+Open `https://hermes.aucklandsecuritysystems.co.nz/` in a browser. With no users in the database it lands on
 **`/setup`**.
 
 1. **Create your admin login.** Name, email, password. This creates the first admin account and signs
@@ -366,7 +367,7 @@ Test a restore once, before you rely on it.
 
 ## 12. Health monitoring and server upkeep
 
-- **`GET https://crm.getsecure.co.nz/api/health`** returns `{"ok":true,"db":"up"}` and HTTP 200, or
+- **`GET https://hermes.aucklandsecuritysystems.co.nz/api/health`** returns `{"ok":true,"db":"up"}` and HTTP 200, or
   503 when the database is down. Point a free uptime monitor (UptimeRobot, Better Stack) at it every
   5 minutes. This is the single most valuable thing to set up, because it tells you the CRM is down
   before your staff do.
@@ -433,12 +434,12 @@ value in `.env` and restart. Rotating `ENCRYPTION_KEY` means reconnecting the ma
 | Thing | Where |
 | --- | --- |
 | SSH in | `ssh root@<VPS IP>`, then `cd /opt/getsecure` |
-| Create `.env` with fresh secrets | `bash deploy/init-env.sh crm.getsecure.co.nz` |
+| Create `.env` with fresh secrets | `bash deploy/init-env.sh hermes.aucklandsecuritysystems.co.nz` |
 | Start / update | `docker compose -f docker-compose.prod.yml up -d --build` |
 | Logs | `docker compose -f docker-compose.prod.yml logs -f web` |
 | Restart the app only | `docker compose -f docker-compose.prod.yml restart web` |
 | Database shell | `docker compose -f docker-compose.prod.yml exec db psql -U getsecure -d getsecure` |
-| First login | `https://crm.getsecure.co.nz/` → `/setup` |
+| First login | `https://hermes.aucklandsecuritysystems.co.nz/` → `/setup` |
 | Connect mailbox | Settings → Email accounts |
 | Classifier status | Settings → Email AI |
 | Reminder thresholds, business hours | Settings → Reminders |
