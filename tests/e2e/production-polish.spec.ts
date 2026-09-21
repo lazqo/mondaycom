@@ -128,11 +128,15 @@ test.describe("Production polish", () => {
 
   test("login is throttled after repeated failures", async ({ page }) => {
     await page.goto("/login");
+    // The error from the previous attempt stays on screen, so asserting on the message would pass
+    // against a stale one and let the loop outrun the server. Wait for each POST to be answered so
+    // all 11 attempts are actually recorded; the limit is 10, so the 11th must be refused.
     for (let i = 0; i < 11; i++) {
       await page.getByLabel("Email").fill(`throttle-${RUN}@test.local`);
       await page.getByLabel("Password").fill("wrong-password");
+      const submitted = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/login"));
       await page.getByRole("button", { name: "Sign in" }).click();
-      await expect(page.getByText(/Incorrect email or password|Too many attempts/)).toBeVisible();
+      await submitted;
     }
     await expect(page.getByText(/Too many attempts/)).toBeVisible();
   });
