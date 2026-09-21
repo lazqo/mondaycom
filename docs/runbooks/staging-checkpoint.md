@@ -11,11 +11,11 @@ to turn Claude on.
 
 ## 0. What you need in hand
 
-- A hosting account (Railway recommended; Render also pre-configured). See `docs/DEPLOY.md`.
+- A deployed server. Follow `docs/DEPLOYMENT_HANDOFF.md` (Hostinger VPS) and come back here.
 - The Titan mailbox to connect (e.g. `info@getsecure.co.nz`), with **third-party email access** turned
   on in Titan and an **app password** if 2FA is enabled. See `docs/runbooks/titan-mailbox.md`.
 
-## 1. Deploy (Railway)
+## 1. Deploy
 
 1. New project → Deploy from GitHub → `lazqo/mondaycom`, branch `claude/pensive-wright-jjs01m`.
 2. Add a PostgreSQL service. On the web service set variables:
@@ -24,7 +24,7 @@ to turn Claude on.
    | --- | --- |
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
    | `AUTH_SECRET` | `openssl rand -base64 32` output |
-   | `APP_URL` | the generated Railway domain (Settings → Networking) |
+   | `APP_URL` | your HTTPS domain |
    | `APP_TIMEZONE` | `Pacific/Auckland` |
    | `INGEST_IN_PROCESS` | `true` |
    | `AI_PROVIDER` | `rules` |

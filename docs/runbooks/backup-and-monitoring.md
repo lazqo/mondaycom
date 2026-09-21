@@ -9,9 +9,12 @@ The app itself is rebuilt from git. Nothing is stored on the container's disk.
 Two secrets must be kept alongside the backup, or restored data is unusable:
 `AUTH_SECRET` (login cookies) and `ENCRYPTION_KEY` (mailbox passwords). Store them in a password manager.
 
-## Automatic backups (managed hosting)
+## Automatic backups
 
-- **Railway**: Postgres service → Backups → enable daily; retention 7–30 days. Restores are a button.
+- **Hostinger VPS (the production setup)**: hPanel → VPS → Backups gives free weekly whole-machine
+  backups plus manual snapshots. That is not enough on its own for business records — also run the
+  nightly database dump in section 11 of `docs/DEPLOYMENT_HANDOFF.md` and copy it off the server.
+- **Railway**: Postgres service → Backups → enable daily; retention 6 days daily, 27 weekly, 89 monthly.
 - **Render**: managed Postgres includes daily backups on paid plans; Dashboard → Database → Backups.
 
 Turn this on before real data goes in. Check once a month that a backup exists and that a restore
@@ -20,7 +23,8 @@ to a scratch database works.
 ## Manual backup (any host)
 
 ```bash
-# Full logical dump, compressed. Works against Railway/Render with the external connection string.
+# Full logical dump, compressed. Needs a connection string reachable from where you run it.
+# On the VPS, dump through the container instead — see docs/DEPLOYMENT_HANDOFF.md section 11.
 scripts/backup.sh "postgres://user:pass@host:5432/getsecure?sslmode=require" ./backups
 # → backups/getsecure-2026-09-21T0300.dump
 ```

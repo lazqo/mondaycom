@@ -1,7 +1,7 @@
 # Production environment checklist
 
 Every variable the app reads, what it is for, and whether staging needs it. Set these on the
-hosting service (Railway/Render variables, or a `.env` file the container can read). Never commit
+hosting service — on a VPS that is `/opt/getsecure/.env`, read by `docker-compose.prod.yml`. Never commit
 real values. `pnpm env:check` validates a local `.env` against this list.
 
 ## Required
@@ -45,7 +45,7 @@ section 9 of `docs/DEPLOYMENT_HANDOFF.md`.
 | `PORT` | `3000` | Injected by the host. |
 | `NODE_ENV` | `production` | Set by the Docker image. |
 | `PROCESS_TYPE` | `web` / `worker` | Which process the container runs (Docker entrypoint). |
-| `APP_VERSION` | git sha | Optional; shown on System status. Railway/Render commit vars are picked up automatically. |
+| `APP_VERSION` | git sha | Optional; shown on System status. |
 
 ## First-run only
 

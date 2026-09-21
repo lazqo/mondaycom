@@ -1,0 +1,12 @@
+# HTTPS for Get Secure CRM. Caddy obtains and renews a Let's Encrypt certificate
+# automatically for $DOMAIN, so there is nothing to configure or renew by hand.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Job photos and email attachments can be a few MB each.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy web:3000
+}

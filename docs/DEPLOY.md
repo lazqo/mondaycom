@@ -1,10 +1,18 @@
-# Deploying a staging environment
+# Deploying — other hosting options
+
+**For the production deployment, follow [DEPLOYMENT_HANDOFF.md](DEPLOYMENT_HANDOFF.md).** It covers a
+Hostinger VPS running `docker-compose.prod.yml` (app + PostgreSQL + Caddy for HTTPS) end to end. This
+page keeps the alternatives for reference.
 
 The app is a single Docker image (see `Dockerfile`). On start it runs pending migrations, then serves
-Next.js on `$PORT`. It needs a PostgreSQL 16 database and two secrets. Any host that runs Docker
-images with a Postgres add-on works; two one-click options are pre-configured.
+Next.js on `$PORT`. It needs a PostgreSQL 16 database and two secrets. Any host that runs an
+always-on Docker container works.
 
-## Option A — Railway (recommended)
+**Vercel does not.** The CRM holds a permanent IMAP connection to Titan, started from
+`src/instrumentation.ts` when the server boots. Vercel's functions are frozen between requests, so
+the watcher dies on every cold start and no email is ever detected automatically.
+
+## Option A — Railway
 
 1. Create a project at https://railway.com → **Deploy from GitHub repo** → pick `lazqo/mondaycom`
    and the branch you want on staging. Railway detects `railway.json` and builds the `Dockerfile`.

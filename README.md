@@ -29,8 +29,10 @@ login throttling, private attachment/photo routes, a health endpoint and System 
 scripts and runbooks, and a production `.env` checklist.
 
 **Going live? Start with [docs/DEPLOYMENT_HANDOFF.md](docs/DEPLOYMENT_HANDOFF.md)** — one document
-covering hosting, services, every environment variable, first login, the Titan mailbox, the Anthropic
-key, verification, backups, health and rollback.
+covering the server, every environment variable, first login, the Titan mailbox, verification,
+backups, health and rollback. Production runs on a single VPS with `docker-compose.prod.yml`
+(app + PostgreSQL + Caddy for HTTPS). Note that the app needs an always-on container for its IMAP
+connection, so serverless hosts such as Vercel cannot run it.
 
 See also [docs/PLAN.md](docs/PLAN.md) for the roadmap, [docs/DEPLOY.md](docs/DEPLOY.md) for other
 hosting options, [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for mailbox detail,
