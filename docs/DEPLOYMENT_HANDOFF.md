@@ -65,8 +65,17 @@ git clone https://github.com/lazqo/mondaycom.git /opt/getsecure
 cd /opt/getsecure
 git checkout claude/pensive-wright-jjs01m     # or main, once this branch is merged
 
-cp deploy/env.example .env
-nano .env                                      # fill it in — see section 4
+bash deploy/init-env.sh crm.getsecure.co.nz    # your domain
+```
+
+That writes `.env` with the four secrets generated on the server and permissions set to 600. It
+never prints them and refuses to overwrite an existing `.env`. To fill the file in by hand instead,
+`cp deploy/env.example .env && nano .env` and see section 4.
+
+**Copy `AUTH_SECRET` and `ENCRYPTION_KEY` into your password manager now**, before you go further:
+
+```bash
+grep -E '^(AUTH_SECRET|ENCRYPTION_KEY)=' .env
 ```
 
 Then start everything:
@@ -105,14 +114,8 @@ be committed. `deploy/env.example` is the template you copied.
 | `AI_PROVIDER` | `rules` | Fixed. Built-in offline classifier. No external AI service, no per-email cost. |
 | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Fixed. At or above this a lead is created automatically; below it goes to Needs review. |
 
-Generate all four secrets in one go and paste them in:
-
-```bash
-echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)"
-echo "AUTH_SECRET=$(openssl rand -base64 32)"
-echo "ENCRYPTION_KEY=$(openssl rand -base64 32)"
-echo "HEALTH_TOKEN=$(openssl rand -hex 16)"
-```
+`bash deploy/init-env.sh <domain>` in section 3 generates all four and sets the domain for you, so
+you only fill these in by hand if you skipped it.
 
 Store `AUTH_SECRET` and `ENCRYPTION_KEY` in a password manager. A database backup cannot be used
 without them: the sessions and the saved mailbox password are tied to those two values.
@@ -430,6 +433,7 @@ value in `.env` and restart. Rotating `ENCRYPTION_KEY` means reconnecting the ma
 | Thing | Where |
 | --- | --- |
 | SSH in | `ssh root@<VPS IP>`, then `cd /opt/getsecure` |
+| Create `.env` with fresh secrets | `bash deploy/init-env.sh crm.getsecure.co.nz` |
 | Start / update | `docker compose -f docker-compose.prod.yml up -d --build` |
 | Logs | `docker compose -f docker-compose.prod.yml logs -f web` |
 | Restart the app only | `docker compose -f docker-compose.prod.yml restart web` |
