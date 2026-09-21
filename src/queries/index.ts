@@ -35,6 +35,7 @@ export async function getLead(id: string) {
       contact: true,
       quotes: { orderBy: [desc(quotes.createdAt)] },
       jobs: { orderBy: [desc(jobs.createdAt)], with: { events: true } },
+      events: { orderBy: [desc(events.startsAt)] },
     },
   });
 }
@@ -105,6 +106,8 @@ export async function getJob(id: string) {
       quote: { columns: { id: true, number: true, title: true, total: true, status: true } },
       assignedTo: { columns: { id: true, name: true } },
       events: true,
+      noteEntries: { orderBy: (n, { desc: d }) => [d(n.createdAt)], with: { author: { columns: { id: true, name: true } } } },
+      photos: { columns: { id: true, filename: true, caption: true, createdAt: true, contentType: true, size: true }, orderBy: (p, { desc: d }) => [d(p.createdAt)] },
     },
   });
 }
@@ -114,7 +117,8 @@ export async function listEventsBetween(from: Date, to: Date) {
     where: and(gte(events.endsAt, from), lte(events.startsAt, to)),
     with: {
       assignedTo: { columns: { id: true, name: true } },
-      job: { columns: { id: true, number: true, status: true }, with: { contact: { columns: { name: true } } } },
+      job: { columns: { id: true, number: true, status: true, siteAddress: true, title: true }, with: { contact: { columns: { name: true } } } },
+      lead: { columns: { id: true, name: true, site: true } },
     },
     orderBy: [asc(events.startsAt)],
   });

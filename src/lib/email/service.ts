@@ -4,6 +4,7 @@ import { mailboxes } from "@/db/schema";
 import { env } from "@/lib/env";
 import { syncMailboxOnce, watchMailbox, type SyncSummary } from "./imap";
 import { processPendingEmails } from "./pipeline";
+import { runAutomationsIfDue } from "@/lib/automations/runner";
 
 /** One pass over every active mailbox, then classify anything still pending. */
 export async function runIngestionOnce(log: (m: string) => void = () => {}): Promise<Record<string, SyncSummary | { error: string }>> {
@@ -48,6 +49,8 @@ export function startIngestionLoop(log: (m: string) => void = console.log): () =
           .finally(() => watched.delete(m.id));
       }
       await processPendingEmails();
+      const run = await runAutomationsIfDue(5);
+      if (run && (run.created || run.resolved)) log(`automations: ${run.created} new reminders, ${run.resolved} resolved`);
     } catch (err) {
       log(`ingestion refresh error: ${err instanceof Error ? err.message : String(err)}`);
     }

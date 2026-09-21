@@ -6,6 +6,25 @@ import { setJobStatus } from "@/actions/jobs";
 import { Button } from "@/components/ui";
 import { JOB_STATUSES, JOB_STATUS_META, type JobStatus } from "@/lib/constants";
 
+/** Forward steps a job can take from each status; the select allows any status for corrections. */
+export const JOB_NEXT_STEPS: Partial<Record<JobStatus, JobStatus[]>> = {
+  unscheduled: ["cancelled"],
+  scheduled: ["en_route", "on_site", "cancelled"],
+  en_route: ["on_site", "cancelled"],
+  on_site: ["done"],
+  done: ["invoiced"],
+  invoiced: [],
+  cancelled: ["unscheduled"],
+};
+export const JOB_STEP_LABELS: Partial<Record<JobStatus, string>> = {
+  en_route: "En route",
+  on_site: "On site",
+  done: "Mark done",
+  invoiced: "Mark invoiced",
+  cancelled: "Cancel",
+  unscheduled: "Reopen",
+};
+
 export function JobStatusActions({ jobId, status }: { jobId: string; status: JobStatus }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -19,14 +38,6 @@ export function JobStatusActions({ jobId, status }: { jobId: string; status: Job
       router.refresh();
     });
   }
-
-  const nextSteps: Partial<Record<JobStatus, JobStatus[]>> = {
-    unscheduled: ["cancelled"],
-    scheduled: ["in_progress", "cancelled"],
-    in_progress: ["done", "cancelled"],
-    done: ["in_progress"],
-    cancelled: ["unscheduled"],
-  };
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -47,9 +58,9 @@ export function JobStatusActions({ jobId, status }: { jobId: string; status: Job
             </option>
           ))}
         </select>
-        {(nextSteps[status] ?? []).map((s) => (
+        {(JOB_NEXT_STEPS[status] ?? []).map((s) => (
           <Button key={s} variant={s === "cancelled" ? "secondary" : "primary"} onClick={() => go(s)} disabled={pending}>
-            {s === "in_progress" ? "Start job" : s === "done" ? "Mark done" : JOB_STATUS_META[s].label}
+            {JOB_STEP_LABELS[s] ?? JOB_STATUS_META[s].label}
           </Button>
         ))}
       </div>

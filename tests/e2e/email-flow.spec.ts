@@ -45,7 +45,7 @@ async function login(page: Page) {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/leads$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
 }
 
 test.describe("Titan-style email ingestion", () => {

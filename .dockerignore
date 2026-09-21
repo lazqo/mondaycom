@@ -6,6 +6,7 @@ node_modules
 !.env.example
 test-results
 tests
+!tests/fixtures/emails
 playwright-report
 coverage
 docs

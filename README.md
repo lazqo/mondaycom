@@ -13,8 +13,15 @@ their full original message and thread, classified by an AI layer (Claude, or of
 turned into Leads automatically when confidence is high or sent to a Needs-review queue when not.
 Replies are sent from the CRM through Titan SMTP and kept on the same thread.
 
+v0.3: **Today dashboard, calendar & dispatch, My Day, follow-up automations.** A morning
+"attention needed" screen; a day/week time grid with technician lanes, drag-to-reschedule and an
+unscheduled-jobs tray; site visits booked from leads; a mobile technician view with
+Scheduled → En route → On site → Done, notes and photos; and internal reminders for stale leads,
+unsent quotes, unanswered quotes, uninvoiced jobs and follow-up dates. No automation emails customers.
+
 See [docs/PLAN.md](docs/PLAN.md) for the roadmap, [docs/DEPLOY.md](docs/DEPLOY.md) for staging
-deployment, and [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for connecting a mailbox.
+deployment, [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for connecting a mailbox,
+and [docs/runbooks/staging-checkpoint.md](docs/runbooks/staging-checkpoint.md) for the real-mailbox + live-AI checkpoint.
 
 ## Stack
 
@@ -50,6 +57,7 @@ Sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` from your `.env`.
 | `pnpm worker` | Run the email ingestion worker (IMAP IDLE + poll) as its own process |
 | `pnpm mailbox:sync` | One sync pass over every active mailbox |
 | `pnpm ingest:eml -- --mailbox <address> file.eml` | Import .eml files as if they arrived over IMAP (testing / backfill) |
+| `pnpm ai:smoke [-- --recent N]` | Classify the sample enquiries (or the latest N real emails) with the active AI provider; prints extracted fields, writes nothing |
 
 ## Project layout
 
@@ -60,6 +68,7 @@ src/queries/        read queries used by pages (email.ts for inbox/threads)
 src/components/     UI: leads board (table/kanban/cells), inbox, calendar, forms, layout, primitives
 src/db/             Drizzle schema + client
 src/lib/ai/         provider-neutral lead classifier interface + Anthropic and offline-rules providers
+src/lib/automations/ follow-up rules (one candidate per entity) and the idempotent runner
 src/lib/email/      parse, store/thread, classification pipeline, IMAP sync + IDLE watcher, SMTP replies
 src/worker/         standalone ingestion worker entry point (src/instrumentation.ts runs it in-process)
 src/lib/            auth (JWT cookie sessions), env validation, crypto for mailbox secrets, constants

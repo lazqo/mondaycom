@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   customType,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   LEAD_STATUSES,
   LEAD_SOURCES,
@@ -21,10 +21,12 @@ import {
   JOB_STATUSES,
   EMAIL_CLASSIFICATIONS,
   LEAD_URGENCIES,
+  TASK_STATUSES,
+  EVENT_KINDS,
 } from "@/lib/constants";
 
-export { LEAD_STATUSES, LEAD_SOURCES, QUOTE_STATUSES, JOB_STATUSES, EMAIL_CLASSIFICATIONS, LEAD_URGENCIES };
-export type { LeadStatus, LeadSource, QuoteStatus, JobStatus, EmailClassification, LeadUrgency } from "@/lib/constants";
+export { LEAD_STATUSES, LEAD_SOURCES, QUOTE_STATUSES, JOB_STATUSES, EMAIL_CLASSIFICATIONS, LEAD_URGENCIES, TASK_STATUSES, EVENT_KINDS };
+export type { LeadStatus, LeadSource, QuoteStatus, JobStatus, EmailClassification, LeadUrgency, TaskStatus, EventKind } from "@/lib/constants";
 
 // ---------- Enums ----------
 
@@ -40,6 +42,8 @@ export const jobStatusEnum = pgEnum("job_status", JOB_STATUSES);
 export const emailClassificationEnum = pgEnum("email_classification", EMAIL_CLASSIFICATIONS);
 export const emailDirectionEnum = pgEnum("email_direction", ["inbound", "outbound"]);
 export const leadUrgencyEnum = pgEnum("lead_urgency", LEAD_URGENCIES);
+export const taskStatusEnum = pgEnum("task_status", TASK_STATUSES);
+export const eventKindEnum = pgEnum("event_kind", EVENT_KINDS);
 
 // ---------- Tables ----------
 
@@ -154,6 +158,9 @@ export const jobs = pgTable(
     status: jobStatusEnum("status").notNull().default("unscheduled"),
     assignedToId: uuid("assigned_to_id").references(() => users.id, { onDelete: "set null" }),
     notes: text("notes"),
+    statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    invoicedAt: timestamp("invoiced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -170,14 +177,108 @@ export const events = pgTable(
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
     endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
     allDay: boolean("all_day").notNull().default(false),
+    kind: eventKindEnum("kind").notNull().default("other"),
     jobId: uuid("job_id").references(() => jobs.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }), // site visits
     assignedToId: uuid("assigned_to_id").references(() => users.id, { onDelete: "set null" }),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("events_starts_idx").on(t.startsAt), index("events_job_idx").on(t.jobId)],
+  (t) => [index("events_starts_idx").on(t.startsAt), index("events_job_idx").on(t.jobId), index("events_lead_idx").on(t.leadId)],
 );
+
+// ---------- Jobs: notes & photos ----------
+
+export const jobNotes = pgTable(
+  "job_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("job_notes_job_idx").on(t.jobId)],
+);
+
+export const jobPhotos = pgTable(
+  "job_photos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    uploadedById: uuid("uploaded_by_id").references(() => users.id, { onDelete: "set null" }),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull().default("image/jpeg"),
+    size: integer("size").notNull().default(0),
+    caption: text("caption"),
+    content: customType<{ data: Buffer; driverData: Buffer }>({
+      dataType() {
+        return "bytea";
+      },
+    })("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("job_photos_job_idx").on(t.jobId)],
+);
+
+// ---------- Tasks, notifications, settings ----------
+
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    detail: text("detail"),
+    status: taskStatusEnum("status").notNull().default("open"),
+    dueAt: date("due_at"),
+    assignedToId: uuid("assigned_to_id").references(() => users.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+    quoteId: uuid("quote_id").references(() => quotes.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "cascade" }),
+    // Automation-created tasks: one open task per (rule, entity). Manual tasks have ruleKey null.
+    ruleKey: text("rule_key"),
+    entityId: uuid("entity_id"),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("tasks_status_due_idx").on(t.status, t.dueAt),
+    index("tasks_assigned_idx").on(t.assignedToId),
+    uniqueIndex("tasks_rule_entity_open_idx").on(t.ruleKey, t.entityId).where(sql`status = 'open' and rule_key is not null`),
+  ],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"),
+    kind: text("kind").notNull().default("info"),
+    dedupeKey: text("dedupe_key"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.readAt), uniqueIndex("notifications_dedupe_idx").on(t.userId, t.dedupeKey).where(sql`dedupe_key is not null`)],
+);
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const activityLog = pgTable(
   "activity_log",
@@ -372,6 +473,8 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   sourceEmail: one(emails, { fields: [leads.sourceEmailId], references: [emails.id] }),
   quotes: many(quotes),
   jobs: many(jobs),
+  events: many(events),
+  tasks: many(tasks),
 }));
 
 export const mailboxesRelations = relations(mailboxes, ({ many }) => ({
@@ -418,11 +521,37 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   quote: one(quotes, { fields: [jobs.quoteId], references: [quotes.id] }),
   assignedTo: one(users, { fields: [jobs.assignedToId], references: [users.id] }),
   events: many(events),
+  noteEntries: many(jobNotes),
+  photos: many(jobPhotos),
+  tasks: many(tasks),
 }));
 
 export const eventsRelations = relations(events, ({ one }) => ({
   job: one(jobs, { fields: [events.jobId], references: [jobs.id] }),
+  lead: one(leads, { fields: [events.leadId], references: [leads.id] }),
   assignedTo: one(users, { fields: [events.assignedToId], references: [users.id] }),
+}));
+
+export const jobNotesRelations = relations(jobNotes, ({ one }) => ({
+  job: one(jobs, { fields: [jobNotes.jobId], references: [jobs.id] }),
+  author: one(users, { fields: [jobNotes.authorId], references: [users.id] }),
+}));
+
+export const jobPhotosRelations = relations(jobPhotos, ({ one }) => ({
+  job: one(jobs, { fields: [jobPhotos.jobId], references: [jobs.id] }),
+  uploadedBy: one(users, { fields: [jobPhotos.uploadedById], references: [users.id] }),
+}));
+
+export const tasksRelations = relations(tasks, ({ one }) => ({
+  assignedTo: one(users, { fields: [tasks.assignedToId], references: [users.id] }),
+  lead: one(leads, { fields: [tasks.leadId], references: [leads.id] }),
+  contact: one(contacts, { fields: [tasks.contactId], references: [contacts.id] }),
+  quote: one(quotes, { fields: [tasks.quoteId], references: [quotes.id] }),
+  job: one(jobs, { fields: [tasks.jobId], references: [jobs.id] }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
 }));
 
 // ---------- Types ----------
@@ -439,3 +568,7 @@ export type EmailThread = typeof emailThreads.$inferSelect;
 export type Email = typeof emails.$inferSelect;
 export type EmailAttachment = typeof emailAttachments.$inferSelect;
 export type EmailClassificationRow = typeof emailClassifications.$inferSelect;
+export type JobNote = typeof jobNotes.$inferSelect;
+export type JobPhoto = typeof jobPhotos.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;

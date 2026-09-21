@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const user = await getCurrentUser();
-  if (user) redirect("/leads");
+  if (user) redirect("/dashboard");
   const { next } = await searchParams;
   return (
     <div className="flex min-h-screen items-center justify-center p-4">

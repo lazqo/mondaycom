@@ -3,8 +3,22 @@ import { Avatar } from "@/components/ui";
 import { logoutAction } from "@/actions/auth";
 import type { SessionUser } from "@/lib/auth";
 import { SidebarNav } from "./sidebar-nav";
+import { NotificationsBell } from "./notifications-bell";
+import type { Notification } from "@/db/schema";
 
-export function AppShell({ user, needsReview = 0, children }: { user: SessionUser; needsReview?: number; children: React.ReactNode }) {
+export function AppShell({
+  user,
+  needsReview = 0,
+  notifications = [],
+  unread = 0,
+  children,
+}: {
+  user: SessionUser;
+  needsReview?: number;
+  notifications?: Notification[];
+  unread?: number;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
@@ -12,12 +26,16 @@ export function AppShell({ user, needsReview = 0, children }: { user: SessionUse
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 text-sm font-bold text-white">
             GS
           </span>
-          <Link href="/leads" className="text-sm font-semibold text-gray-900">
+          <Link href="/dashboard" className="text-sm font-semibold text-gray-900">
             Get Secure CRM
           </Link>
         </div>
         <SidebarNav isAdmin={user.role === "admin"} needsReview={needsReview} />
         <div className="mt-auto border-t border-gray-200 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-500">Notifications</span>
+            <NotificationsBell items={notifications} unread={unread} />
+          </div>
           <div className="flex items-center gap-2">
             <Avatar name={user.name} />
             <div className="min-w-0 flex-1">
@@ -34,10 +52,13 @@ export function AppShell({ user, needsReview = 0, children }: { user: SessionUse
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:hidden">
-          <Link href="/leads" className="text-sm font-semibold text-gray-900">
+          <Link href="/dashboard" className="text-sm font-semibold text-gray-900">
             Get Secure CRM
           </Link>
-          <MobileNav isAdmin={user.role === "admin"} />
+          <div className="flex items-center gap-2">
+            <NotificationsBell items={notifications} unread={unread} />
+            <MobileNav isAdmin={user.role === "admin"} />
+          </div>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
@@ -47,6 +68,8 @@ export function AppShell({ user, needsReview = 0, children }: { user: SessionUse
 
 function MobileNav({ isAdmin }: { isAdmin: boolean }) {
   const items = [
+    ["Today", "/dashboard"],
+    ["My day", "/my-day"],
     ["Inbox", "/inbox"],
     ["Leads", "/leads"],
     ["Customers", "/contacts"],

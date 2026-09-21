@@ -15,6 +15,13 @@
       "when": 1789964618498,
       "tag": "0001_clever_mysterio",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789968344087,
+      "tag": "0002_giant_sabretooth",
+      "breakpoints": true
     }
   ]
 }

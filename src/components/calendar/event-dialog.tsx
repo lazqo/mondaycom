@@ -6,11 +6,15 @@ import { Button, Dialog, Field, FormError, Input, Select, Textarea } from "@/com
 import type { CalendarEvent } from "./calendar-view";
 
 type UserOption = { id: string; name: string };
-type State = { mode: "create"; date: string } | { mode: "edit"; event: CalendarEvent } | null;
+type State = { mode: "create"; date: string; time?: string; leadId?: string; title?: string } | { mode: "edit"; event: CalendarEvent } | null;
 
 function localDate(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function plusHour(t: string) {
+  const [h, m] = t.split(":").map(Number);
+  return `${String(Math.min(23, h + 1)).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 function localTime(iso: string) {
   const d = new Date(iso);
@@ -41,6 +45,8 @@ export function EventDialog({
     const startTime = allDay ? "00:00" : String(fd.get("startTime"));
     const endTime = allDay ? "23:59" : String(fd.get("endTime"));
     const payload = {
+      leadId: state?.mode === "create" ? (state.leadId ?? null) : undefined,
+      kind: state?.mode === "create" && state.leadId ? ("site_visit" as const) : undefined,
       title: String(fd.get("title") ?? ""),
       description: String(fd.get("description") ?? ""),
       location: String(fd.get("location") ?? ""),
@@ -70,17 +76,17 @@ export function EventDialog({
     <Dialog open={state !== null} onClose={onClose} title={ev ? "Edit event" : "New event"}>
       <form key={key} onSubmit={submit} className="space-y-4">
         <Field label="Title *" htmlFor="ev-title">
-          <Input id="ev-title" name="title" defaultValue={ev?.title ?? ""} required autoFocus />
+          <Input id="ev-title" name="title" defaultValue={ev?.title ?? (state?.mode === "create" ? (state.title ?? "") : "")} required autoFocus />
         </Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Date" htmlFor="ev-date">
             <Input id="ev-date" name="date" type="date" defaultValue={ev ? localDate(ev.startsAt) : state?.mode === "create" ? state.date : ""} required />
           </Field>
           <Field label="Start" htmlFor="ev-start">
-            <Input id="ev-start" name="startTime" type="time" defaultValue={ev ? localTime(ev.startsAt) : "09:00"} />
+            <Input id="ev-start" name="startTime" type="time" defaultValue={ev ? localTime(ev.startsAt) : (state?.mode === "create" && state.time) || "09:00"} />
           </Field>
           <Field label="End" htmlFor="ev-end">
-            <Input id="ev-end" name="endTime" type="time" defaultValue={ev ? localTime(ev.endsAt) : "10:00"} />
+            <Input id="ev-end" name="endTime" type="time" defaultValue={ev ? localTime(ev.endsAt) : plusHour((state?.mode === "create" && state.time) || "09:00")} />
           </Field>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-800">

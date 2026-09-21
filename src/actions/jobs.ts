@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { events, jobs } from "@/db/schema";
+import { events, jobs, jobNotes, jobPhotos } from "@/db/schema";
+import { notifyJobScheduled } from "@/lib/automations/runner";
+import { logActivity as log } from "@/lib/activity";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { JOB_STATUSES } from "@/lib/constants";
@@ -59,9 +61,18 @@ export async function updateJob(id: string, input: unknown): Promise<ActionResul
   const user = await requireUser();
   const parsed = jobInput.partial().safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid input");
+  const before = await db.query.jobs.findFirst({ where: eq(jobs.id, id), columns: { status: true, doneAt: true, invoicedAt: true } });
+  if (!before) return fail("Job not found");
+  const statusChanged = parsed.data.status !== undefined && parsed.data.status !== before.status;
   await db
     .update(jobs)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({
+      ...parsed.data,
+      updatedAt: new Date(),
+      ...(statusChanged ? { statusChangedAt: new Date() } : {}),
+      ...(statusChanged && parsed.data.status === "done" ? { doneAt: new Date() } : {}),
+      ...(statusChanged && parsed.data.status === "invoiced" ? { invoicedAt: new Date(), doneAt: before.doneAt ?? new Date() } : {}),
+    })
     .where(eq(jobs.id, id));
   // Keep the linked calendar event's assignee/location in sync.
   if (parsed.data.assignedToId !== undefined || parsed.data.siteAddress !== undefined || parsed.data.title) {
@@ -111,6 +122,7 @@ export async function scheduleJob(id: string, input: unknown): Promise<ActionRes
       startsAt,
       endsAt,
       allDay: false,
+      kind: "job" as const,
       jobId: job.id,
       assignedToId,
       updatedAt: new Date(),
@@ -144,6 +156,7 @@ export async function scheduleJob(id: string, input: unknown): Promise<ActionRes
     action: "scheduled",
     detail: { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), assignedToId },
   });
+  await notifyJobScheduled({ ...job, assignedToId }, startsAt, endsAt);
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${id}`);
   revalidatePath("/calendar");
@@ -165,4 +178,48 @@ export async function unscheduleJob(id: string): Promise<ActionResult<undefined>
 
 export async function setJobStatus(id: string, status: string) {
   return updateJob(id, { status });
+}
+
+// ---------- Notes & photos ----------
+
+export async function addJobNote(jobId: string, body: string): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const text = body.trim();
+  if (!text) return fail("Write a note first");
+  if (text.length > 5000) return fail("Note is too long");
+  const [row] = await db.insert(jobNotes).values({ jobId, authorId: user.id, body: text }).returning({ id: jobNotes.id });
+  await log({ entity: "job", entityId: jobId, actorId: user.id, action: "note_added", detail: { noteId: row.id } });
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/my-day");
+  return ok({ id: row.id });
+}
+
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+
+export async function addJobPhoto(jobId: string, formData: FormData): Promise<ActionResult<{ id: string }>> {
+  const user = await requireUser();
+  const file = formData.get("photo");
+  if (!(file instanceof File) || file.size === 0) return fail("Choose a photo first");
+  if (!file.type.startsWith("image/")) return fail("Only images can be uploaded");
+  if (file.size > MAX_PHOTO_BYTES) return fail("Photo is larger than 8 MB");
+  const caption = String(formData.get("caption") ?? "").trim() || null;
+  const content = Buffer.from(await file.arrayBuffer());
+  const [row] = await db
+    .insert(jobPhotos)
+    .values({ jobId, uploadedById: user.id, filename: file.name || "photo.jpg", contentType: file.type, size: file.size, caption, content })
+    .returning({ id: jobPhotos.id });
+  await log({ entity: "job", entityId: jobId, actorId: user.id, action: "photo_added", detail: { photoId: row.id, filename: file.name } });
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/my-day");
+  return ok({ id: row.id });
+}
+
+export async function deleteJobPhoto(photoId: string): Promise<ActionResult<undefined>> {
+  await requireUser();
+  const [row] = await db.delete(jobPhotos).where(eq(jobPhotos.id, photoId)).returning({ jobId: jobPhotos.jobId });
+  if (row) {
+    revalidatePath(`/jobs/${row.jobId}`);
+    revalidatePath("/my-day");
+  }
+  return ok(undefined);
 }

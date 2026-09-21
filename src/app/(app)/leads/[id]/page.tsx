@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getLead, getActivity, listActiveUsers } from "@/queries";
 import { getThreadForLead } from "@/queries/email";
 import { LeadEmailCard } from "@/components/leads/lead-email-card";
+import { SiteVisitCard } from "@/components/leads/site-visit-card";
 import { LEAD_URGENCY_META } from "@/lib/constants";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { LeadForm } from "@/components/leads/lead-form";
@@ -126,6 +127,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="space-y-4">
+          <SiteVisitCard lead={{ id: lead.id, name: lead.name, site: lead.site }} events={lead.events} users={users} />
           <Card>
             <CardHeader title="Activity" />
             <div className="p-4">

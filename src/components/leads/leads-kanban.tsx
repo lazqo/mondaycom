@@ -6,6 +6,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
   KeyboardSensor,
   useDraggable,
   useDroppable,
@@ -47,7 +48,7 @@ export function LeadsKanban({
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
+    <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
       <div className="flex gap-3 overflow-x-auto pb-2">
         {LEAD_STATUSES.map((status) => (
           <Column key={status} status={status} rows={rows.filter((r) => r.status === status)} />

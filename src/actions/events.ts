@@ -1,10 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { events } from "@/db/schema";
+import { events, jobs, leads } from "@/db/schema";
+import { notifyJobScheduled } from "@/lib/automations/runner";
+import { EVENT_KINDS } from "@/lib/constants";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
@@ -32,6 +34,8 @@ const eventInput = z.object({
   endsAt: z.string().datetime({ offset: true }),
   allDay: z.boolean().default(false),
   assignedToId: optionalUuid,
+  kind: z.enum(EVENT_KINDS).optional(),
+  leadId: optionalUuid,
 });
 export type EventInput = z.input<typeof eventInput>;
 
@@ -43,13 +47,49 @@ export async function createEvent(input: unknown): Promise<ActionResult<{ id: st
   const startsAt = new Date(d.startsAt);
   const endsAt = new Date(d.endsAt);
   if (endsAt <= startsAt) return fail("End time must be after start time");
+  const kind = d.kind ?? (d.leadId ? "site_visit" : "other");
   const [row] = await db
     .insert(events)
-    .values({ ...d, startsAt, endsAt, createdById: user.id })
+    .values({ ...d, kind, startsAt, endsAt, createdById: user.id })
     .returning({ id: events.id });
+  if (d.leadId && kind === "site_visit") {
+    // Booking a site visit moves a New/Contacted lead along.
+    await db
+      .update(leads)
+      .set({ status: sql`case when ${leads.status} in ('new','contacted') then 'site_visit'::lead_status else ${leads.status} end`, updatedAt: new Date() })
+      .where(eq(leads.id, d.leadId));
+    await logActivity({ entity: "lead", entityId: d.leadId, actorId: user.id, action: "site_visit_scheduled", detail: { eventId: row.id, startsAt: d.startsAt } });
+    revalidatePath(`/leads/${d.leadId}`);
+    revalidatePath("/leads");
+  }
   await logActivity({ entity: "event", entityId: row.id, actorId: user.id, action: "created" });
   revalidatePath("/calendar");
+  revalidatePath("/dashboard");
   return ok({ id: row.id });
+}
+
+/** Drag-and-drop: move an event (job or otherwise) to a new time and optionally a new technician. */
+export async function moveEvent(id: string, input: { startsAt: string; endsAt: string; assignedToId?: string | null }): Promise<ActionResult<undefined>> {
+  const user = await requireUser();
+  const startsAt = new Date(input.startsAt);
+  const endsAt = new Date(input.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return fail("Invalid time range");
+  const ev = await db.query.events.findFirst({ where: eq(events.id, id), with: { job: true } });
+  if (!ev) return fail("Event not found");
+  const assignedToId = input.assignedToId === undefined ? ev.assignedToId : input.assignedToId;
+  await db.transaction(async (tx) => {
+    await tx.update(events).set({ startsAt, endsAt, assignedToId, updatedAt: new Date() }).where(eq(events.id, id));
+    if (ev.jobId) {
+      await tx.update(jobs).set({ assignedToId, updatedAt: new Date() }).where(eq(jobs.id, ev.jobId));
+      await logActivity({ entity: "job", entityId: ev.jobId, actorId: user.id, action: "rescheduled", detail: { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), assignedToId } });
+    }
+  });
+  if (ev.job) await notifyJobScheduled({ ...ev.job, assignedToId }, startsAt, endsAt);
+  revalidatePath("/calendar");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-day");
+  if (ev.jobId) revalidatePath(`/jobs/${ev.jobId}`);
+  return ok(undefined);
 }
 
 export async function updateEvent(id: string, input: unknown): Promise<ActionResult<undefined>> {

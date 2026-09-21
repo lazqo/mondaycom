@@ -94,3 +94,16 @@ async function appendToSent(mailbox: Mailbox, conn: MailboxConnection, raw: Buff
     await client.logout().catch(() => client.close());
   }
 }
+
+/** Plain internal email (staff notifications) from the first active mailbox. Never used for customers. */
+export async function sendInternalEmail(input: { to: string; subject: string; text: string }): Promise<void> {
+  const mailbox = await db.query.mailboxes.findFirst({ where: eq(mailboxes.active, true) });
+  if (!mailbox) throw new Error("No active mailbox to send from");
+  const conn = connectionFromMailbox(mailbox);
+  await createSmtpTransport(conn).sendMail({
+    from: { name: "Get Secure CRM", address: mailbox.emailAddress },
+    to: input.to,
+    subject: input.subject,
+    text: input.text,
+  });
+}

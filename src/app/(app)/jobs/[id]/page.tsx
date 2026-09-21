@@ -6,6 +6,7 @@ import { Badge, Card, CardHeader } from "@/components/ui";
 import { JobForm } from "@/components/jobs/job-form";
 import { ScheduleJobCard } from "@/components/jobs/schedule-job-card";
 import { JobStatusActions } from "@/components/jobs/job-status-actions";
+import { JobNotesPhotos } from "@/components/jobs/job-notes-photos";
 import { ActivityFeed } from "@/components/activity-feed";
 import { JOB_STATUS_META } from "@/lib/constants";
 import { formatMoney } from "@/lib/utils";
@@ -62,6 +63,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               <JobForm mode="edit" job={job} contacts={contacts} users={users} />
             </div>
           </Card>
+          <JobNotesPhotos jobId={job.id} notes={job.noteEntries} photos={job.photos} />
         </div>
         <div className="space-y-4">
           <ScheduleJobCard job={job} users={users} />

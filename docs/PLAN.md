@@ -385,5 +385,35 @@ Deviation: the Anthropic provider is code-complete but was exercised only throug
 this environment (no API key available here); the offline rules provider drives the automated tests.
 First production run should watch the Inbox "Needs review" tab and the stored confidences.
 
-Next: calendar/dispatch improvements and the follow-up automation layer (overdue follow-ups,
-reminders, status-driven actions).
+### v0.3 — Today, calendar & dispatch, My Day, follow-up automations (2026-09-21)
+
+- **Today** (`/dashboard`, the new home): overdue tasks, tasks due today, Needs review emails,
+  today's jobs and site visits, unassigned jobs, new leads, leads with a follow-up date reached,
+  quotes waiting on action (draft or sent). Manual tasks can be added and completed inline.
+- **Calendar**: day view with one lane per technician (plus Unassigned), week time grid, month
+  overview. Job chips are coloured by job status and show customer, time, technician and address;
+  clicking opens the job. Drag a chip to another slot or lane to reschedule/reassign (15-minute
+  snap, duration kept). Unscheduled jobs sit in a tray and drop onto the grid to schedule (2-hour
+  default). Site visits are booked from the lead page and appear on the calendar and Today.
+- **Jobs**: statuses are now Unscheduled → Scheduled → En Route → On Site → Done → Invoiced
+  (+ Cancelled); notes and photos (stored in Postgres, served through an authenticated route).
+- **My Day** (`/my-day`): mobile-friendly list of the signed-in technician's jobs for a day (admins
+  can pick anyone) with map and call links, one-tap status advance, add note, add photo (camera
+  capture on phones), plus that person's reminders.
+- **Automations** (internal only, never emails customers): new lead not contacted, site visit done
+  but no quote, quote sent with no response, job done but not invoiced, follow-up date reached.
+  Each creates one open task per entity, re-runs never duplicate, tasks auto-resolve when the
+  condition clears, dismissed ones stay dismissed. Thresholds live in Settings → Automations.
+  Scheduling or moving a job notifies the assignee in-app (email optional). The runner executes
+  every five minutes inside the ingestion loop and on dashboard load.
+- **Notifications** bell in the sidebar.
+- **Settings → AI**: active provider, model, threshold, recent classifications with review outcome,
+  and a no-side-effects smoke test over the bundled enquiries. `pnpm ai:smoke` does the same from
+  the command line, including over the latest real emails.
+
+Staging checkpoint (deploy, real Titan mailbox, live AI) is documented step by step in
+`docs/runbooks/staging-checkpoint.md`; it needs the hosting account, mailbox app password and API
+key, which only the owner holds.
+
+Next: quote PDF + send-by-email, customer notifications on scheduling (with approval), Apple
+Calendar sync, Plaud transcripts, and the generic board engine.

@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Briefcase, FileText, Calendar, Kanban, Settings, Inbox, Mail } from "lucide-react";
+import { Users, Briefcase, FileText, Calendar, Kanban, Settings, Inbox, Mail, Sun, Smartphone, Zap, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
+  { label: "Today", href: "/dashboard", icon: Sun },
+  { label: "My day", href: "/my-day", icon: Smartphone },
   { label: "Inbox", href: "/inbox", icon: Inbox },
   { label: "Leads", href: "/leads", icon: Kanban },
   { label: "Customers", href: "/contacts", icon: Users },
@@ -17,7 +19,13 @@ const items = [
 export function SidebarNav({ isAdmin, needsReview = 0 }: { isAdmin: boolean; needsReview?: number }) {
   const pathname = usePathname();
   const all = isAdmin
-    ? [...items, { label: "Mailboxes", href: "/settings/mailboxes", icon: Mail }, { label: "Users", href: "/settings/users", icon: Settings }]
+    ? [
+        ...items,
+        { label: "Automations", href: "/settings/automations", icon: Zap },
+        { label: "AI", href: "/settings/ai", icon: Sparkles },
+        { label: "Mailboxes", href: "/settings/mailboxes", icon: Mail },
+        { label: "Users", href: "/settings/users", icon: Settings },
+      ]
     : items;
   return (
     <nav className="flex flex-col gap-0.5 p-2">

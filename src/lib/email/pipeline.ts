@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, isNull, max, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, max, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, emailClassifications, emailThreads, emails, jobs, leads, type ExtractedLead } from "@/db/schema";
 import { env } from "@/lib/env";
+import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 import { getClassifier, type ClassificationInput } from "@/lib/ai";
 import { isAutomatedMail, stripQuotedReply } from "./parse";
@@ -62,7 +63,7 @@ export async function processEmail(emailId: string, opts: { force?: boolean } = 
       : null;
     const openJob = contact
       ? await db.query.jobs.findFirst({
-          where: and(eq(jobs.contactId, contact.id), notInArray(jobs.status, ["done", "cancelled"])),
+          where: and(eq(jobs.contactId, contact.id), inArray(jobs.status, OPEN_JOB_STATUSES)),
           orderBy: [desc(jobs.updatedAt)],
         })
       : null;

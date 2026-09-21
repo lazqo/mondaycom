@@ -1,5 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// The app renders "today" in APP_TIMEZONE; run the test process and the browser in the same zone.
+const TZ = process.env.APP_TIMEZONE ?? "Pacific/Auckland";
+process.env.TZ = TZ;
+
 const PORT = process.env.E2E_PORT ?? "3100";
 const baseURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`;
 
@@ -14,6 +18,7 @@ export default defineConfig({
   globalSetup: "./tests/e2e/global-setup.ts",
   use: {
     baseURL,
+    timezoneId: TZ,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

@@ -24,7 +24,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   const user = await authenticate(parsed.data.email, parsed.data.password);
   if (!user) return { error: "Incorrect email or password" };
   await createSession(user.id);
-  const next = parsed.data.next && parsed.data.next.startsWith("/") ? parsed.data.next : "/leads";
+  const next = parsed.data.next && parsed.data.next.startsWith("/") ? parsed.data.next : "/dashboard";
   redirect(next);
 }
 
