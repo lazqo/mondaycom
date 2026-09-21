@@ -3,8 +3,9 @@
 Everything needed to put v0.4 into production and run it. One architecture, no alternatives.
 Written for someone who has not seen the code.
 
-You will need three things that only you can provide: a Railway account (card on file), the Titan
-mailbox app password, and an Anthropic API key. Nothing else is outstanding.
+You will need two things that only you can provide: a Railway account (card on file) and the Titan
+mailbox app password. Nothing else is outstanding. There is no AI service to sign up for — the CRM
+runs with its built-in offline classifier (section 9).
 
 ---
 
@@ -25,7 +26,7 @@ such as Vercel. Railway also runs the managed database beside it and already und
 **The `web` service must stay at exactly one replica.** Two replicas would mean two processes
 watching the same mailbox. Nothing else about the app prevents scaling; the mailbox does.
 
-Expect roughly USD 10–20/month for both services at this size, plus Anthropic usage (section 10).
+Expect roughly USD 10–20/month for both services at this size. There are no other running costs.
 
 ---
 
@@ -57,17 +58,15 @@ Set these on the **`web`** service → **Variables**. Railway injects `PORT` its
 | `APP_TIMEZONE` | `Pacific/Auckland` | Fixed. Drives "Today", follow-up dates and business hours. |
 | `INGEST_IN_PROCESS` | `true` | Fixed. Runs the mailbox watcher inside the web service. |
 | `INGEST_POLL_SECONDS` | `120` | Fixed. Backstop poll; IDLE reacts sooner. |
-| `AI_PROVIDER` | `auto` | Fixed. Uses Claude when a key is present, offline rules when not. |
-| `ANTHROPIC_API_KEY` | `sk-ant-…` | https://console.anthropic.com → API keys → Create key. See section 10. |
-| `AI_MODEL` | `claude-opus-5` | Fixed unless you deliberately change models. |
-| `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Fixed. Above this a lead is created automatically; below it goes to Needs review. |
+| `AI_PROVIDER` | `rules` | Fixed. Uses the built-in offline classifier. No external AI service, no per-email cost. |
+| `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Fixed. At or above this a lead is created automatically; below it goes to Needs review. |
 | `HEALTH_TOKEN` | run `openssl rand -hex 16` | Generate on your machine. Lets an uptime monitor read detailed health. |
 
 Store `AUTH_SECRET` and `ENCRYPTION_KEY` in a password manager. A database backup cannot be used
 without them: the sessions and the saved mailbox password are tied to those two values.
 
 **The Titan mailbox password is not an environment variable.** You enter it inside the app, where it
-is encrypted before being stored (section 9).
+is encrypted before being stored (section 8).
 
 To sanity-check a local `.env` against this list, run `pnpm env:check`.
 
@@ -131,8 +130,8 @@ Migrations are idempotent — running them twice is safe.
 3. You then get a six-step checklist that ticks itself off as each thing is done:
    1. Admin login (done by step 2)
    2. Add staff — office people and technicians, each with a role
-   3. Connect the Titan mailbox (section 9)
-   4. Configure AI (section 10)
+   3. Connect the Titan mailbox (section 8)
+   4. Configure email AI — press **Use offline rules for now**; there is nothing else to set
    5. Set business hours and reminder thresholds
    6. Start using the CRM
 
@@ -172,52 +171,84 @@ an environment variable, never in the repository and never shown again in the UI
 
 ---
 
-## 9. Where the Anthropic API key goes
+## 9. How enquiries are turned into leads (no AI service)
 
-Two places, in this order:
+There is no Anthropic account, no API key and no per-email cost. `AI_PROVIDER=rules` uses the
+classifier built into the app, which reads each new email and looks for:
 
-1. Get the key: https://console.anthropic.com → **API keys** → **Create key**. Copy it once; the
-   console will not show it again.
-2. Paste it into Railway → `web` service → **Variables** → `ANTHROPIC_API_KEY`. Saving a variable
-   redeploys the service.
+- your services by keyword — CCTV, Ajax, alarm, access control, intercom, gate automation, and
+  service or fault calls
+- a New Zealand phone number, and a street address, by their shape
+- enquiry intent — quote, price, install, book, site visit, how much, looking for
+- urgency words — urgent, ASAP, today, emergency, break-in
 
-Leave `AI_PROVIDER=auto`. With the key present the CRM classifies enquiries with Claude
-(`claude-opus-5`); with the key absent it silently falls back to the built-in offline rules, so a
-missing or expired key degrades quality but never stops email coming in.
+It scores each email. At or above `AI_LEAD_CONFIDENCE_THRESHOLD` a lead is created on the board with
+whatever it could extract; below that the email waits in **Needs review** for you to accept, edit or
+reject. Newsletters, invoices, bounces and auto-replies are filtered out before any of this.
 
-Check it took effect at **Settings → Email AI**, which names the active provider and model.
+**Settings → Email AI** shows the active classifier and recent decisions. It will say the offline
+rules classifier is in use, which is correct.
 
-**Cost.** Roughly 2 US cents per email that actually reaches the AI, at current
-Claude Opus 5 pricing (USD 5 per million input tokens, USD 25 per million output). Replies on an
-existing thread, mail from known customers, bounces and newsletters never reach the AI at all. At
-twenty fresh enquiries a day that is on the order of USD 10 a month. Set a spend limit in the
-Anthropic console if you want a hard ceiling.
+### The limitation you need to know about
+
+**Forwarded enquiries lose their details.** If an enquiry is forwarded into the connected mailbox
+rather than sent to it directly, the forward header cuts the message off before the classifier reads
+it. Tested with a real forward:
+
+```
+Dave's original:  6 CCTV cameras, 12 Station Road Penrose, Ajax alarm quote, 021 555 0123
+
+Lead the CRM creates:
+  name          Get Secure Info
+  email         info@getsecure.co.nz     <- your address, not Dave's
+  phone         (empty)
+  site address  (empty)
+```
+
+The lead is still created, because the subject line carries enough to score above the threshold, so
+it does not stop in Needs review for you to catch. Replying to that lead from the CRM would email
+your own info address rather than the customer.
+
+**Nothing is lost.** The complete forwarded message, exactly as it arrived, is visible in the CRM
+Inbox — open the thread and you can read all of Dave's text. Only the automatic field extraction
+misses it.
+
+**So, day to day:** for any enquiry that reached the CRM by forwarding, open the email in the Inbox
+and correct the lead's name, email, phone and site address by hand before working it. Treat the
+auto-filled fields on a forwarded lead as untrustworthy.
+
+**The clean fix, when you want it,** is to connect `info@getsecure.co.nz` directly as the CRM mailbox
+in section 8 instead of forwarding from it. The customer's real address and full message are then
+preserved and everything works as designed. That is a configuration change, not code. Website
+landing-page enquiries have the same shape of problem: there is no form endpoint yet, so they only
+arrive as whatever email the form service sends.
 
 ---
 
-## 10. Verifying receive, reply and AI classification
+## 10. Verifying receive and reply
 
-Do these three in order, after the mailbox is connected. This is the staging checkpoint.
+Do these in order, after the mailbox is connected. This is the staging checkpoint.
 
 **IMAP receive.** From a personal address, send a realistic enquiry to the Titan mailbox — for
 example: *"Hi, we need 6 CCTV cameras installed at our warehouse in Penrose, and a quote for an Ajax
-alarm. Can someone come and look? — Dave, 021 555 0123."* Within a minute it should appear in the
-CRM **Inbox**. If it does not, press **Check for new email** and then look at **Settings → System
-status**.
+alarm. Can someone come and look? — Dave, 021 555 0123."* Send it **directly**, not forwarded, for
+this test. Within a minute it should appear in the CRM **Inbox**. If it does not, press **Check for
+new email** and then look at **Settings → System status**.
 
-**Live AI classification.** Open that email in the Inbox. It should either have created a lead on the
-Leads board (with name, phone, service, site address, summary and urgency filled in) or be sitting in
-**Needs review** with the AI's reading of it. Check the extracted fields look sensible. **Settings →
-Email AI** shows the provider, the confidence and recent classifications; if it says the rules
-classifier is active, the API key has not taken effect.
+**Classification.** Open that email in the Inbox. It should either have created a lead on the Leads
+board with the service, phone and address filled in, or be waiting in **Needs review**. Either is a
+pass — Needs review means the classifier was not confident, which is the behaviour you want.
 
 **SMTP reply.** Open the thread in the CRM and write a reply. Send it. Three things must be true: the
 reply arrives in your personal inbox, it appears threaded under the original message rather than as a
-new conversation, and it shows on the CRM thread as an outbound message. The CRM never sends AI-written
-text to a customer; what you type is what goes.
+new conversation, and it shows on the CRM thread as an outbound message. What you type is exactly
+what goes; the CRM never writes or sends anything to a customer on its own.
 
-If all three pass, the system is live. `docs/runbooks/staging-checkpoint.md` has the longer version of
-this with troubleshooting.
+Then repeat the first test with a **forwarded** enquiry, so you see for yourself what section 9
+describes before you rely on it.
+
+If those pass, the system is live. `docs/runbooks/staging-checkpoint.md` has the longer version with
+troubleshooting.
 
 ---
 
@@ -304,8 +335,8 @@ Rules, and what enforces them:
   value. It runs in CI on every push, and locally with `pnpm secrets:check`.
 - The repository history has been checked and contains no committed credentials.
 
-If a key is ever exposed: revoke it at the source first (Anthropic console, or Titan app passwords),
-then replace the value in Railway. Rotating `ENCRYPTION_KEY` means reconnecting the mailbox; rotating
+If a credential is ever exposed: revoke it at the source first (Titan app passwords), then replace
+the value in Railway. Rotating `ENCRYPTION_KEY` means reconnecting the mailbox; rotating
 `AUTH_SECRET` signs everyone out.
 
 ---
@@ -316,7 +347,7 @@ then replace the value in Railway. Rotating `ENCRYPTION_KEY` means reconnecting 
 | --- | --- |
 | First login | `https://<domain>/` → `/setup` |
 | Connect mailbox | Settings → Email accounts |
-| AI status and smoke test | Settings → Email AI |
+| Classifier status and recent decisions | Settings → Email AI |
 | Reminder thresholds, business hours | Settings → Reminders |
 | Staff and roles | Settings → Staff |
 | System status | Settings → System status |

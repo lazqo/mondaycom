@@ -9,8 +9,9 @@ kanban), lead conversion to customer + job (+ optional draft quote), quotes with
 jobs with scheduling onto a built-in calendar, user management, and an activity log.
 
 v0.2: **Titan email ingestion.** A mailbox is connected over IMAP/SMTP; new enquiries are stored with
-their full original message and thread, classified by an AI layer (Claude, or offline rules), and
-turned into Leads automatically when confidence is high or sent to a Needs-review queue when not.
+their full original message and thread, classified by a pluggable classifier (the built-in offline
+rules by default, optionally Claude), and turned into Leads automatically when confidence is high or
+sent to a Needs-review queue when not.
 Replies are sent from the CRM through Titan SMTP and kept on the same thread.
 
 v0.3: **Today dashboard, calendar & dispatch, My Day, follow-up automations.** A morning

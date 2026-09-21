@@ -1,15 +1,19 @@
-# Staging checkpoint: real Titan mailbox + live AI
+# Staging checkpoint: real Titan mailbox
 
 Goal: prove, on a deployed staging site, that a real Titan email is detected automatically, the
-thread is preserved, a reply from the CRM stays threaded, and the live AI extracts sensible lead data.
+thread is preserved, a reply from the CRM stays threaded, and lead extraction is sensible.
 Budget: about 30 minutes. Nothing here needs code changes.
+
+`docs/DEPLOYMENT_HANDOFF.md` is the primary go-live document; this runbook is the longer walkthrough
+of the mailbox checks. Production runs the built-in offline classifier (`AI_PROVIDER=rules`), so
+there is no AI service to enable — section 4 below is optional and only applies if you ever decide
+to turn Claude on.
 
 ## 0. What you need in hand
 
 - A hosting account (Railway recommended; Render also pre-configured). See `docs/DEPLOY.md`.
 - The Titan mailbox to connect (e.g. `info@getsecure.co.nz`), with **third-party email access** turned
   on in Titan and an **app password** if 2FA is enabled. See `docs/runbooks/titan-mailbox.md`.
-- An Anthropic API key (console.anthropic.com → API keys).
 
 ## 1. Deploy (Railway)
 
@@ -23,8 +27,7 @@ Budget: about 30 minutes. Nothing here needs code changes.
    | `APP_URL` | the generated Railway domain (Settings → Networking) |
    | `APP_TIMEZONE` | `Pacific/Auckland` |
    | `INGEST_IN_PROCESS` | `true` |
-   | `AI_PROVIDER` | `rules` for step 3, then `anthropic` for step 4 |
-   | `ANTHROPIC_API_KEY` | your key (add at step 4) |
+   | `AI_PROVIDER` | `rules` |
    | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` |
    | `ENCRYPTION_KEY` | `openssl rand -base64 32` output |
    | `HEALTH_TOKEN` | `openssl rand -hex 16` |
@@ -42,7 +45,7 @@ Budget: about 30 minutes. Nothing here needs code changes.
 3. **Connect**, then **Check for new email**. The first sync imports the last 14 days. Expect the Inbox to
    fill; with `AI_PROVIDER=rules` everything is classified by the offline rules.
 
-## 3. Prove detection, thread and reply (rules provider, no AI cost)
+## 3. Prove detection, thread and reply
 
 1. From a personal address, send a new email to the mailbox: subject
    `Staging test: CCTV quote for 12 Test St`, a body that mentions two cameras and a phone number.
@@ -61,7 +64,9 @@ Budget: about 30 minutes. Nothing here needs code changes.
 Send me: a screenshot of the CRM thread with all three messages, and any log line containing
 `error` from the service.
 
-## 4. Turn on the live AI
+## 4. Optional: turn on the live AI
+
+Skip this unless you have decided you want Claude reading enquiries. Production runs `rules`.
 
 1. Set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`. Redeploy.
 2. **Settings → Email AI** shows the active provider and model. Press **Run smoke test**: it classifies the
@@ -74,13 +79,17 @@ Send me: a screenshot of the CRM thread with all three messages, and any log lin
 
 ## 5. Decide
 
-Look at **Settings → Email AI → Recent classifications** (provider, confidence, extracted fields, and
+Whichever classifier is active, look at **Settings → Email AI → Recent classifications** (provider, confidence, extracted fields, and
 whether a person accepted, edited or rejected each one). Automatic lead creation is sensible when:
 
 - confident leads have the right name, phone and service;
 - no newsletter or supplier email was created as a lead;
 - the uncertain ones are in Needs review, not on the board.
 
-If not, keep `AI_PROVIDER=anthropic` but raise `AI_LEAD_CONFIDENCE_THRESHOLD` to `0.9` so more goes to
-review, and send me three examples that were wrong. Tuning the prompt against real examples is a
-small change.
+If not, raise `AI_LEAD_CONFIDENCE_THRESHOLD` to `0.9` so more goes to review, and keep three examples
+that were wrong.
+
+**Forwarded enquiries are a known limitation** with either classifier: the forward header truncates
+the message before extraction, so the lead is created against your own forwarding address with the
+phone and site address empty. The full original email is still readable on the thread. See section 9
+of `docs/DEPLOYMENT_HANDOFF.md`.

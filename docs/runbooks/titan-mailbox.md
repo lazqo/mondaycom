@@ -19,6 +19,15 @@ Server settings (defaults are pre-filled in the CRM):
 EU-hosted Titan accounts use `imap.titan.email` / `smtp.titan.email` as well; if login fails, check
 the "Configure Titan on other apps" page in Titan support for your region's hostnames.
 
+## Connect the enquiry mailbox directly, do not forward into it
+
+Connect the mailbox customers actually write to (`info@getsecure.co.nz`). Do **not** set that mailbox
+to forward into a different connected address: a forwarded message carries your own address in its
+`From` header and the forward banner truncates the body before lead extraction reads it, so leads come
+out named after your own info address with no phone or site address. The full email is still readable
+on the thread, but the fields must be corrected by hand. Section 9 of `docs/DEPLOYMENT_HANDOFF.md` has
+the worked example.
+
 ## In the CRM
 
 1. **Settings → Email accounts** (admin only) → **Connect mailbox**.
@@ -54,10 +63,11 @@ Replies written in the CRM are sent exactly as typed through Titan SMTP, with co
 `In-Reply-To` / `References` headers, stored on the same thread, and copied to Titan's Sent folder.
 The CRM never sends AI-generated text to a customer.
 
-## AI provider
+## Classifier
 
-`AI_PROVIDER=auto` uses Anthropic (Claude, model `AI_MODEL`, default `claude-opus-5`) when
-`ANTHROPIC_API_KEY` is set, and the built-in offline rules classifier otherwise. The provider is
+Production runs `AI_PROVIDER=rules`: the built-in offline classifier, no external service and no cost.
+`AI_PROVIDER=auto` would use Anthropic (Claude, model `AI_MODEL`) when `ANTHROPIC_API_KEY` is set, and
+fall back to the offline rules otherwise. The provider is
 behind one interface (`src/lib/ai/types.ts`); add a class and a branch in `src/lib/ai/index.ts` to
 use another model or vendor. Every classification is stored with provider, model, confidence, the
 extracted fields, token usage and the reviewer's decision, so accuracy can be measured over time.

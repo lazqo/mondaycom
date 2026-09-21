@@ -23,14 +23,19 @@ real values. `pnpm env:check` validates a local `.env` against this list.
 
 Mailbox credentials themselves are entered in the app (Settings → Email accounts), not in env.
 
-## Email AI (Anthropic)
+## Lead classification
+
+Production runs the built-in offline classifier. There is no Anthropic account or API key.
 
 | Variable | Example | Why |
 | --- | --- | --- |
-| `AI_PROVIDER` | `auto` | `auto` uses Claude when a key is present, else offline rules. `anthropic` forces Claude (fails without key). `rules` forces offline. |
-| `ANTHROPIC_API_KEY` | `sk-ant-…` | From console.anthropic.com. Costs money per email classified (cents). |
-| `AI_MODEL` | `claude-opus-5` | Model id. |
+| `AI_PROVIDER` | `rules` | **Production value.** Built-in offline classifier: keyword and pattern matching, no external service, no cost. `auto` would use Claude when a key is present; `anthropic` forces it and fails without a key. |
 | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Auto-create leads at or above this; below goes to Needs review. Raise to `0.9` to be cautious. |
+| `ANTHROPIC_API_KEY` | `sk-ant-…` | Only if you ever switch `AI_PROVIDER` away from `rules`. From console.anthropic.com; costs roughly 2 US cents per email classified. |
+| `AI_MODEL` | `claude-opus-5` | Only used when the provider is Anthropic. |
+
+Note: forwarded enquiries lose their details during extraction whichever classifier is active — see
+section 9 of `docs/DEPLOYMENT_HANDOFF.md`.
 
 ## Operations
 
@@ -61,6 +66,6 @@ Not needed once the first admin exists. Either open `/setup` after deploying (re
 - [ ] `APP_URL` is the HTTPS domain; the host terminates TLS (cookies are `Secure` in production).
 - [ ] `APP_TIMEZONE=Pacific/Auckland`.
 - [ ] `INGEST_IN_PROCESS=true` on exactly one running instance.
-- [ ] `ANTHROPIC_API_KEY` set and `AI_PROVIDER=auto` (or `rules` until you have reviewed the smoke test).
+- [ ] `AI_PROVIDER=rules`. No Anthropic key is needed or wanted.
 - [ ] `HEALTH_TOKEN` set and an uptime monitor polling `/api/health` every 5 minutes.
 - [ ] Opened `/setup` and completed the checklist; the seed variables are removed afterwards.
