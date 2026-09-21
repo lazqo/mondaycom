@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLead, getActivity, listActiveUsers } from "@/queries";
+import { getThreadForLead } from "@/queries/email";
+import { LeadEmailCard } from "@/components/leads/lead-email-card";
+import { LEAD_URGENCY_META } from "@/lib/constants";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { LeadForm } from "@/components/leads/lead-form";
 import { ConvertLeadButton } from "@/components/leads/convert-lead-dialog";
@@ -16,7 +19,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const [lead, users] = await Promise.all([getLead(id), listActiveUsers()]);
   if (!lead) notFound();
-  const activity = await getActivity("lead", id);
+  const [activity, thread] = await Promise.all([getActivity("lead", id), getThreadForLead(id)]);
 
   return (
     <div className="space-y-4">
@@ -25,9 +28,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <Link href="/leads" className="text-xs text-gray-500 hover:text-brand-700">
             ← Leads
           </Link>
-          <h1 className="mt-1 flex items-center gap-3 text-xl font-semibold text-gray-900">
+          <h1 className="mt-1 flex flex-wrap items-center gap-3 text-xl font-semibold text-gray-900">
             {lead.name}
             <StatusPill value={lead.status} />
+            {lead.urgency ? <Badge className={`${LEAD_URGENCY_META[lead.urgency].bg} ${LEAD_URGENCY_META[lead.urgency].text}`}>{LEAD_URGENCY_META[lead.urgency].label}</Badge> : null}
+            {lead.aiConfidence ? <span className="text-xs font-normal text-gray-500">AI {Math.round(Number(lead.aiConfidence) * 100)}%</span> : null}
           </h1>
           <p className="text-sm text-gray-500">
             {lead.company ? `${lead.company} · ` : ""}Created {formatDateTime(lead.createdAt)}
@@ -48,6 +53,13 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
+          {lead.summary ? (
+            <Card className="p-4 text-sm">
+              <p className="text-gray-900">{lead.summary}</p>
+              {lead.nextAction ? <p className="mt-1 text-xs text-gray-600">Next: {lead.nextAction}</p> : null}
+            </Card>
+          ) : null}
+          <LeadEmailCard thread={thread} />
           <Card>
             <CardHeader title="Details" />
             <div className="p-4">

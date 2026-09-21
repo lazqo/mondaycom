@@ -16,6 +16,12 @@ services:
         generateValue: true
       - key: APP_TIMEZONE
         value: Pacific/Auckland
+      - key: INGEST_IN_PROCESS
+        value: "true"
+      - key: AI_PROVIDER
+        value: auto
+      - key: ANTHROPIC_API_KEY
+        sync: false
       - key: SEED_ADMIN_EMAIL
         sync: false
       - key: SEED_ADMIN_PASSWORD

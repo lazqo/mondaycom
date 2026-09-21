@@ -29,6 +29,7 @@ jobs:
       SEED_ADMIN_EMAIL: admin@getsecure.co.nz
       SEED_ADMIN_PASSWORD: ci-password-123
       NEXT_TELEMETRY_DISABLED: "1"
+      AI_PROVIDER: rules
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -42,7 +43,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Start local IMAP server (Dovecot) for integration and e2e tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq dovecot-imapd
+          sudo systemctl stop dovecot || true
+          tests/support/dovecot/start.sh 1143
       - run: pnpm db:migrate
+      - run: pnpm test:integration
       - run: pnpm db:seed -- --sample
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium

@@ -4,17 +4,23 @@ A monday.com-style CRM for Get Secure, built around the core workflow:
 
 **Lead → Customer → Quote → Job → Calendar**
 
-v0.1 ships: login, a Leads board (table with inline editing, grouped by status, plus a drag-and-drop
+v0.1: login, a Leads board (table with inline editing, grouped by status, plus a drag-and-drop
 kanban), lead conversion to customer + job (+ optional draft quote), quotes with line items and GST,
-jobs with scheduling onto a built-in calendar, user management, and an activity log. Everything is
-persisted in PostgreSQL.
+jobs with scheduling onto a built-in calendar, user management, and an activity log.
 
-See [docs/PLAN.md](docs/PLAN.md) for the full roadmap and [docs/DEPLOY.md](docs/DEPLOY.md) for staging deployment.
+v0.2: **Titan email ingestion.** A mailbox is connected over IMAP/SMTP; new enquiries are stored with
+their full original message and thread, classified by an AI layer (Claude, or offline rules), and
+turned into Leads automatically when confidence is high or sent to a Needs-review queue when not.
+Replies are sent from the CRM through Titan SMTP and kept on the same thread.
+
+See [docs/PLAN.md](docs/PLAN.md) for the roadmap, [docs/DEPLOY.md](docs/DEPLOY.md) for staging
+deployment, and [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for connecting a mailbox.
 
 ## Stack
 
 Next.js 15 (App Router, server actions) · TypeScript · PostgreSQL 16 + Drizzle ORM · Tailwind v4 · dnd-kit ·
-Playwright + Vitest. Single app for now; a worker process for email ingestion is next.
+imapflow / mailparser / nodemailer · Anthropic SDK · Playwright + Vitest. One codebase, two processes:
+the web app and an optional email-ingestion worker (or run ingestion inside the web process).
 
 ## Local development
 
@@ -39,17 +45,24 @@ Sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` from your `.env`.
 | `pnpm db:seed [-- --sample]` | Create the first admin user; `--sample` adds example leads |
 | `pnpm db:studio` | Drizzle Studio for browsing the database |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | ESLint / `tsc` / Vitest unit tests |
-| `pnpm test:e2e` | Playwright end-to-end test of the core workflow (needs a migrated + seeded DB and a `pnpm build`) |
+| `pnpm test:integration` | Vitest against the real database: ingestion, threading, classification; plus IMAP/SMTP when a local Dovecot is running |
+| `pnpm test:e2e` | Playwright end-to-end: core workflow, and the email flow when a local Dovecot is running (`tests/support/dovecot/start.sh`) |
+| `pnpm worker` | Run the email ingestion worker (IMAP IDLE + poll) as its own process |
+| `pnpm mailbox:sync` | One sync pass over every active mailbox |
+| `pnpm ingest:eml -- --mailbox <address> file.eml` | Import .eml files as if they arrived over IMAP (testing / backfill) |
 
 ## Project layout
 
 ```
 src/app/            routes (App Router). (app)/ is the authenticated shell; login/ is public
-src/actions/        server actions: leads, contacts, quotes, jobs, events, users, auth
-src/queries/        read queries used by pages
-src/components/     UI: leads board (table/kanban/cells), calendar, forms, layout, primitives
+src/actions/        server actions: leads, contacts, quotes, jobs, events, users, auth, mailboxes, inbox
+src/queries/        read queries used by pages (email.ts for inbox/threads)
+src/components/     UI: leads board (table/kanban/cells), inbox, calendar, forms, layout, primitives
 src/db/             Drizzle schema + client
-src/lib/            auth (JWT cookie sessions), env validation, constants, helpers
+src/lib/ai/         provider-neutral lead classifier interface + Anthropic and offline-rules providers
+src/lib/email/      parse, store/thread, classification pipeline, IMAP sync + IDLE watcher, SMTP replies
+src/worker/         standalone ingestion worker entry point (src/instrumentation.ts runs it in-process)
+src/lib/            auth (JWT cookie sessions), env validation, crypto for mailbox secrets, constants
 drizzle/            SQL migrations (generated; commit them)
 scripts/            migrate.mjs, seed.mjs (plain JS so they run in the production image)
 tests/              unit (Vitest) and e2e (Playwright)
@@ -64,3 +77,9 @@ tests/              unit (Vitest) and e2e (Playwright)
 | `APP_URL` | no | Public URL (default `http://localhost:3000`) |
 | `APP_TIMEZONE` | no | IANA zone for server-rendered times (default `Pacific/Auckland`) |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` / `SEED_ADMIN_NAME` | seed only | Used by `pnpm db:seed` when no users exist |
+| `ENCRYPTION_KEY` | no | Key for mailbox passwords at rest (derived from `AUTH_SECRET` if unset) |
+| `AI_PROVIDER` | no | `auto` (default), `anthropic`, or `rules` |
+| `ANTHROPIC_API_KEY` / `AI_MODEL` | for Claude | Model defaults to `claude-opus-5` |
+| `AI_LEAD_CONFIDENCE_THRESHOLD` | no | Auto-create leads at or above this confidence (default 0.75) |
+| `INGEST_IN_PROCESS` | no | `true` runs the IMAP watcher inside the web server |
+| `INGEST_POLL_SECONDS` | no | Backstop poll interval for mailboxes (default 120) |

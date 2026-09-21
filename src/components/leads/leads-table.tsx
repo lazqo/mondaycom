@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Mail } from "lucide-react";
 import type { LeadRow } from "@/queries";
 import { LEAD_STATUSES, LEAD_STATUS_META, type LeadStatus } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -116,6 +116,11 @@ function LeadTableRow({
           >
             {row.name}
           </Link>
+          {row.emailThreadId ? (
+            <Link href={`/inbox/${row.emailThreadId}`} title="Open original email" className="mr-2 text-gray-400 hover:text-brand-700">
+              <Mail className="h-4 w-4" />
+            </Link>
+          ) : null}
         </div>
       </td>
       <td className="border-l border-gray-200 p-0">

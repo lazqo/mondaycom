@@ -4,7 +4,7 @@ import { logoutAction } from "@/actions/auth";
 import type { SessionUser } from "@/lib/auth";
 import { SidebarNav } from "./sidebar-nav";
 
-export function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+export function AppShell({ user, needsReview = 0, children }: { user: SessionUser; needsReview?: number; children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
@@ -16,7 +16,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             Get Secure CRM
           </Link>
         </div>
-        <SidebarNav isAdmin={user.role === "admin"} />
+        <SidebarNav isAdmin={user.role === "admin"} needsReview={needsReview} />
         <div className="mt-auto border-t border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <Avatar name={user.name} />
@@ -47,6 +47,7 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
 
 function MobileNav({ isAdmin }: { isAdmin: boolean }) {
   const items = [
+    ["Inbox", "/inbox"],
     ["Leads", "/leads"],
     ["Customers", "/contacts"],
     ["Quotes", "/quotes"],

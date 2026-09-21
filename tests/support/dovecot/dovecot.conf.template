@@ -1,0 +1,40 @@
+# Minimal Dovecot config for local/CI IMAP testing. Plain IMAP on 127.0.0.1:__PORT__, one user.
+base_dir = __RUN__
+state_dir = __RUN__
+protocols = imap
+listen = 127.0.0.1
+log_path = __ROOT__/dovecot.log
+info_log_path = __ROOT__/dovecot.log
+ssl = no
+disable_plaintext_auth = no
+auth_mechanisms = plain login
+mail_location = maildir:__ROOT__/mail/%u
+mail_uid = 65534
+mail_gid = 65534
+first_valid_uid = 65534
+first_valid_gid = 65534
+default_login_user = dovenull
+default_internal_user = dovecot
+passdb {
+  driver = passwd-file
+  args = __ROOT__/users
+}
+userdb {
+  driver = passwd-file
+  args = __ROOT__/users
+}
+service imap-login {
+  inet_listener imap {
+    port = __PORT__
+  }
+  process_min_avail = 0
+  service_count = 1
+}
+namespace inbox {
+  inbox = yes
+  separator = /
+  mailbox Sent {
+    special_use = \Sent
+    auto = subscribe
+  }
+}

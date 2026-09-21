@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Lead } from "@/db/schema";
 import { updateLead, archiveLead } from "@/actions/leads";
 import { Button, Field, FormError, Input, Select, Textarea } from "@/components/ui";
-import { LEAD_SOURCES, LEAD_SOURCE_LABELS, LEAD_STATUSES, LEAD_STATUS_META, SERVICE_SUGGESTIONS } from "@/lib/constants";
+import { LEAD_SOURCES, LEAD_SOURCE_LABELS, LEAD_STATUSES, LEAD_STATUS_META, LEAD_URGENCIES, LEAD_URGENCY_META, SERVICE_SUGGESTIONS } from "@/lib/constants";
 import type { UserOption } from "./cells";
 
 export function LeadForm({ lead, users }: { lead: Lead; users: UserOption[] }) {
@@ -101,6 +101,22 @@ export function LeadForm({ lead, users }: { lead: Lead; users: UserOption[] }) {
               </option>
             ))}
           </Select>
+        </Field>
+        <Field label="Enquiry summary" htmlFor="l-summary" className="sm:col-span-2">
+          <Textarea id="l-summary" name="summary" defaultValue={lead.summary ?? ""} className="min-h-16" placeholder="What the customer is asking for" />
+        </Field>
+        <Field label="Urgency" htmlFor="l-urgency">
+          <Select id="l-urgency" name="urgency" defaultValue={lead.urgency ?? ""}>
+            <option value="">—</option>
+            {LEAD_URGENCIES.map((u) => (
+              <option key={u} value={u}>
+                {LEAD_URGENCY_META[u].label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Next action" htmlFor="l-next">
+          <Input id="l-next" name="nextAction" defaultValue={lead.nextAction ?? ""} />
         </Field>
         <Field label="Notes" htmlFor="l-notes" className="sm:col-span-2">
           <Textarea id="l-notes" name="notes" defaultValue={lead.notes ?? ""} />

@@ -1,0 +1,25 @@
+Message-ID: <inv-008@accounts.wholesaler.example>
+Date: Mon, 21 Sep 2026 08:20:00 +1200
+From: Accounts <accounts@wholesaler.example>
+To: info@getsecure.co.nz
+Subject: Invoice INV-20419 attached
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="m1"
+
+--m1
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+Please find invoice INV-20419 attached for your recent order. Payment is due on the 20th of next month.
+
+Regards,
+Accounts team
+
+--m1
+Content-Type: application/pdf; name="INV-20419.pdf"
+Content-Disposition: attachment; filename="INV-20419.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nPj4KZW5kb2JqCnRyYWlsZXIKPDwvUm9vdCAxIDAgUj4+CiUlRU9G
+--m1--

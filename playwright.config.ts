@@ -11,6 +11,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: process.env.CI ? "github" : "list",
+  globalSetup: "./tests/e2e/global-setup.ts",
   use: {
     baseURL,
     trace: "retain-on-failure",
@@ -30,6 +31,7 @@ export default defineConfig({
     ? undefined
     : {
         command: `pnpm next start -p ${PORT}`,
+        env: { AI_PROVIDER: "rules" },
         url: `${baseURL}/api/health`,
         reuseExistingServer: !process.env.CI,
         timeout: 60_000,

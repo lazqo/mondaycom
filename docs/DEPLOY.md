@@ -13,6 +13,8 @@ images with a Postgres add-on works; two one-click options are pre-configured.
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (reference the Postgres service)
    - `AUTH_SECRET` = output of `openssl rand -base64 32`
    - `APP_TIMEZONE` = `Pacific/Auckland`
+   - `INGEST_IN_PROCESS` = `true` (email ingestion runs inside the web service)
+   - `ANTHROPIC_API_KEY` = your key (optional; without it the offline rules classifier is used)
    - `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME` (used once, see step 5)
 4. **Settings → Networking → Generate Domain**. Set `APP_URL` to that URL.
 5. First-time only — create the admin user. Either open the service's shell (Railway CLI:
@@ -58,5 +60,7 @@ Put a TLS-terminating proxy (Caddy, nginx) in front of port 3000.
 - Session cookies are marked `secure` in production, so the app must be served over HTTPS.
 - The Docker image is not built in CI yet (CI runs lint, typecheck, unit and e2e tests). If a host
   fails to build the image, run `docker build .` locally to reproduce.
-- Upcoming email ingestion will add a second process (worker). It will ship as the same image with a
-  different start command, so the hosting choice above stays valid.
+- Email ingestion runs inside the web process when `INGEST_IN_PROCESS=true`. To run it separately,
+  deploy the same image a second time with `PROCESS_TYPE=worker` and set `INGEST_IN_PROCESS=false`
+  on the web service. Never run both at once against the same mailbox.
+- After deploying, connect the Titan mailbox: see `docs/runbooks/titan-mailbox.md`.

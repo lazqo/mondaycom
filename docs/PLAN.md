@@ -354,5 +354,36 @@ Deviations from the plan, and why:
   repo, sharing `src/db` and `src/lib`.
 - **No Redis yet.** Nothing needs a queue until IMAP ingestion arrives.
 
-Next: Titan email ingestion (IMAP IDLE worker → inbox → Claude classification → lead created with the
-original email attached), then dedupe against existing contacts.
+### v0.2 — Titan email ingestion (2026-09-21)
+
+- **Mailboxes** (admin): connect a Titan mailbox over IMAP/SMTP, test the connection, sync now,
+  pause/remove. Passwords are AES-256-GCM encrypted at rest.
+- **Ingestion**: IMAP IDLE watcher with a polling backstop, runnable inside the web process
+  (`INGEST_IN_PROCESS=true`) or as a separate worker (`PROCESS_TYPE=worker`). Per-mailbox UID cursor
+  plus Message-ID uniqueness means no duplicates across restarts or UIDVALIDITY changes.
+- **Storage**: full original MIME, parsed text/HTML, headers, attachments; threading by
+  References/In-Reply-To, then normalised subject + counterpart within 30 days.
+- **AI layer** (`src/lib/ai`): one `LeadClassifier` interface; `AnthropicClassifier` (Claude with
+  structured output, prompt caching, low effort) and `RulesClassifier` (offline, deterministic, used
+  in CI). Extracts name, company, email, phone, service, site, summary, urgency, next action, plus a
+  confidence and a reason. Every result is stored with provider/model/tokens and the reviewer's decision.
+- **Pipeline**: existing-thread and known-customer matching first (no AI call), automated-mail
+  prefilter, then classification → auto-create Lead (confidence ≥ 0.75) / Needs review / Not a lead.
+- **Inbox**: sender, subject, received, classification, linked lead/customer; tabs and search; thread
+  view with original HTML in a sandboxed frame, attachments, AI assessment panel (accept, edit &
+  create, not a lead, re-run), link/unlink to existing lead/customer/job, and a reply composer that
+  sends through Titan SMTP, threads correctly, stores the outbound message and copies it to Sent.
+  No AI-written replies are ever sent.
+- **Leads**: email-sourced leads carry summary, urgency, next action, AI confidence and an envelope
+  link to the thread; the lead page shows the original email.
+- **Tests**: unit (parser, rules classifier, crypto), integration against Postgres + a local Dovecot
+  IMAP server (fetch, incremental cursor, IDLE detection, SMTP reply threading), and Playwright e2e
+  proving a delivered email appears on the Leads board with extracted fields and the original email.
+  CI installs Dovecot and runs all of it.
+
+Deviation: the Anthropic provider is code-complete but was exercised only through its interface in
+this environment (no API key available here); the offline rules provider drives the automated tests.
+First production run should watch the Inbox "Needs review" tab and the stored confidences.
+
+Next: calendar/dispatch improvements and the follow-up automation layer (overdue follow-ups,
+reminders, status-driven actions).

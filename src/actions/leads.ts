@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { contacts, jobs, leads, quotes } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
-import { LEAD_SOURCES, LEAD_STATUSES } from "@/lib/constants";
+import { LEAD_SOURCES, LEAD_STATUSES, LEAD_URGENCIES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
 
@@ -53,6 +53,15 @@ const leadInput = z.object({
   lastContactAt: optionalDate,
   source: z.enum(LEAD_SOURCES).optional(),
   notes: z.string().trim().max(10000).optional(),
+  summary: z.string().trim().max(2000).optional(),
+  urgency: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : v))
+    .pipe(z.enum(LEAD_URGENCIES).nullable())
+    .nullable()
+    .optional(),
+  nextAction: z.string().trim().max(500).optional(),
 });
 export type LeadInput = z.infer<typeof leadInput>;
 
