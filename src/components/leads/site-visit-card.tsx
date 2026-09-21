@@ -7,7 +7,7 @@ import { CalendarPlus } from "lucide-react";
 import type { Event } from "@/db/schema";
 import { Button, Card, CardHeader } from "@/components/ui";
 import { EventDialog } from "@/components/calendar/event-dialog";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatTime } from "@/lib/utils";
 
 type UserOption = { id: string; name: string };
 
@@ -32,7 +32,7 @@ export function SiteVisitCard({ lead, events, users }: { lead: { id: string; nam
         {visits.map((v) => (
           <Link key={v.id} href={`/calendar?view=day&date=${new Date(v.startsAt).toISOString().slice(0, 10)}`} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50">
             <span>
-              {formatDateTime(v.startsAt)} – {new Date(v.endsAt).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" })}
+              {formatDateTime(v.startsAt)} – {formatTime(v.endsAt)}
             </span>
             <span className="text-xs text-gray-500">{new Date(v.endsAt) < new Date() ? "completed" : "upcoming"}</span>
           </Link>

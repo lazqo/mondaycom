@@ -6,7 +6,7 @@ import { and, eq, isNull, max, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { contacts, jobs, leads, quotes } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
+import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { LEAD_SOURCES, LEAD_STATUSES, LEAD_URGENCIES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";

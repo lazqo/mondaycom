@@ -54,8 +54,8 @@ export function MailboxesAdmin({ mailboxes }: { mailboxes: MailboxView[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Mailboxes</h1>
-          <p className="text-sm text-gray-500">Mailboxes the CRM reads enquiries from and replies through.</p>
+          <h1 className="text-xl font-semibold text-gray-900">Email accounts</h1>
+          <p className="text-sm text-gray-500">The Titan mailbox the CRM reads enquiries from and replies through.</p>
         </div>
         <Button onClick={() => setEditing("new")}>
           <Plus className="h-4 w-4" /> Connect mailbox

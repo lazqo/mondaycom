@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { mailboxes } from "@/db/schema";
-import { requireAdmin, requireUser } from "@/lib/auth";
+import { requireAdmin, requireOffice as requireUser } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { connectionFromMailbox, syncMailboxOnce, testImapConnection, type MailboxConnection } from "@/lib/email/imap";
 import { testSmtpConnection } from "@/lib/email/smtp";

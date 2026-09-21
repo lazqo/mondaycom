@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContact } from "@/queries";
+import { getContactHistory } from "@/queries/contact-history";
+import { ContactHistory } from "@/components/contacts/contact-history";
 import { Badge, Card, CardHeader, LinkButton } from "@/components/ui";
 import { ContactForm } from "@/components/contacts/contact-form";
 import { StatusPill } from "@/components/leads/cells";
@@ -14,6 +16,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const contact = await getContact(id);
   if (!contact) notFound();
+  const history = await getContactHistory(id);
 
   return (
     <div className="space-y-4">
@@ -41,6 +44,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
               <ContactForm contact={contact} />
             </div>
           </Card>
+          <ContactHistory contactId={contact.id} items={history} />
           <Card>
             <CardHeader title="Jobs" />
             <div className="divide-y divide-gray-100">

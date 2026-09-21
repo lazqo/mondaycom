@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Paperclip } from "lucide-react";
 import { listInbox, inboxCounts, listMailboxes, type InboxFilter } from "@/queries/email";
+import { requireOffice } from "@/lib/auth";
 import { Badge, EmptyState, LinkButton } from "@/components/ui";
 import { SyncNowButton } from "@/components/inbox/sync-now-button";
 import { InboxSearch } from "@/components/inbox/inbox-search";
+import { ReviewRowActions } from "@/components/inbox/review-row-actions";
 import { EMAIL_CLASSIFICATION_META, LEAD_STATUS_META } from "@/lib/constants";
 import { cn, formatDateTime } from "@/lib/utils";
 
@@ -13,13 +15,14 @@ export const metadata: Metadata = { title: "Inbox" };
 const TABS: { key: InboxFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "needs_review", label: "Needs review" },
-  { key: "lead", label: "Leads" },
-  { key: "existing", label: "Existing" },
+  { key: "lead", label: "New leads" },
+  { key: "existing", label: "Known customers" },
   { key: "not_lead", label: "Not leads" },
-  { key: "error", label: "Errors" },
+  { key: "error", label: "Problems" },
 ];
 
 export default async function InboxPage({ searchParams }: { searchParams: Promise<{ filter?: string; q?: string }> }) {
+  await requireOffice();
   const sp = await searchParams;
   const filter = (TABS.some((t) => t.key === sp.filter) ? sp.filter : "all") as InboxFilter;
   const q = sp.q ?? "";
@@ -33,13 +36,14 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Inbox</h1>
           <p className="text-sm text-gray-500">
-            {total} emails · {active.length ? active.map((b) => b.emailAddress).join(", ") : "no mailbox connected"}
+            {total} emails · {active.length ? active.map((b) => b.emailAddress).join(", ") : "no email account connected"}
+            {filter === "needs_review" && rows.length ? " · decide each with the buttons on the right, or open one to edit the details first" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {active.length ? <SyncNowButton mailboxes={active.map((b) => ({ id: b.id, emailAddress: b.emailAddress }))} /> : null}
           <LinkButton variant="secondary" href="/settings/mailboxes">
-            Mailboxes
+            Email accounts
           </LinkButton>
         </div>
       </div>
@@ -73,7 +77,10 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
           action={<LinkButton href="/settings/mailboxes">Connect mailbox</LinkButton>}
         />
       ) : rows.length === 0 ? (
-        <EmptyState title="Nothing here" hint={q ? "No emails match your search." : "No emails in this view."} />
+        <EmptyState
+          title={q ? "No emails match" : filter === "needs_review" ? "Nothing to review" : filter === "error" ? "No problems" : "No emails here yet"}
+          hint={q ? "Try a different word, or search by the sender's address." : filter === "needs_review" ? "When the AI isn't sure about an enquiry it lands here for a quick yes/no." : filter === "all" ? "New enquiries appear here within a minute of arriving in the mailbox." : "Nothing in this view right now."}
+        />
       ) : (
         <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
           <table className="w-full text-sm">
@@ -82,8 +89,9 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                 <th className="px-3 py-2 text-left">Sender</th>
                 <th className="px-3 py-2 text-left">Subject</th>
                 <th className="px-3 py-2 text-left">Received</th>
-                <th className="px-3 py-2 text-left">Classification</th>
+                <th className="px-3 py-2 text-left">What is it</th>
                 <th className="px-3 py-2 text-left">Linked to</th>
+                {filter === "needs_review" ? <th className="px-3 py-2 text-left">Decide</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -91,11 +99,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                 const meta = EMAIL_CLASSIFICATION_META[e.classification];
                 return (
                   <tr key={e.id} className="hover:bg-gray-50" data-testid={`inbox-row-${e.id}`}>
-                    <td className="max-w-[220px] px-3 py-2">
+                    <td className="max-w-[180px] px-3 py-2">
                       <div className="truncate font-medium text-gray-900">{e.fromName || e.fromAddress}</div>
                       {e.fromName ? <div className="truncate text-xs text-gray-500">{e.fromAddress}</div> : null}
                     </td>
-                    <td className="max-w-[420px] px-3 py-2">
+                    <td className={`${filter === "needs_review" ? "max-w-[320px]" : "max-w-[420px]"} px-3 py-2`}>
                       <Link href={`/inbox/${e.threadId}`} className="block truncate font-medium text-gray-900 hover:text-brand-700 hover:underline">
                         {e.subject || "(no subject)"}
                         {e.hasAttachments ? <Paperclip className="ml-1 inline h-3.5 w-3.5 text-gray-400" /> : null}
@@ -121,6 +129,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
+                    {filter === "needs_review" ? (
+                      <td className="whitespace-nowrap px-3 py-2">
+                        <ReviewRowActions emailId={e.id} />
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}

@@ -8,13 +8,12 @@ import type { DayJob } from "@/queries/dashboard";
 import { setJobStatus, addJobNote, addJobPhoto } from "@/actions/jobs";
 import { Badge, Button, Card, FormError, Textarea } from "@/components/ui";
 import { JOB_STATUS_META, type JobStatus } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { cn, formatTime } from "@/lib/utils";
 
 const FLOW: JobStatus[] = ["scheduled", "en_route", "on_site", "done"];
 
 function timeRange(s: Date, e: Date) {
-  const f = (d: Date) => d.toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" });
-  return `${f(new Date(s))} – ${f(new Date(e))}`;
+  return `${formatTime(s)} – ${formatTime(e)}`;
 }
 
 export function MyDayJobCard({ row }: { row: DayJob }) {

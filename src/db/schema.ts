@@ -23,6 +23,7 @@ import {
   LEAD_URGENCIES,
   TASK_STATUSES,
   EVENT_KINDS,
+  USER_ROLES,
 } from "@/lib/constants";
 
 export { LEAD_STATUSES, LEAD_SOURCES, QUOTE_STATUSES, JOB_STATUSES, EMAIL_CLASSIFICATIONS, LEAD_URGENCIES, TASK_STATUSES, EVENT_KINDS };
@@ -30,7 +31,7 @@ export type { LeadStatus, LeadSource, QuoteStatus, JobStatus, EmailClassificatio
 
 // ---------- Enums ----------
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "member"]);
+export const userRoleEnum = pgEnum("user_role", USER_ROLES);
 
 export const leadStatusEnum = pgEnum("lead_status", LEAD_STATUSES);
 

@@ -3,11 +3,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import type { Notification } from "@/db/schema";
 import { markAllNotificationsRead, markNotificationRead } from "@/actions/notifications";
 import { formatDateTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+function relative(d: Date) {
+  const mins = Math.round((Date.now() - new Date(d).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h} h ago`;
+  return formatDateTime(d);
+}
 
 export function NotificationsBell({ items, unread }: { items: Notification[]; unread: number }) {
   const router = useRouter();
@@ -41,27 +50,41 @@ export function NotificationsBell({ items, unread }: { items: Notification[]; un
                   router.refresh();
                 }}
               >
-                Mark all read
+                Clear all
               </button>
             ) : null}
           </div>
           <div className="max-h-96 overflow-y-auto">
-            {items.length === 0 ? <p className="px-3 py-4 text-sm text-gray-500">No notifications.</p> : null}
+            {items.length === 0 ? <p className="px-3 py-4 text-sm text-gray-500">You&apos;re up to date. You&apos;ll be told here when a job is scheduled for you or a reminder is assigned to you.</p> : null}
             {items.map((n) => (
-              <Link
-                key={n.id}
-                href={n.link ?? "/dashboard"}
-                onClick={async () => {
-                  setOpen(false);
-                  if (!n.readAt) await markNotificationRead(n.id);
-                  router.refresh();
-                }}
-                className={cn("block border-b border-gray-100 px-3 py-2 text-sm hover:bg-gray-50", !n.readAt && "bg-brand-50/60")}
-              >
-                <p className="truncate font-medium text-gray-900">{n.title}</p>
-                {n.body ? <p className="truncate text-xs text-gray-600">{n.body}</p> : null}
-                <p className="text-[11px] text-gray-400">{formatDateTime(n.createdAt)}</p>
-              </Link>
+              <div key={n.id} className={cn("flex items-start gap-2 border-b border-gray-100 px-3 py-2 text-sm hover:bg-gray-50", !n.readAt && "bg-brand-50/60")} data-testid="notification-item">
+                <Link
+                  href={n.link ?? "/dashboard"}
+                  onClick={async () => {
+                    setOpen(false);
+                    if (!n.readAt) await markNotificationRead(n.id);
+                    router.refresh();
+                  }}
+                  className="min-w-0 flex-1"
+                >
+                  <p className="truncate font-medium text-gray-900">{n.title}</p>
+                  {n.body ? <p className="truncate text-xs text-gray-600">{n.body}</p> : null}
+                  <p className="text-[11px] text-gray-400">{relative(n.createdAt)}</p>
+                </Link>
+                {!n.readAt ? (
+                  <button
+                    type="button"
+                    aria-label="Dismiss"
+                    className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                    onClick={async () => {
+                      await markNotificationRead(n.id);
+                      router.refresh();
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+              </div>
             ))}
           </div>
         </div>

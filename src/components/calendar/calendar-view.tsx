@@ -53,11 +53,11 @@ function useNoClickAfterDrag() {
     }
   };
 }
-const START_HOUR = 6;
-const END_HOUR = 20;
 const SLOT_MIN = 30;
 const SLOT_PX = 28; // height of a 30-minute slot
-const SLOTS = ((END_HOUR - START_HOUR) * 60) / SLOT_MIN;
+/** Grid hours come from Settings → Reminders (business hours) with an hour of margin each side. */
+type Hours = { start: number; end: number; slots: number };
+const HoursCtx = React.createContext<Hours>({ start: 6, end: 20, slots: 28 });
 const DEFAULT_JOB_MIN = 120;
 const MIN_CHIP_PX = 72;
 const CASCADE_PX = 16;
@@ -93,8 +93,8 @@ function startOfWeek(d: Date) {
 function timeLabel(iso: string) {
   return new Date(iso).toLocaleTimeString("en-NZ", { hour: "numeric", minute: "2-digit" });
 }
-function minutesFromStart(d: Date) {
-  return d.getHours() * 60 + d.getMinutes() - START_HOUR * 60;
+function minutesFromStart(d: Date, startHour: number) {
+  return d.getHours() * 60 + d.getMinutes() - startHour * 60;
 }
 const PALETTE = ["#579bfc", "#a25ddc", "#ff9900", "#00c875", "#e2445c", "#0086c0", "#ffcb00", "#784bd1"];
 function techColor(id: string | null, users: UserOption[]) {
@@ -110,6 +110,7 @@ export function CalendarView({
   users,
   unassigned,
   techFilter,
+  hours: hoursIn = { start: 7, end: 18 },
 }: {
   view: View;
   date: string;
@@ -117,8 +118,14 @@ export function CalendarView({
   users: UserOption[];
   unassigned: UnassignedJob[];
   techFilter: string | null;
+  hours?: { start: number; end: number };
 }) {
   const router = useRouter();
+  const hours = React.useMemo<Hours>(() => {
+    const start = Math.max(0, Math.min(hoursIn.start, 22) - 1);
+    const end = Math.min(24, Math.max(hoursIn.end, start + 2) + 1);
+    return { start, end, slots: ((end - start) * 60) / SLOT_MIN };
+  }, [hoursIn.start, hoursIn.end]);
   const current = parseDate(date);
   const [dialog, setDialog] = React.useState<{ mode: "create"; date: string; time?: string } | { mode: "edit"; event: CalendarEvent } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -152,7 +159,7 @@ export function CalendarView({
     const over = e.over?.data.current as { day: string; slot: number; lane?: string } | undefined;
     if (!data || !over) return;
     const [y, m, d] = over.day.split("-").map(Number);
-    const startsAt = new Date(y, m - 1, d, START_HOUR, over.slot * SLOT_MIN);
+    const startsAt = new Date(y, m - 1, d, hours.start, over.slot * SLOT_MIN);
     setError(null);
     if (data.type === "event") {
       const durationMs = new Date(data.event.endsAt).getTime() - new Date(data.event.startsAt).getTime();
@@ -187,6 +194,7 @@ export function CalendarView({
       }}
     >
       <SuppressClick.Provider value={suppressUntil}>
+      <HoursCtx.Provider value={hours}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -254,6 +262,7 @@ export function CalendarView({
           }}
         />
       </div>
+      </HoursCtx.Provider>
       </SuppressClick.Provider>
       <DragOverlay>
         {active?.type === "event" ? <div className="w-48 rounded border border-gray-300 bg-white px-2 py-1 text-xs shadow-lg">{active.event.title}</div> : null}
@@ -268,6 +277,7 @@ export function CalendarView({
 type Column = { key: string; day: string; label: string; lane: string | undefined };
 
 function TimeGrid({ columns, events, users, todayStr, onNew, onOpen }: { columns: Column[]; events: CalendarEvent[]; users: UserOption[]; todayStr: string; onNew: (day: string, time: string) => void; onOpen: (ev: CalendarEvent) => void }) {
+  const { start: START_HOUR, end: END_HOUR, slots: SLOTS } = React.useContext(HoursCtx);
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
       <div className="grid" style={{ gridTemplateColumns: `56px repeat(${columns.length}, minmax(140px, 1fr))` }}>
@@ -331,6 +341,7 @@ function layoutOverlaps(events: CalendarEvent[]): Map<string, { lane: number; la
 }
 
 function DayColumn({ column, events, users, onNew, onOpen }: { column: Column; events: CalendarEvent[]; users: UserOption[]; onNew: (day: string, time: string) => void; onOpen: (ev: CalendarEvent) => void }) {
+  const { slots: SLOTS } = React.useContext(HoursCtx);
   const layout = React.useMemo(() => layoutOverlaps(events), [events]);
   const ref = React.useRef<HTMLDivElement>(null);
   const [width, setWidth] = React.useState(140);
@@ -355,6 +366,7 @@ function DayColumn({ column, events, users, onNew, onOpen }: { column: Column; e
 }
 
 function Slot({ column, slot, onNew }: { column: Column; slot: number; onNew: (day: string, time: string) => void }) {
+  const { start: START_HOUR } = React.useContext(HoursCtx);
   const { setNodeRef, isOver } = useDroppable({ id: `${column.key}:${slot}`, data: { day: column.day, slot, lane: column.lane } });
   const hour = START_HOUR + Math.floor((slot * SLOT_MIN) / 60);
   const min = (slot * SLOT_MIN) % 60;
@@ -373,10 +385,11 @@ function Slot({ column, slot, onNew }: { column: Column; slot: number; onNew: (d
 function PositionedEvent({ event, users, onOpen, placement, colWidth }: { event: CalendarEvent; users: UserOption[]; onOpen: (ev: CalendarEvent) => void; placement: { lane: number; lanes: number }; colWidth: number }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event:${event.id}`, data: { type: "event", event } });
   const noClickAfterDrag = useNoClickAfterDrag();
+  const { start: START_HOUR, slots: SLOTS } = React.useContext(HoursCtx);
   const s = new Date(event.startsAt);
   const en = new Date(event.endsAt);
-  const top = Math.max(0, minutesFromStart(s)) * (SLOT_PX / SLOT_MIN);
-  const bottom = Math.min(SLOTS * SLOT_MIN, minutesFromStart(en)) * (SLOT_PX / SLOT_MIN);
+  const top = Math.max(0, minutesFromStart(s, START_HOUR)) * (SLOT_PX / SLOT_MIN);
+  const bottom = Math.min(SLOTS * SLOT_MIN, minutesFromStart(en, START_HOUR)) * (SLOT_PX / SLOT_MIN);
   const height = Math.max(SLOT_PX, bottom - top);
   const color = event.job ? JOB_STATUS_META[event.job.status].color : event.kind === "site_visit" ? "#ff9900" : techColor(event.assignedToId, users);
   const label = event.job ? `J-${event.job.number} ${event.job.contactName}` : event.lead ? `Site visit: ${event.lead.name}` : event.title;

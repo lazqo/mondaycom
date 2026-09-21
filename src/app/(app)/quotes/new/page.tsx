@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireOffice } from "@/lib/auth";
 import Link from "next/link";
 import { listContacts } from "@/queries";
 import { QuoteEditor } from "@/components/quotes/quote-editor";
@@ -10,6 +11,7 @@ export default async function NewQuotePage({
 }: {
   searchParams: Promise<{ contactId?: string; leadId?: string }>;
 }) {
+  await requireOffice();
   const [{ contactId, leadId }, contacts] = await Promise.all([searchParams, listContacts()]);
   return (
     <div className="space-y-4">

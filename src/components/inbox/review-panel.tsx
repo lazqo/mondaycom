@@ -16,7 +16,9 @@ export function ReviewPanel({
   email,
   classification,
   users,
+  nextThreadId = null,
 }: {
+  nextThreadId?: string | null;
   thread: { id: string; leadId: string | null; contactId: string | null; jobId: string | null };
   email: { id: string; classification: EmailClassification; classificationError: string | null; fromName: string | null; fromAddress: string } | null;
   classification: EmailClassificationRow | null;
@@ -54,7 +56,8 @@ export function ReviewPanel({
     startTransition(async () => {
       const res = await acceptEmailAsLead(email.id, data);
       if (!res.ok) return setError(res.error);
-      router.push(`/leads/${res.data.leadId}`);
+      // In the review queue, move straight on to the next email; the banner links to the new lead.
+      router.push(nextThreadId ? `/inbox/${nextThreadId}?created=${res.data.leadId}` : `/leads/${res.data.leadId}`);
       router.refresh();
     });
   }
@@ -63,6 +66,7 @@ export function ReviewPanel({
     startTransition(async () => {
       const res = await rejectEmailAsLead(email.id);
       if (!res.ok) return setError(res.error);
+      if (nextThreadId) router.push(`/inbox/${nextThreadId}`);
       router.refresh();
     });
   }
@@ -156,7 +160,7 @@ export function ReviewPanel({
               {!editing ? (
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" onClick={() => accept()} disabled={pending} data-testid="accept-lead">
-                    Create lead
+                    {nextThreadId ? "Create lead & next" : "Create lead"}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => setEditing(true)} disabled={pending}>
                     Edit &amp; create

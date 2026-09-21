@@ -76,6 +76,18 @@ export async function getThread(threadId: string) {
 }
 export type ThreadDetail = NonNullable<Awaited<ReturnType<typeof getThread>>>;
 
+/** The next thread in the review queue after `currentThreadId` (oldest first), if any. */
+export async function nextReviewThread(currentThreadId: string): Promise<string | null> {
+  const rows = await db.query.emails.findMany({
+    where: and(eq(emails.direction, "inbound"), inArray(emails.classification, ["needs_review", "error"])),
+    columns: { threadId: true, receivedAt: true },
+    orderBy: [asc(emails.receivedAt)],
+    limit: 200,
+  });
+  const ids = [...new Set(rows.map((r) => r.threadId))].filter((id) => id !== currentThreadId);
+  return ids[0] ?? null;
+}
+
 export async function getThreadForLead(leadId: string) {
   return db.query.emailThreads.findFirst({
     where: eq(emailThreads.leadId, leadId),

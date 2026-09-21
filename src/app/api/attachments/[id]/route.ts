@@ -17,6 +17,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       "Content-Disposition": `attachment; filename="${safeName}"`,
       "Content-Length": String(a.content.length),
       "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-store",
     },
   });
 }

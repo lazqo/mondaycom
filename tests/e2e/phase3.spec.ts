@@ -58,12 +58,12 @@ test.describe("Calendar, dispatch, My Day and Today", () => {
 
   test("Today dashboard shows attention sections and can complete a task", async ({ page }) => {
     await login(page);
-    for (const s of ["overdue-tasks", "tasks-due-today", "needs-review", "today-s-jobs-site-visits", "unassigned-jobs", "new-leads", "leads-needing-follow-up", "quotes-waiting-on-action"]) {
+    for (const s of ["overdue-reminders", "reminders-for-today", "emails-needing-review", "today-s-jobs-site-visits", "jobs-not-yet-scheduled", "new-leads", "leads-needing-follow-up", "quotes-waiting-on-action"]) {
       await expect(page.getByTestId(`section-${s}`)).toBeVisible();
     }
-    await page.getByRole("button", { name: "Task" }).click();
+    await page.getByRole("button", { name: "Add reminder" }).click();
     await page.getByLabel("Title *").fill(`Ring supplier ${RUN}`);
-    await page.getByRole("button", { name: "Add task" }).click();
+    await page.getByRole("button", { name: "Add reminder" }).last().click();
     const task = page.locator("[data-testid^=task-]", { hasText: `Ring supplier ${RUN}` });
     await expect(task).toBeVisible();
     await task.getByRole("button", { name: /Mark done/ }).click();

@@ -10,6 +10,9 @@ import { JobNotesPhotos } from "@/components/jobs/job-notes-photos";
 import { ActivityFeed } from "@/components/activity-feed";
 import { JOB_STATUS_META } from "@/lib/constants";
 import { formatMoney } from "@/lib/utils";
+import { JourneyBar } from "@/components/journey/journey-bar";
+import { buildJourney } from "@/lib/journey";
+import { getJourneyForJob } from "@/queries/journey";
 
 export const metadata: Metadata = { title: "Job" };
 
@@ -18,6 +21,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const [job, contacts, users, activity] = await Promise.all([getJob(id), listContacts(), listActiveUsers(), getActivity("job", id)]);
   if (!job) notFound();
   const meta = JOB_STATUS_META[job.status];
+  const journey = buildJourney(await getJourneyForJob(job), "job");
 
   return (
     <div className="space-y-4">
@@ -55,6 +59,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         <JobStatusActions jobId={job.id} status={job.status} />
       </div>
 
+      <JourneyBar steps={journey.steps} cta={journey.cta} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>

@@ -21,11 +21,11 @@ the "Configure Titan on other apps" page in Titan support for your region's host
 
 ## In the CRM
 
-1. **Mailboxes** (admin only) → **Connect mailbox**.
+1. **Settings → Email accounts** (admin only) → **Connect mailbox**.
 2. Fill in display name, the email address, username (the full address) and the password /
    app password. Leave hosts and ports as pre-filled.
 3. **Test connection** — both IMAP and SMTP should say OK.
-4. **Connect**, then **Sync now**. The first sync pulls the last 14 days; after that only new
+4. **Connect**, then **Check for new email**. The first sync pulls the last 14 days; after that only new
    messages are fetched (the CRM stores the IMAP UID cursor per mailbox, so nothing is re-imported).
 
 ## How ingestion runs
@@ -36,17 +36,17 @@ the "Configure Titan on other apps" page in Titan support for your region's host
 - For hosts that run more than one web instance, run the ingestion as its own process instead:
   `PROCESS_TYPE=worker` on the same Docker image (or `pnpm worker`), and set `INGEST_IN_PROCESS=false`
   on the web service so two processes never watch the same mailbox.
-- **Sync now** on the Inbox or Mailboxes page runs one pass on demand.
+- **Check for new email** on the Inbox or Email accounts page runs one pass on demand.
 - Every stored email keeps its full original MIME (`raw_mime`), headers and attachments.
 
 ## What happens to each email
 
 | Situation | Result |
 | --- | --- |
-| Reply on a thread already linked to a lead/customer/job | Attached to it, marked **Existing**. No AI call. |
-| Sender's address matches a customer with an open lead | Attached to that lead, marked **Existing**. |
+| Reply on a thread already linked to a lead/customer/job | Attached to it, marked **Known customer**. No AI call. |
+| Sender's address matches a customer with an open lead | Attached to that lead, marked **Known customer**. |
 | Bounce, auto-reply, newsletter (`List-Unsubscribe`, bulk precedence) | **Not a lead**, no AI call. |
-| AI says lead, confidence ≥ threshold (`AI_LEAD_CONFIDENCE_THRESHOLD`, default 0.75) | **Lead created** on the board with name, company, phone, email, service, site, summary, urgency, next action, source = Email, and the thread attached. |
+| AI says lead, confidence ≥ threshold (`AI_LEAD_CONFIDENCE_THRESHOLD`, default 0.75) | **New lead** created on the board with name, company, phone, email, service, site, summary, urgency, next action, source = Email, and the thread attached. |
 | AI says lead but confidence below threshold, or unsure either way | **Needs review** in the Inbox. A person accepts (optionally editing the fields), links to an existing record, or marks it not a lead. Nothing is created until then. |
 | AI says not a lead, confident | **Not a lead**. Stays searchable in the Inbox. |
 

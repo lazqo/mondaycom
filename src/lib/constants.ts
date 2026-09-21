@@ -1,3 +1,13 @@
+export const USER_ROLES = ["admin", "member", "field"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+export const USER_ROLE_META: Record<UserRole, { label: string; description: string }> = {
+  admin: { label: "Admin", description: "Everything, including staff, email accounts, AI and reminder settings." },
+  member: { label: "Office", description: "Leads, inbox, customers, quotes, jobs and calendar. No settings." },
+  field: { label: "Technician", description: "My Day, calendar, jobs and customer contact details only." },
+};
+/** Roles allowed to see leads, inbox and quotes. */
+export const OFFICE_ROLES: UserRole[] = ["admin", "member"];
+
 export const LEAD_STATUSES = [
   "new",
   "contacted",
@@ -59,6 +69,7 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const EVENT_KINDS = ["job", "site_visit", "other"] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
+export const EVENT_KIND_LABELS: Record<EventKind, string> = { job: "Job", site_visit: "Site visit", other: "Appointment" };
 
 /** Default thresholds for follow-up automations (editable in Settings → Automations). */
 export const AUTOMATION_DEFAULTS = {
@@ -67,6 +78,8 @@ export const AUTOMATION_DEFAULTS = {
   quote_followup_days: 5,
   job_invoice_days: 3,
   notify_assignee_by_email: false,
+  business_hours_start: 7, // calendar grid starts here (24h)
+  business_hours_end: 18, // and ends here
 } as const;
 export type AutomationSettings = { [K in keyof typeof AUTOMATION_DEFAULTS]: (typeof AUTOMATION_DEFAULTS)[K] extends boolean ? boolean : number };
 
@@ -94,13 +107,13 @@ export const EMAIL_CLASSIFICATIONS = [
 ] as const;
 export type EmailClassification = (typeof EMAIL_CLASSIFICATIONS)[number];
 export const EMAIL_CLASSIFICATION_META: Record<EmailClassification, { label: string; bg: string; text: string }> = {
-  pending: { label: "Pending", bg: "bg-gray-200", text: "text-gray-700" },
-  lead: { label: "Lead", bg: "bg-[#00c875]", text: "text-white" },
+  pending: { label: "Waiting", bg: "bg-gray-200", text: "text-gray-700" },
+  lead: { label: "New lead", bg: "bg-[#00c875]", text: "text-white" },
   needs_review: { label: "Needs review", bg: "bg-[#ffcb00]", text: "text-gray-900" },
   not_lead: { label: "Not a lead", bg: "bg-gray-400", text: "text-white" },
-  existing: { label: "Existing", bg: "bg-[#579bfc]", text: "text-white" },
-  outbound: { label: "Sent", bg: "bg-[#a25ddc]", text: "text-white" },
-  error: { label: "Error", bg: "bg-[#e2445c]", text: "text-white" },
+  existing: { label: "Known customer", bg: "bg-[#579bfc]", text: "text-white" },
+  outbound: { label: "Sent by us", bg: "bg-[#a25ddc]", text: "text-white" },
+  error: { label: "Couldn't classify", bg: "bg-[#e2445c]", text: "text-white" },
 };
 
 export const LEAD_URGENCIES = ["low", "normal", "high", "urgent"] as const;

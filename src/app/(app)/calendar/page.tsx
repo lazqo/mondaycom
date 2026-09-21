@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { listEventsBetween, listActiveUsers, listJobs } from "@/queries";
 import { CalendarView, type CalendarEvent, type UnassignedJob } from "@/components/calendar/calendar-view";
 import { env } from "@/lib/env";
+import { getAutomationSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Calendar" };
 
@@ -17,7 +18,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const from = view === "month" ? new Date(Date.UTC(y, m - 1, 1 - 8)) : new Date(Date.UTC(y, m - 1, d - 8));
   const to = view === "month" ? new Date(Date.UTC(y, m, 8)) : new Date(Date.UTC(y, m - 1, d + 8));
 
-  const [rows, users, jobs] = await Promise.all([listEventsBetween(from, to), listActiveUsers(), listJobs()]);
+  const [rows, users, jobs, settings] = await Promise.all([listEventsBetween(from, to), listActiveUsers(), listJobs(), getAutomationSettings()]);
   const events: CalendarEvent[] = rows.map((e) => ({
     id: e.id,
     title: e.title,
@@ -36,5 +37,15 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .filter((j) => j.status === "unscheduled")
     .map((j) => ({ id: j.id, number: j.number, title: j.title, contactName: j.contact.name, siteAddress: j.siteAddress, service: j.service }));
 
-  return <CalendarView view={view} date={date} events={events} users={users} unassigned={unassigned} techFilter={sp.tech && users.some((u) => u.id === sp.tech) ? sp.tech : null} />;
+  return (
+    <CalendarView
+      view={view}
+      date={date}
+      events={events}
+      users={users}
+      unassigned={unassigned}
+      techFilter={sp.tech && users.some((u) => u.id === sp.tech) ? sp.tech : null}
+      hours={{ start: settings.business_hours_start, end: settings.business_hours_end }}
+    />
+  );
 }

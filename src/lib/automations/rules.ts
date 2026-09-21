@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNull, lt, lte, notInArray, sql } from "drizzle
 import type { Db } from "@/db";
 import { events, jobs, leads, quotes } from "@/db/schema";
 import type { AutomationSettings } from "@/lib/constants";
+import { formatDate } from "@/lib/utils";
 
 export type RuleCandidate = {
   ruleKey: string;
@@ -50,7 +51,7 @@ export const RULES: Rule[] = [
         ruleKey: "lead_not_contacted",
         entityId: l.id,
         title: `Contact new lead: ${l.name}${l.company ? ` (${l.company})` : ""}`,
-        detail: `Created ${l.createdAt.toLocaleDateString("en-NZ")} and still New${l.phone ? ` · ${l.phone}` : ""}`,
+        detail: `Created ${formatDate(l.createdAt)} and still New${l.phone ? ` · ${l.phone}` : ""}`,
         dueAt: today,
         assignedToId: l.assignedToId,
         link: `/leads/${l.id}`,
@@ -81,7 +82,7 @@ export const RULES: Rule[] = [
         ruleKey: "site_visit_no_quote",
         entityId: r.leadId,
         title: `Send quote: ${r.name}`,
-        detail: `Site visit was on ${new Date(r.endsAt).toLocaleDateString("en-NZ")} and no quote has been sent.`,
+        detail: `Site visit was on ${formatDate(r.endsAt)} and no quote has been sent.`,
         dueAt: today,
         assignedToId: r.assignedToId,
         link: `/leads/${r.leadId}`,
@@ -103,7 +104,7 @@ export const RULES: Rule[] = [
         ruleKey: "quote_no_response",
         entityId: q.id,
         title: `Follow up quote Q-${q.number}: ${q.contact.name}`,
-        detail: `Sent ${q.sentAt ? new Date(q.sentAt).toLocaleDateString("en-NZ") : ""}, no response yet.`,
+        detail: `Sent ${formatDate(q.sentAt)}, no response yet.`,
         dueAt: today,
         assignedToId: q.lead?.assignedToId ?? null,
         link: `/quotes/${q.id}`,
@@ -127,7 +128,7 @@ export const RULES: Rule[] = [
         ruleKey: "job_not_invoiced",
         entityId: j.id,
         title: `Invoice job J-${j.number}: ${j.contact.name}`,
-        detail: `${j.title} was done on ${j.doneAt ? new Date(j.doneAt).toLocaleDateString("en-NZ") : "an earlier date"}.`,
+        detail: `${j.title} was done on ${j.doneAt ? formatDate(j.doneAt) : "an earlier date"}.`,
         dueAt: today,
         assignedToId: null,
         link: `/jobs/${j.id}`,

@@ -9,7 +9,7 @@ import { Badge, Card, CardHeader } from "@/components/ui";
 import { AiSmokeTest } from "@/components/settings/ai-smoke-test";
 import { formatDateTime } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "AI" };
+export const metadata: Metadata = { title: "Email AI" };
 
 export default async function AiSettingsPage() {
   await requireAdmin();
@@ -25,8 +25,8 @@ export default async function AiSettingsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">AI</h1>
-        <p className="text-sm text-gray-500">How incoming emails are classified. Providers are swappable; every decision is recorded.</p>
+        <h1 className="text-xl font-semibold text-gray-900">Email AI</h1>
+        <p className="text-sm text-gray-500">How incoming enquiries are read and turned into leads. Every decision is recorded so you can check it.</p>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card>

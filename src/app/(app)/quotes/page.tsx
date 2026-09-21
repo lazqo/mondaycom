@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireOffice } from "@/lib/auth";
 import Link from "next/link";
 import { listQuotes } from "@/queries";
 import { Badge, EmptyState, LinkButton } from "@/components/ui";
@@ -8,6 +9,7 @@ import { formatDateTime, formatMoney } from "@/lib/utils";
 export const metadata: Metadata = { title: "Quotes" };
 
 export default async function QuotesPage() {
+  await requireOffice();
   const quotes = await listQuotes();
   return (
     <div className="space-y-4">
@@ -19,7 +21,7 @@ export default async function QuotesPage() {
         <LinkButton href="/quotes/new">New quote</LinkButton>
       </div>
       {quotes.length === 0 ? (
-        <EmptyState title="No quotes yet" hint="Create a quote from a customer or a converted lead." />
+        <EmptyState title="No quotes yet" hint="Quotes are created from a lead (after converting it) or from a customer page." action={<LinkButton href="/quotes/new">Create a quote</LinkButton>} />
       ) : (
         <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
           <table className="w-full text-sm">

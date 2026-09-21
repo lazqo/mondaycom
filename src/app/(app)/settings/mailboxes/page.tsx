@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { listMailboxes } from "@/queries/email";
 import { MailboxesAdmin } from "@/components/settings/mailboxes-admin";
 
-export const metadata: Metadata = { title: "Mailboxes" };
+export const metadata: Metadata = { title: "Email accounts" };
 
 export default async function MailboxesPage() {
   await requireAdmin();

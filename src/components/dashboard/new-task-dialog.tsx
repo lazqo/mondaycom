@@ -29,9 +29,9 @@ export function NewTaskButton({ users, defaults }: { users: UserOption[]; defaul
   return (
     <>
       <Button variant="secondary" onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" /> Task
+        <Plus className="h-4 w-4" /> Add reminder
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="New task">
+      <Dialog open={open} onClose={() => setOpen(false)} title="New reminder">
         <form onSubmit={submit} className="space-y-3">
           <Field label="Title *" htmlFor="t-title">
             <Input id="t-title" name="title" required autoFocus defaultValue={defaults?.title ?? ""} />
@@ -60,7 +60,7 @@ export function NewTaskButton({ users, defaults }: { users: UserOption[]; defaul
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Adding…" : "Add task"}
+              {pending ? "Adding…" : "Add reminder"}
             </Button>
           </div>
         </form>

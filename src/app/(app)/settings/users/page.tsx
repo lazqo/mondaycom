@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { listUsers } from "@/queries";
 import { UsersAdmin } from "@/components/settings/users-admin";
 
-export const metadata: Metadata = { title: "Users" };
+export const metadata: Metadata = { title: "Staff" };
 
 export default async function UsersPage() {
   const me = await requireAdmin();

@@ -15,7 +15,7 @@ const COLUMNS: { key: string; label: string; width: string }[] = [
   { key: "phone", label: "Phone", width: "min-w-[120px]" },
   { key: "email", label: "Email", width: "min-w-[180px]" },
   { key: "service", label: "Service", width: "min-w-[130px]" },
-  { key: "site", label: "Site", width: "min-w-[170px]" },
+  { key: "site", label: "Site address", width: "min-w-[170px]" },
   { key: "status", label: "Status", width: "w-[130px] min-w-[130px]" },
   { key: "assignedToId", label: "Assigned To", width: "min-w-[130px]" },
   { key: "followUpAt", label: "Follow-up", width: "min-w-[135px]" },

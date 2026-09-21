@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, homeFor } from "@/lib/auth";
+import { hasAnyUser } from "@/lib/setup";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  if (!(await hasAnyUser())) redirect("/setup");
   const user = await getCurrentUser();
-  if (user) redirect("/dashboard");
+  if (user) redirect(homeFor(user.role));
   const { next } = await searchParams;
   return (
     <div className="flex min-h-screen items-center justify-center p-4">

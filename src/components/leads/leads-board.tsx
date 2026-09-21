@@ -111,7 +111,15 @@ export function LeadsBoard({
         </div>
       ) : null}
 
-      {view === "kanban" ? (
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
+          <p className="text-sm font-medium text-gray-800">No leads yet</p>
+          <p className="mt-1 text-sm text-gray-500">Enquiries from the connected email account appear here automatically. You can also add one by hand.</p>
+          <Button className="mt-4" onClick={() => setNewOpen(true)}>
+            <Plus className="h-4 w-4" /> Add the first lead
+          </Button>
+        </div>
+      ) : view === "kanban" ? (
         <LeadsKanban rows={rows} onStatusChange={setStatus} />
       ) : (
         <LeadsTable rows={rows} users={users} onPatch={patchLead} />

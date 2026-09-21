@@ -19,6 +19,14 @@ unscheduled-jobs tray; site visits booked from leads; a mobile technician view w
 Scheduled → En route → On site → Done, notes and photos; and internal reminders for stale leads,
 unsent quotes, unanswered quotes, uninvoiced jobs and follow-up dates. No automation emails customers.
 
+v0.4: **Production-readiness.** A first-run setup checklist at `/setup` (admin login → staff →
+Titan mailbox → AI → business hours), roles for Admin / Office / Technician with the field role kept
+out of settings and the inbox, global search by name, phone, email or site address, a customer
+history timeline (emails, leads, quotes, jobs, site visits, notes), a journey bar that connects
+lead → site visit → quote → job, one-click decisions on the Needs-review list, security headers,
+login throttling, private attachment/photo routes, a health endpoint and System status page, backup
+scripts and runbooks, and a production `.env` checklist.
+
 See [docs/PLAN.md](docs/PLAN.md) for the roadmap, [docs/DEPLOY.md](docs/DEPLOY.md) for staging
 deployment, [docs/runbooks/titan-mailbox.md](docs/runbooks/titan-mailbox.md) for connecting a mailbox,
 and [docs/runbooks/staging-checkpoint.md](docs/runbooks/staging-checkpoint.md) for the real-mailbox + live-AI checkpoint.
@@ -36,7 +44,7 @@ pnpm install
 docker compose up -d           # Postgres on localhost:5432 (or use your own)
 cp .env.example .env           # then set AUTH_SECRET and SEED_ADMIN_PASSWORD
 pnpm db:migrate                # apply SQL migrations in ./drizzle
-pnpm db:seed -- --sample       # first admin user + a few example leads
+pnpm db:seed -- --sample       # optional: example leads (or just open /setup to create the admin)
 pnpm dev                       # http://localhost:3000
 ```
 

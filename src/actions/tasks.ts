@@ -76,7 +76,9 @@ const settingsInput = z.object({
   quote_followup_days: z.coerce.number().int().min(1).max(90),
   job_invoice_days: z.coerce.number().int().min(0).max(90),
   notify_assignee_by_email: z.coerce.boolean(),
-});
+  business_hours_start: z.coerce.number().int().min(0).max(22),
+  business_hours_end: z.coerce.number().int().min(2).max(24),
+}).refine((v) => v.business_hours_end > v.business_hours_start, { message: "Work day must end after it starts", path: ["business_hours_end"] });
 
 export async function updateAutomationSettings(formData: FormData): Promise<ActionResult<undefined>> {
   await requireAdmin();

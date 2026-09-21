@@ -7,13 +7,24 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hashPassword, requireAdmin } from "@/lib/auth";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
+import { USER_ROLES } from "@/lib/constants";
 
 const userInput = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   email: z.string().trim().toLowerCase().email("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
-  role: z.enum(["admin", "member"]).default("member"),
+  role: z.enum(USER_ROLES).default("member"),
 });
+
+export async function setUserRole(id: string, role: string): Promise<ActionResult<undefined>> {
+  const admin = await requireAdmin();
+  const parsed = z.enum(USER_ROLES).safeParse(role);
+  if (!parsed.success) return fail("Invalid role");
+  if (admin.id === id && parsed.data !== "admin") return fail("You cannot remove your own admin access");
+  await db.update(users).set({ role: parsed.data }).where(eq(users.id, id));
+  revalidatePath("/settings/users");
+  return ok(undefined);
+}
 
 export async function createUser(input: unknown): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();

@@ -19,7 +19,7 @@ export default async function JobsPage() {
         <LinkButton href="/jobs/new">New job</LinkButton>
       </div>
       {jobs.length === 0 ? (
-        <EmptyState title="No jobs yet" hint="Convert a lead, accept a quote, or add a job manually." />
+        <EmptyState title="No jobs yet" hint="A job is created when you convert a lead or a customer accepts a quote. Then schedule it on the calendar." action={<LinkButton href="/jobs/new">Add a job</LinkButton>} />
       ) : (
         <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
           <table className="w-full text-sm">

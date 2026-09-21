@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLead, getActivity, listActiveUsers } from "@/queries";
+import { requireOffice } from "@/lib/auth";
 import { getThreadForLead } from "@/queries/email";
 import { LeadEmailCard } from "@/components/leads/lead-email-card";
 import { SiteVisitCard } from "@/components/leads/site-visit-card";
+import { JourneyBar } from "@/components/journey/journey-bar";
+import { buildJourney } from "@/lib/journey";
 import { LEAD_URGENCY_META } from "@/lib/constants";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { LeadForm } from "@/components/leads/lead-form";
@@ -17,10 +20,21 @@ import { formatDateTime, formatMoney } from "@/lib/utils";
 export const metadata: Metadata = { title: "Lead" };
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireOffice();
   const { id } = await params;
   const [lead, users] = await Promise.all([getLead(id), listActiveUsers()]);
   if (!lead) notFound();
   const [activity, thread] = await Promise.all([getActivity("lead", id), getThreadForLead(id)]);
+  const journey = buildJourney(
+    {
+      lead: { id: lead.id, status: lead.status, contactId: lead.contactId },
+      siteVisits: lead.events.filter((e) => e.kind === "site_visit"),
+      quotes: lead.quotes.map((q) => ({ id: q.id, status: q.status, number: q.number })),
+      jobs: lead.jobs.map((j) => ({ id: j.id, status: j.status, number: j.number, scheduled: j.events.length > 0 })),
+      contactId: lead.contactId,
+    },
+    "lead",
+  );
 
   return (
     <div className="space-y-4">
@@ -51,6 +65,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <ConvertLeadButton lead={lead} users={users} />
         </div>
       </div>
+
+      <JourneyBar steps={journey.steps} cta={journey.cta?.href.endsWith("#convert") ? null : journey.cta} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

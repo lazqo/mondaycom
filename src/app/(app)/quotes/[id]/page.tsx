@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireOffice } from "@/lib/auth";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getQuote, listContacts, getActivity } from "@/queries";
@@ -7,14 +8,19 @@ import { QuoteEditor } from "@/components/quotes/quote-editor";
 import { QuoteStatusActions } from "@/components/quotes/quote-status-actions";
 import { ActivityFeed } from "@/components/activity-feed";
 import { QUOTE_STATUS_META } from "@/lib/constants";
+import { JourneyBar } from "@/components/journey/journey-bar";
+import { buildJourney } from "@/lib/journey";
+import { getJourneyForQuote } from "@/queries/journey";
 
 export const metadata: Metadata = { title: "Quote" };
 
 export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireOffice();
   const { id } = await params;
   const [quote, contacts, activity] = await Promise.all([getQuote(id), listContacts(), getActivity("quote", id)]);
   if (!quote) notFound();
   const meta = QUOTE_STATUS_META[quote.status];
+  const journey = buildJourney(await getJourneyForQuote(quote), "quote");
 
   return (
     <div className="space-y-4">
@@ -51,6 +57,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         </div>
         <QuoteStatusActions quoteId={quote.id} status={quote.status} hasJob={quote.jobs.length > 0} />
       </div>
+      <JourneyBar steps={journey.steps} cta={journey.cta} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <QuoteEditor mode="edit" quote={quote} contacts={contacts} />

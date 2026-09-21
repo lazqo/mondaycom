@@ -3,11 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { createUser, setUserActive, resetUserPassword } from "@/actions/users";
+import { createUser, setUserActive, resetUserPassword, setUserRole } from "@/actions/users";
+import { USER_ROLES, USER_ROLE_META, type UserRole } from "@/lib/constants";
 import { Badge, Button, Dialog, Field, FormError, Input, Select } from "@/components/ui";
 import { formatDateTime } from "@/lib/utils";
 
-type Row = { id: string; name: string; email: string; role: "admin" | "member"; active: boolean; createdAt: Date };
+type Row = { id: string; name: string; email: string; role: UserRole; active: boolean; createdAt: Date };
 
 export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
   const router = useRouter();
@@ -49,11 +50,11 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Users</h1>
-          <p className="text-sm text-gray-500">People who can sign in and be assigned leads and jobs.</p>
+          <h1 className="text-xl font-semibold text-gray-900">Staff</h1>
+          <p className="text-sm text-gray-500">People who can sign in. Technicians see only My Day, the calendar, jobs and customer details.</p>
         </div>
         <Button onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4" /> Add user
+          <Plus className="h-4 w-4" /> Add staff member
         </Button>
       </div>
       <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
@@ -75,7 +76,27 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
                   {u.name} {u.id === meId ? <span className="text-xs text-gray-500">(you)</span> : null}
                 </td>
                 <td className="px-3 py-2 text-gray-700">{u.email}</td>
-                <td className="px-3 py-2 capitalize text-gray-700">{u.role}</td>
+                <td className="px-3 py-2 text-gray-700">
+                  <select
+                    aria-label={`Role for ${u.name}`}
+                    className="h-8 rounded-md border border-gray-300 bg-white px-2 text-sm"
+                    value={u.role}
+                    disabled={pending || u.id === meId}
+                    onChange={(e) =>
+                      startTransition(async () => {
+                        const res = await setUserRole(u.id, e.target.value);
+                        if (!res.ok) alert(res.error);
+                        router.refresh();
+                      })
+                    }
+                  >
+                    {USER_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {USER_ROLE_META[r].label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 <td className="px-3 py-2">
                   <Badge className={u.active ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-700"}>{u.active ? "Active" : "Inactive"}</Badge>
                 </td>
@@ -98,7 +119,7 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
         </table>
       </div>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title="Add user">
+      <Dialog open={open} onClose={() => setOpen(false)} title="Add staff member">
         <form onSubmit={submit} className="space-y-4">
           <Field label="Name *" htmlFor="u-name">
             <Input id="u-name" name="name" required autoFocus />
@@ -111,8 +132,11 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
           </Field>
           <Field label="Role" htmlFor="u-role">
             <Select id="u-role" name="role" defaultValue="member">
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
+              {USER_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {USER_ROLE_META[r].label} — {USER_ROLE_META[r].description}
+                </option>
+              ))}
             </Select>
           </Field>
           <FormError message={error} />
@@ -121,7 +145,7 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Adding…" : "Add user"}
+              {pending ? "Adding…" : "Add staff member"}
             </Button>
           </div>
         </form>

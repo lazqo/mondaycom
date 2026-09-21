@@ -415,5 +415,36 @@ Staging checkpoint (deploy, real Titan mailbox, live AI) is documented step by s
 `docs/runbooks/staging-checkpoint.md`; it needs the hosting account, mailbox app password and API
 key, which only the owner holds.
 
-Next: quote PDF + send-by-email, customer notifications on scheduling (with approval), Apple
-Calendar sync, Plaud transcripts, and the generic board engine.
+### v0.4 — production-readiness and operational polish (2026-09-21)
+
+- **First-run setup** (`/setup`): with no users in the database the login page sends you to a
+  create-admin form; afterwards a six-step checklist (admin, staff, Titan mailbox, AI, business
+  hours/reminder thresholds, start) derives its state from real data and can be re-opened from
+  the Today banner. Seeding is optional.
+- **Roles**: Admin, Office (member) and Technician (field). Technicians land on My day and only
+  see My day, Customers, Jobs and Calendar; settings, inbox, leads and quotes redirect them away,
+  and the underlying server actions enforce the same rule. Staff page lets an admin change roles.
+- **Terminology and navigation**: Tasks → Reminders, Contacts → Customers, Automations → Reminders,
+  Mailboxes → Email accounts, Users → Staff, AI → Email AI; classification labels read "New lead /
+  Needs review / Not a lead / Known customer / Sent by us"; plain-language empty states everywhere.
+- **Today**: greeting in NZ time, sections renamed and capped at eight rows with a "more" link,
+  all times rendered in `APP_TIMEZONE` on the server (previously UTC slipped into a few lists).
+- **Mobile**: header no longer wraps; nav scrolls horizontally; search sits under the header.
+- **Needs review**: Lead / Not a lead buttons directly on the list; on the thread page, accepting
+  opens the new lead with a "Next to review" link so a backlog can be cleared in one pass.
+- **Connected flow**: a journey bar (Lead → Site visit → Quote → Job → Done) on lead, quote and
+  job pages with the one next action; customer page has a full history timeline with filters and
+  free-text notes; search (`/search`) matches name, company, phone digits, email, site address,
+  quote and job numbers and email subjects.
+- **Notifications**: readable text, relative time, dismiss one or clear all.
+- **Security / operations**: security headers, login rate limiting, JSON 401 for `/api/*`,
+  private no-store caching on attachments and photos, `/api/health` (minimal unless admin or
+  `HEALTH_TOKEN`), Settings → System status, `scripts/backup.sh`, `pnpm env:check`,
+  `docs/PRODUCTION_ENV.md` and `docs/runbooks/backup-and-monitoring.md`.
+- Migration `0003` adds the `field` role.
+
+Staging checkpoint still needs the hosting account, Titan app password and Anthropic key; with
+those, `docs/runbooks/staging-checkpoint.md` can be followed without further development.
+
+Next (after a period of real use): quote PDF + send-by-email, customer notifications on scheduling
+(with approval), Apple Calendar sync, Plaud transcripts, Xero, and the generic board engine.

@@ -18,7 +18,7 @@ export default async function ContactsPage() {
         <NewContactButton />
       </div>
       {contacts.length === 0 ? (
-        <EmptyState title="No customers yet" hint="Convert a lead or add a customer manually." />
+        <EmptyState title="No customers yet" hint="A customer is created when you convert a lead. You can also add one directly." action={<NewContactButton />} />
       ) : (
         <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
           <table className="w-full text-sm">

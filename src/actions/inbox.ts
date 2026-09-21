@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { emails, emailThreads, type ExtractedLead } from "@/db/schema";
-import { requireUser } from "@/lib/auth";
+import { requireOffice as requireUser } from "@/lib/auth";
 import { createLeadFromEmail, linkThread, markEmailNotLead, processEmail } from "@/lib/email/pipeline";
 import { sendReply } from "@/lib/email/smtp";
 import { LEAD_URGENCIES } from "@/lib/constants";

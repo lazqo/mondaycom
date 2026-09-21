@@ -97,7 +97,7 @@ test.describe("Titan-style email ingestion", () => {
     const ajaxRow = page.locator("tr", { hasText: ajax.subject });
     await expect(ajaxRow).toBeVisible();
     await expect(ajaxRow).toContainText("Dean Walker");
-    await expect(ajaxRow.getByText("Lead", { exact: true })).toBeVisible();
+    await expect(ajaxRow.getByText("New lead", { exact: true })).toBeVisible();
     await expect(ajaxRow.getByRole("link", { name: /Dean Walker/ })).toBeVisible();
     const newsRow = page.locator("tr", { hasText: newsletter.subject });
     await expect(newsRow.getByText("Not a lead")).toBeVisible();
@@ -138,9 +138,27 @@ test.describe("Titan-style email ingestion", () => {
     await page.getByLabel("Service").fill("CCTV");
     await page.getByLabel("Site address").fill("West Auckland");
     await page.getByRole("button", { name: "Create lead" }).click();
+    // In the review queue the CRM moves on to the next email and shows a banner linking to the new lead.
+    await expect(page.getByTestId("created-banner").or(page.getByRole("heading", { name: /J Brown/ }))).toBeVisible();
+    if (await page.getByTestId("created-banner").count()) await page.getByRole("link", { name: "Open lead →" }).click();
     await expect(page).toHaveURL(/\/leads\/[0-9a-f-]+$/);
     await expect(page.getByRole("heading", { name: /J Brown/ })).toBeVisible();
     await expect(page.getByTestId("lead-original-email")).toContainText("west auckland");
+  });
+
+  test("Needs review can be decided straight from the list", async ({ page }) => {
+    const vague2 = deliver("09-vague.eml", "vague2", ` ${RUN} second`);
+    await login(page);
+    await page.goto("/inbox");
+    await page.getByTestId("sync-now").click();
+    await expect(page.getByText(/new,/)).toBeVisible({ timeout: 30_000 });
+    await page.goto(`/inbox?filter=needs_review&q=${encodeURIComponent(RUN)}`);
+    const row = page.locator("tr", { hasText: vague2.subject });
+    await expect(row).toBeVisible();
+    await row.locator("[data-testid^=row-reject-]").click();
+    await expect(page.locator("tr", { hasText: vague2.subject })).toHaveCount(0);
+    await page.goto(`/inbox?filter=not_lead&q=${encodeURIComponent(RUN)}`);
+    await expect(page.locator("tr", { hasText: vague2.subject })).toBeVisible();
   });
 
   test("a reply is sent through SMTP and kept on the CRM thread", async ({ page }) => {

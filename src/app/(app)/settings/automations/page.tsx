@@ -9,7 +9,7 @@ import { AutomationSettingsForm } from "@/components/settings/automation-setting
 import { TaskList } from "@/components/dashboard/task-list";
 import { formatDateTime } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Automations" };
+export const metadata: Metadata = { title: "Reminders" };
 
 export default async function AutomationsPage() {
   await requireAdmin();
@@ -18,15 +18,15 @@ export default async function AutomationsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Automations</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Reminder rules</h1>
         <p className="text-sm text-gray-500">
-          Internal reminders only. Nothing here emails customers. Last run: {last ? `${formatDateTime(last.ranAt)} · ${last.created} created, ${last.resolved} resolved in ${last.durationMs} ms` : "never"}
+          Reminders for the team only. Nothing here emails customers. Last run: {last ? `${formatDateTime(last.ranAt)} · ${last.created} created, ${last.resolved} resolved in ${last.durationMs} ms` : "never"}
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-1">
           <Card>
-            <CardHeader title="Thresholds" />
+            <CardHeader title="When to remind" />
             <div className="p-4">
               <AutomationSettingsForm settings={settings} />
             </div>

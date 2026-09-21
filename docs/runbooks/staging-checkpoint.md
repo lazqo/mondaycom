@@ -26,32 +26,35 @@ Budget: about 30 minutes. Nothing here needs code changes.
    | `AI_PROVIDER` | `rules` for step 3, then `anthropic` for step 4 |
    | `ANTHROPIC_API_KEY` | your key (add at step 4) |
    | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` |
-   | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` / `SEED_ADMIN_NAME` | your first admin login |
+   | `ENCRYPTION_KEY` | `openssl rand -base64 32` output |
+   | `HEALTH_TOKEN` | `openssl rand -hex 16` |
 
-3. After the first deploy, run the seed once (Railway CLI: `railway run node scripts/seed.mjs`).
-4. Open `/api/health` → `{"ok":true,"db":"up"}`. Sign in.
+3. After the first deploy, open the site: `/setup` creates your admin login and shows the checklist.
+4. Open `/api/health` → `{"ok":true,"db":"up"}`. Settings → System status should show the mailbox
+   once it is connected.
 
 ## 2. Connect the real mailbox
 
-1. **Mailboxes → Connect mailbox.** Fill the address, username (full address), app password.
+1. **Settings → Email accounts → Connect mailbox.** Fill the address, username (full address), app password.
    Hosts/ports are pre-filled for Titan.
 2. **Test connection** → both lines must say OK. If IMAP fails with an auth error, third-party
    access is off or the app password is wrong. If it fails with a TLS error, note the exact text.
-3. **Connect**, then **Sync now**. The first sync imports the last 14 days. Expect the Inbox to
+3. **Connect**, then **Check for new email**. The first sync imports the last 14 days. Expect the Inbox to
    fill; with `AI_PROVIDER=rules` everything is classified by the offline rules.
 
 ## 3. Prove detection, thread and reply (rules provider, no AI cost)
 
 1. From a personal address, send a new email to the mailbox: subject
    `Staging test: CCTV quote for 12 Test St`, a body that mentions two cameras and a phone number.
-2. Within ~1 minute (IMAP IDLE) it should appear in **Inbox** without pressing Sync now. If it only
-   appears after Sync now, ingestion is not running: check the service logs for `[ingest]` lines.
+2. Within ~1 minute (IMAP IDLE) it should appear in **Inbox** without pressing Check for new email.
+   If it only appears after pressing it, ingestion is not running: Settings → System status will say
+   so, and the service logs will lack `[ingest]` lines.
 3. Open it. Check: sender, subject, received time, body, and **Original HTML** if you sent HTML.
-   The classification should be **Lead** and a lead named after you should be on the Leads board
+   The classification should be **New lead** and a lead named after you should be on the Leads board
    with phone and site filled and the envelope icon linking back.
 4. Press **Reply**, write a line, **Send reply**. Check in your personal mailbox: it arrived from the
    Titan address, subject `Re: …`, and threads under your original message.
-5. Reply to it from your personal mailbox. It should appear on the same CRM thread as **Existing**,
+5. Reply to it from your personal mailbox. It should appear on the same CRM thread as **Known customer**,
    attached to the same lead, with the lead's Last Contact updated. No second lead should appear.
 6. Check Titan webmail: the CRM reply is in **Sent**.
 
@@ -61,7 +64,7 @@ Send me: a screenshot of the CRM thread with all three messages, and any log lin
 ## 4. Turn on the live AI
 
 1. Set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`. Redeploy.
-2. **Settings → AI** shows the active provider and model. Press **Run smoke test**: it classifies the
+2. **Settings → Email AI** shows the active provider and model. Press **Run smoke test**: it classifies the
    bundled realistic enquiries (CCTV, Ajax alarm, access control, intercom, urgent fault, maintenance,
    newsletter, invoice, vague one-liner) and lists the extracted fields and confidence for each.
    Nothing is written to the Inbox or Leads by this test.
@@ -71,7 +74,7 @@ Send me: a screenshot of the CRM thread with all three messages, and any log lin
 
 ## 5. Decide
 
-Look at **Settings → AI → Recent classifications** (provider, confidence, extracted fields, and
+Look at **Settings → Email AI → Recent classifications** (provider, confidence, extracted fields, and
 whether a person accepted, edited or rejected each one). Automatic lead creation is sensible when:
 
 - confident leads have the right name, phone and service;

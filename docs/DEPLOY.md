@@ -15,16 +15,14 @@ images with a Postgres add-on works; two one-click options are pre-configured.
    - `APP_TIMEZONE` = `Pacific/Auckland`
    - `INGEST_IN_PROCESS` = `true` (email ingestion runs inside the web service)
    - `ANTHROPIC_API_KEY` = your key (optional; without it the offline rules classifier is used)
-   - `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_NAME` (used once, see step 5)
+   - `ENCRYPTION_KEY` = another `openssl rand -base64 32`
+   - `HEALTH_TOKEN` = `openssl rand -hex 16` (for the uptime monitor)
+   Full list with explanations: `docs/PRODUCTION_ENV.md`.
 4. **Settings → Networking → Generate Domain**. Set `APP_URL` to that URL.
-5. First-time only — create the admin user. Either open the service's shell (Railway CLI:
-   `railway run node scripts/seed.mjs`) or run locally against the staging database:
-   ```bash
-   DATABASE_URL='<staging url>?sslmode=require' SEED_ADMIN_EMAIL=you@getsecure.co.nz \
-   SEED_ADMIN_PASSWORD='choose-a-strong-one' node scripts/seed.mjs
-   ```
-   Add `--sample` to also insert example leads.
-6. Open the domain, sign in, and check `/api/health` returns `{"ok":true,"db":"up"}`.
+5. Open the domain. With no users yet it shows **/setup**: create your admin login there, then
+   work through the checklist (staff, Titan mailbox, AI, business hours). No seed script needed.
+   (`node scripts/seed.mjs` still works for scripted setups; add `--sample` for example leads.)
+6. Check `/api/health` returns `{"ok":true,"db":"up"}` and Settings → **System status** is green.
 
 Every push to the connected branch redeploys; migrations run automatically on boot.
 
@@ -33,7 +31,7 @@ Every push to the connected branch redeploys; migrations run automatically on bo
 1. https://dashboard.render.com → **New → Blueprint** → connect the repo. `render.yaml` defines the
    web service **and** the Postgres database, and generates `AUTH_SECRET`.
 2. When prompted, enter `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`.
-3. After the first deploy, open the service **Shell** and run `node scripts/seed.mjs` once.
+3. After the first deploy, open the site: it lands on **/setup** to create the admin login.
 
 ## Option C — any VPS with Docker
 
@@ -44,14 +42,14 @@ docker run -d --name crm -p 3000:3000 \
   -e AUTH_SECRET="$(openssl rand -base64 32)" \
   -e APP_URL='https://crm.example.com' -e APP_TIMEZONE='Pacific/Auckland' \
   get-secure-crm
-docker exec -e SEED_ADMIN_EMAIL=you@getsecure.co.nz -e SEED_ADMIN_PASSWORD='…' crm node scripts/seed.mjs
+# then open http://host:3000/setup to create the admin login
 ```
 
 Put a TLS-terminating proxy (Caddy, nginx) in front of port 3000.
 
 ## Checks after deploy
 
-- `GET /api/health` → `{"ok":true,"db":"up"}`
+- `GET /api/health` → `{"ok":true,"db":"up"}`; Settings → System status shows no warnings
 - Sign in → Leads board loads → create a lead → refresh → it is still there.
 - Users → add a second user → sign in as them in a private window.
 
@@ -64,3 +62,5 @@ Put a TLS-terminating proxy (Caddy, nginx) in front of port 3000.
   deploy the same image a second time with `PROCESS_TYPE=worker` and set `INGEST_IN_PROCESS=false`
   on the web service. Never run both at once against the same mailbox.
 - After deploying, connect the Titan mailbox: see `docs/runbooks/titan-mailbox.md`.
+- Backups and monitoring: `docs/runbooks/backup-and-monitoring.md`. Turn on daily database backups
+  before real data goes in.

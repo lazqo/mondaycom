@@ -35,6 +35,15 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Work day starts" htmlFor="as-h1">
+          <Input id="as-h1" name="business_hours_start" type="number" min={0} max={22} defaultValue={settings.business_hours_start} />
+        </Field>
+        <Field label="Work day ends" htmlFor="as-h2">
+          <Input id="as-h2" name="business_hours_end" type="number" min={2} max={24} defaultValue={settings.business_hours_end} />
+        </Field>
+      </div>
+      <p className="-mt-1 text-xs text-gray-500">24-hour clock. The calendar grid shows these hours plus an hour each side.</p>
       <Field label="New lead not contacted after (hours)" htmlFor="as-1">
         <Input id="as-1" name="new_lead_contact_hours" type="number" min={1} defaultValue={settings.new_lead_contact_hours} />
       </Field>

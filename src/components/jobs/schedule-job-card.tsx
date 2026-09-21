@@ -62,7 +62,7 @@ export function ScheduleJobCard({ job, users }: { job: Job & { events: Event[] }
   }
 
   return (
-    <Card>
+    <Card id="schedule">
       <CardHeader
         title="Schedule"
         action={

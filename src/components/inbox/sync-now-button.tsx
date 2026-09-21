@@ -28,7 +28,7 @@ export function SyncNowButton({ mailboxes }: { mailboxes: { id: string; emailAdd
     <div className="flex items-center gap-2">
       {msg ? <span className="max-w-md truncate text-xs text-gray-600" title={msg}>{msg}</span> : null}
       <Button variant="secondary" onClick={run} disabled={pending} data-testid="sync-now">
-        <RefreshCw className={pending ? "h-4 w-4 animate-spin" : "h-4 w-4"} /> {pending ? "Syncing…" : "Sync now"}
+        <RefreshCw className={pending ? "h-4 w-4 animate-spin" : "h-4 w-4"} /> {pending ? "Checking…" : "Check for new email"}
       </Button>
     </div>
   );

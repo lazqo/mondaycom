@@ -37,6 +37,20 @@ export function formatDateTime(value: Date | string | null | undefined, timeZone
   });
 }
 
+/** Time of day only, e.g. "9:00 am" (app timezone on the server, viewer's timezone in the browser). */
+export function formatTime(value: Date | string | null | undefined, timeZone: string | undefined = SERVER_TIMEZONE) {
+  if (!value) return "";
+  const d = typeof value === "string" ? new Date(value) : value;
+  return d.toLocaleTimeString("en-NZ", { timeZone, hour: "numeric", minute: "2-digit" });
+}
+
+/** Calendar date only, e.g. "21 Sep 2026", for a timestamp (app timezone on the server). */
+export function formatDate(value: Date | string | null | undefined, timeZone: string | undefined = SERVER_TIMEZONE) {
+  if (!value) return "";
+  const d = typeof value === "string" ? new Date(value) : value;
+  return d.toLocaleDateString("en-NZ", { timeZone, day: "numeric", month: "short", year: "numeric" });
+}
+
 export function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

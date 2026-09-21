@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { jobs, leads, quotes } from "@/db/schema";
 import { computeTotals } from "@/lib/quotes";
-import { requireUser } from "@/lib/auth";
+import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { QUOTE_STATUSES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";

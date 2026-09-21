@@ -75,8 +75,19 @@ export async function requireUser(): Promise<SessionUser> {
 
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
-  if (user.role !== "admin") redirect("/dashboard");
+  if (user.role !== "admin") redirect(homeFor(user.role));
   return user;
+}
+
+/** Office staff (admin or member). Technicians are sent to their home screen. */
+export async function requireOffice(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (user.role === "field") redirect("/my-day");
+  return user;
+}
+
+export function homeFor(role: User["role"]): string {
+  return role === "field" ? "/my-day" : "/dashboard";
 }
 
 export async function hashPassword(password: string) {
