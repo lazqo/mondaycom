@@ -70,3 +70,53 @@ describe("website lead parser", () => {
     expect(parseWebsiteLead({ subject: "Invoice 123", text: "Please find attached.", fromAddress: "billing@supplier.co.nz" })).toBeNull();
   });
 });
+
+// The home page form: different labels again. It calls the site "Location", has no Storeys or
+// Cameras, sends the timeline as a slug, and repeats the word "Property" inside its own value.
+const HOME_PAGE = `New Lead · Home Page
+
+
+DAVE LINCOLN
+
+Phone 021593014 tel:021593014 Email dave@drinkhonest.co.nz Servicecctv
+
+Call back tel:021593014 Reply dave@drinkhonest.co.nz
+
+
+REQUEST SUMMARY
+
+PropertyCommercial PropertyCurrent SetupbrokenTimelinethis-weekLocationPonsonby
+`;
+
+describe("website lead parser, home page form", () => {
+  const parsed = parseWebsiteLead({
+    subject: "New Lead · Home Page",
+    text: HOME_PAGE,
+    fromAddress: "noreply@updates.getsecure.co.nz",
+  });
+
+  it("reads the customer's own details", () => {
+    const x = parsed!.extraction;
+    expect(x.contact_name).toBe("Dave Lincoln");
+    expect(x.email).toBe("dave@drinkhonest.co.nz");
+    expect(x.phone).toBe("021593014");
+  });
+
+  it("reads the site from a Location label, not just Address", () => {
+    expect(parsed!.extraction.site_address).toBe("Ponsonby");
+  });
+
+  it("does not let a field run past its own line", () => {
+    // "Service cctv" is followed by the Call back line; none of that is the service.
+    expect(parsed!.extraction.service).toBe("cctv");
+  });
+
+  it("keeps a value that repeats its own label word", () => {
+    expect(parsed!.fields["Property"]).toBe("Commercial Property");
+  });
+
+  it("treats a slug timeline the same as words", () => {
+    expect(parsed!.fields["Timeline"]).toBe("this-week");
+    expect(parsed!.extraction.urgency).toBe("high");
+  });
+});

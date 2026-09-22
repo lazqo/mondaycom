@@ -24,36 +24,66 @@ export function isWebsiteLeadSender(address: string): boolean {
   return websiteLeadSenders().includes(address.trim().toLowerCase());
 }
 
-/** Labels used in the REQUEST SUMMARY block, longest first so "Current Setup" wins over "Setup". */
+/**
+ * Labels the forms use. Longest first, so "Current Setup" wins over "Setup" and the scan below
+ * never splits a longer label in half. Different landing pages use different subsets: the CCTV
+ * page asks for Storeys and Cameras and calls the site "Address", the home page calls it
+ * "Location". Anything unknown is simply not extracted rather than mis-read.
+ */
 const SUMMARY_LABELS = [
   "Current Setup",
   "Property",
   "Storeys",
   "Cameras",
   "Timeline",
+  "Location",
   "Address",
   "Service",
   "Phone",
   "Email",
 ] as const;
 
+/** Labels that name where the work is. */
+const SITE_LABELS = ["Address", "Location"] as const;
+
 const NZ_PHONE = /(?:\+64|0)[2-9]\d[\d\s-]{5,11}\d/;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
-/** Put each known label on its own line so "Label value" pairs can be read off. */
+/**
+ * Read "Label value" pairs out of the flattened text.
+ *
+ * Each label's value runs until the next label starts. A label word can also appear *inside* a
+ * value — "PropertyCommercial Property" — which shows up as a label with nothing after it. Those
+ * are put back into the value they came from, otherwise Property would read as "Commercial".
+ */
 function splitLabels(text: string): Map<string, string> {
-  let t = text.replace(/\r\n/g, "\n");
-  for (const label of SUMMARY_LABELS) {
-    t = t.replace(new RegExp(label, "g"), `\n${label}\u0000`);
+  const t = text.replace(/\r\n/g, "\n");
+  const pattern = new RegExp(SUMMARY_LABELS.join("|"), "g");
+  const hits = [...t.matchAll(pattern)];
+  const pairs: { label: string; value: string }[] = [];
+
+  for (let i = 0; i < hits.length; i++) {
+    const hit = hits[i];
+    const from = hit.index! + hit[0].length;
+    const to = i + 1 < hits.length ? hits[i + 1].index! : t.length;
+    const value = t.slice(from, to);
+
+    if (!value.trim() && pairs.length) {
+      // This label is part of the previous value, not a field of its own.
+      pairs[pairs.length - 1].value += hit[0] + value;
+      continue;
+    }
+    pairs.push({ label: hit[0], value });
   }
+
   const out = new Map<string, string>();
-  for (const line of t.split("\n")) {
-    const m = line.match(/^(.+?)\u0000(.*)$/);
-    if (!m) continue;
-    const key = m[1].trim();
-    const value = m[2].trim();
-    // Keep the first occurrence; later ones are usually the "Call back / Reply" repeat.
-    if (value && !out.has(key)) out.set(key, value);
+  for (const { label, value } of pairs) {
+    // A field never runs past its own line: "Service cctv" is followed by the Call back line and
+    // the REQUEST SUMMARY heading, none of which belong to the service. Several fields can share
+    // one line though ("TimelinethisweekLocationPonsonby"), which the label scan already split.
+    const v = value.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+    // Keep the first occurrence; later ones are the "Call back / Reply" repeat.
+    if (v && !out.has(label)) out.set(label, v);
   }
   return out;
 }
@@ -118,7 +148,7 @@ export function parseWebsiteLead(input: { subject: string; text: string; fromAdd
   const phoneField = clean(labelled.get("Phone"));
   const phone = phoneField?.match(NZ_PHONE)?.[0]?.trim() ?? phoneField ?? text.match(NZ_PHONE)?.[0]?.trim() ?? null;
   const service = clean(labelled.get("Service"));
-  const address = clean(labelled.get("Address"));
+  const address = SITE_LABELS.map((l) => clean(labelled.get(l))).find(Boolean) ?? null;
   const name = findName(text);
 
   // Everything the form collected, for the summary and the lead notes.
@@ -138,8 +168,9 @@ export function parseWebsiteLead(input: { subject: string; text: string; fromAdd
     .join(" ")
     .trim();
 
-  const timeline = (fields["Timeline"] ?? "").toLowerCase();
-  const urgency: ExtractedLead["urgency"] = /asap|as soon as possible|urgent|immediately|emergency/.test(timeline)
+  // Forms send either words ("As Soon As Possible") or slugs ("this-week"); treat them alike.
+  const timeline = (fields["Timeline"] ?? "").toLowerCase().replace(/[-_]+/g, " ");
+  const urgency: ExtractedLead["urgency"] = /asap|as soon as possible|urgent|immediately|emergency|today/.test(timeline)
     ? "urgent"
     : /week|soon|priority/.test(timeline)
       ? "high"
