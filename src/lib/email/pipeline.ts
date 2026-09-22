@@ -6,6 +6,7 @@ import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 import { getClassifier, type ClassificationInput } from "@/lib/ai";
 import { isAutomatedMail, stripQuotedReply } from "./parse";
+import { isWebsiteLeadSender, parseWebsiteLead } from "./website-lead";
 
 
 export type ProcessOutcome = {
@@ -84,7 +85,35 @@ export async function processEmail(emailId: string, opts: { force?: boolean } = 
       return { emailId, classification: "existing", leadId: openLead.id, contactId: contact?.id ?? openLead.contactId, detail: "matched open lead" };
     }
 
-    // C. Automated mail never goes to the model.
+    // C. Website enquiry forms. These come from a noreply@ robot with the customer's details in
+    // the body, so they are parsed exactly and skip both the automated-mail filter and the
+    // classifier. Nothing here is guessed.
+    const website =
+      isWebsiteLeadSender(email.fromAddress) || /new lead/i.test(email.subject ?? "")
+        ? parseWebsiteLead({
+            subject: email.subject ?? "",
+            text: email.textBody ?? "",
+            fromAddress: email.fromAddress,
+          })
+        : null;
+    if (website) {
+      await recordClassification(emailId, {
+        provider: "website-form",
+        model: null,
+        isLead: true,
+        confidence: 1,
+        result: website.extraction,
+        durationMs: 0,
+      });
+      const leadId = await createLeadFromEmail(emailId, {
+        actorId: null,
+        contactId: contact?.id ?? null,
+        jobId: openJob?.id ?? null,
+      });
+      return { emailId, classification: "lead", leadId, contactId: contact?.id ?? null, detail: "website enquiry form" };
+    }
+
+    // D. Automated mail never goes to the model.
     const automated = isAutomatedMail({ headers: email.headers, from: { name: email.fromName, address: email.fromAddress }, subject: email.subject });
     if (automated) {
       await recordClassification(emailId, {

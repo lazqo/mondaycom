@@ -178,6 +178,24 @@ describe("store + classify", () => {
     await db.delete(contacts).where(eq(contacts.id, c.id));
   });
 
+  it("turns a website form email into a complete lead, despite the noreply sender and bulk headers", async () => {
+    const raw = fx("11-website-form.eml");
+    const r = await ingestRawMessage({ mailboxId, raw });
+    const out = await processEmail(r.emailId);
+    // It must NOT be filtered as automated, and must not wait in Needs review.
+    expect(out.classification).toBe("lead");
+    expect(out.leadId).toBeTruthy();
+    createdLeadIds.push(out.leadId!);
+    const lead = await db.query.leads.findFirst({ where: eq(leads.id, out.leadId!) });
+    expect(lead?.name).toBe("Isapela");
+    // The customer's own address, not the sending robot's.
+    expect(lead?.email).toBe("isapelamasoe@live.com");
+    expect(lead?.phone).toBe("02108856692");
+    expect(lead?.service).toBe("CCTV Installation");
+    expect(lead?.site).toBe("7 solo place manurewa");
+    expect(lead?.urgency).toBe("urgent");
+  });
+
   it("lets a reviewer accept a Needs review email with edits", async () => {
     const e = await db.query.emails.findFirst({ where: eq(emails.messageId, mid("<vague-009@hotmail.com>")) });
     const leadId = await createLeadFromEmail(e!.id, { actorId: null, overrides: { contact_name: "J Brown", service: "CCTV", site_address: "West Auckland" } });

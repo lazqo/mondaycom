@@ -42,6 +42,9 @@ services:
       # Backstop only. New mail arrives via IMAP IDLE (the server pushes), so this poll just
       # re-checks for anything IDLE missed. Each poll is one cheap SEARCH, not a re-download.
       INGEST_POLL_SECONDS: ${INGEST_POLL_SECONDS:-300}
+      # Mail from these addresses is always a website enquiry: parsed exactly, never filtered as
+      # automated junk, never sent to a classifier. Comma-separated.
+      LEAD_SENDER_ADDRESSES: ${LEAD_SENDER_ADDRESSES:-}
       # Built-in offline classifier: no external AI service, no API key, no per-email cost.
       AI_PROVIDER: ${AI_PROVIDER:-rules}
       AI_LEAD_CONFIDENCE_THRESHOLD: ${AI_LEAD_CONFIDENCE_THRESHOLD:-0.75}
