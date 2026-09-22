@@ -57,9 +57,12 @@ services:
     expose:
       - "3000"
     volumes:
-      # Read-only so the container can run the Plaud CLI with the token you signed in with.
+      # The CLI itself never changes, so it is read-only.
       - /opt/plaud-cli:/opt/plaud-cli:ro
-      - /root/.plaud:/root/.plaud:ro
+      # The token directory must be writable: Plaud's access token expires and the CLI rewrites
+      # tokens.json when it refreshes. Mounted read-only, the sync would work until the first
+      # refresh and then fail permanently.
+      - /root/.plaud:/root/.plaud
 
   caddy:
     image: caddy:2-alpine
