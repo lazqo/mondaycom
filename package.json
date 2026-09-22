@@ -22,7 +22,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "ai:smoke": "tsx scripts/ai-smoke.ts",
     "env:check": "node scripts/env-check.mjs",
-    "secrets:check": "bash scripts/check-secrets.sh"
+    "secrets:check": "bash scripts/check-secrets.sh",
+    "plaud:sync": "tsx scripts/plaud-sync.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

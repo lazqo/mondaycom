@@ -42,6 +42,10 @@ services:
       # Backstop only. New mail arrives via IMAP IDLE (the server pushes), so this poll just
       # re-checks for anything IDLE missed. Each poll is one cheap SEARCH, not a re-download.
       INGEST_POLL_SECONDS: ${INGEST_POLL_SECONDS:-300}
+      # Voice recordings. PLAUD_ENABLED=true turns the Plaud sync on; the CLI and its token are
+      # mounted from the host (see scripts/plaud-login.sh).
+      PLAUD_ENABLED: ${PLAUD_ENABLED:-false}
+      PLAUD_CLI: /opt/plaud-cli/node_modules/.bin/plaud
       # Mail from these addresses is always a website enquiry: parsed exactly, never filtered as
       # automated junk, never sent to a classifier. Comma-separated.
       LEAD_SENDER_ADDRESSES: ${LEAD_SENDER_ADDRESSES:-}
@@ -52,6 +56,10 @@ services:
       APP_VERSION: ${APP_VERSION:-}
     expose:
       - "3000"
+    volumes:
+      # Read-only so the container can run the Plaud CLI with the token you signed in with.
+      - /opt/plaud-cli:/opt/plaud-cli:ro
+      - /root/.plaud:/root/.plaud:ro
 
   caddy:
     image: caddy:2-alpine

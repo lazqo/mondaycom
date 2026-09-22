@@ -275,6 +275,40 @@ export const notifications = pgTable(
   (t) => [index("notifications_user_idx").on(t.userId, t.readAt), uniqueIndex("notifications_dedupe_idx").on(t.userId, t.dedupeKey).where(sql`dedupe_key is not null`)],
 );
 
+/**
+ * Voice recordings pulled from Plaud. Each one is stored once, keyed by its Plaud id, with the
+ * transcript. If it can be matched to a customer or lead it is attached automatically; otherwise it
+ * waits in review. Recordings are never turned into leads without a person deciding.
+ */
+export const recordingStatusEnum = pgEnum("recording_status", ["review", "attached", "dismissed"]);
+
+export const recordings = pgTable(
+  "recordings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Plaud's own id, e.g. of_71fa29… — what stops the same recording importing twice. */
+    externalId: text("external_id").notNull(),
+    source: text("source").notNull().default("plaud"),
+    title: text("title").notNull(),
+    transcript: text("transcript").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }),
+    durationSeconds: integer("duration_seconds"),
+    status: recordingStatusEnum("status").notNull().default("review"),
+    /** Who it was filed against, once matched or chosen. */
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    /** How the match was made, for the audit trail: "phone", "name", "chosen by Admin"… */
+    matchedBy: text("matched_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("recordings_external_idx").on(t.source, t.externalId),
+    index("recordings_status_idx").on(t.status, t.recordedAt),
+    index("recordings_contact_idx").on(t.contactId),
+  ],
+);
+
 export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey(),
   value: jsonb("value").notNull(),
@@ -533,6 +567,11 @@ export const eventsRelations = relations(events, ({ one }) => ({
   assignedTo: one(users, { fields: [events.assignedToId], references: [users.id] }),
 }));
 
+export const recordingsRelations = relations(recordings, ({ one }) => ({
+  contact: one(contacts, { fields: [recordings.contactId], references: [contacts.id] }),
+  lead: one(leads, { fields: [recordings.leadId], references: [leads.id] }),
+}));
+
 export const jobNotesRelations = relations(jobNotes, ({ one }) => ({
   job: one(jobs, { fields: [jobNotes.jobId], references: [jobs.id] }),
   author: one(users, { fields: [jobNotes.authorId], references: [users.id] }),
@@ -571,5 +610,6 @@ export type EmailAttachment = typeof emailAttachments.$inferSelect;
 export type EmailClassificationRow = typeof emailClassifications.$inferSelect;
 export type JobNote = typeof jobNotes.$inferSelect;
 export type JobPhoto = typeof jobPhotos.$inferSelect;
+export type Recording = typeof recordings.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
