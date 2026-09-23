@@ -196,6 +196,60 @@ describe("store + classify", () => {
     expect(lead?.urgency).toBe("urgent");
   });
 
+  it("files two website enquiries as their own leads, even when a customer holds the robot's address", async () => {
+    // Reproduces the real fault: a customer had been created from the noreply@ sender, so every
+    // later form submission matched that one person and was filed as "Known customer".
+    const [robotContact] = await db
+      .insert(contacts)
+      .values({ name: `Wrongly Created ${RUN}`, email: `noreply+${RUN}@updates.getsecure.co.nz` })
+      .returning({ id: contacts.id });
+
+    const form = (who: string, addr: string, phone: string, msgId: string) =>
+      Buffer.from(
+        [
+          `From: Get Secure Website <noreply+${RUN}@updates.getsecure.co.nz>`,
+          "To: info@getsecure.co.nz",
+          `Subject: [CCTV Landing] New Contact Form Submission from ${who}`,
+          `Message-ID: <${msgId}.${RUN}@updates.getsecure.co.nz>`,
+          "Content-Type: text/plain; charset=utf-8",
+          "Auto-Submitted: auto-generated",
+          "",
+          `New Lead · CCTV Landing`,
+          "",
+          who.toUpperCase(),
+          "",
+          `Phone ${phone} tel:${phone} Email ${addr} ServiceCCTV Installation`,
+          "",
+          "REQUEST SUMMARY",
+          "",
+          "PropertyResidential HomeTimelinethis-weekLocationManurewa",
+          "",
+        ].join("\n"),
+      );
+
+    const a = await ingestRawMessage({ mailboxId, raw: form("Anubhav Sharma", `anubhav+${RUN}@example.com`, "0210747667", "web-a") });
+    const outA = await processEmail(a.emailId);
+    const b = await ingestRawMessage({ mailboxId, raw: form("Hamesh Chhiba", `hamesh+${RUN}@example.com`, "0212990604", "web-b") });
+    const outB = await processEmail(b.emailId);
+
+    expect(outA.classification).toBe("lead");
+    expect(outB.classification).toBe("lead");
+    expect(outA.leadId).not.toBe(outB.leadId);
+    createdLeadIds.push(outA.leadId!, outB.leadId!);
+
+    const leadA = await db.query.leads.findFirst({ where: eq(leads.id, outA.leadId!) });
+    const leadB = await db.query.leads.findFirst({ where: eq(leads.id, outB.leadId!) });
+    expect(leadA?.name).toBe("Anubhav Sharma");
+    expect(leadB?.name).toBe("Hamesh Chhiba");
+    expect(leadA?.email).toBe(`anubhav+${RUN}@example.com`);
+    expect(leadB?.email).toBe(`hamesh+${RUN}@example.com`);
+    // Neither may be attached to the customer that wrongly holds the robot's address.
+    expect(leadA?.contactId ?? null).not.toBe(robotContact.id);
+    expect(leadB?.contactId ?? null).not.toBe(robotContact.id);
+
+    await db.delete(contacts).where(eq(contacts.id, robotContact.id));
+  });
+
   it("lets a reviewer accept a Needs review email with edits", async () => {
     const e = await db.query.emails.findFirst({ where: eq(emails.messageId, mid("<vague-009@hotmail.com>")) });
     const leadId = await createLeadFromEmail(e!.id, { actorId: null, overrides: { contact_name: "J Brown", service: "CCTV", site_address: "West Auckland" } });

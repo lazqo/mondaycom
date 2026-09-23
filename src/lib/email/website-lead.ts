@@ -129,14 +129,18 @@ export type WebsiteLead = { extraction: ExtractedLead; fields: Record<string, st
  */
 export function parseWebsiteLead(input: { subject: string; text: string; fromAddress: string }): WebsiteLead | null {
   const text = (input.text ?? "").replace(/\r\n/g, "\n");
+  // Subjects vary by landing page: "New Lead · CCTV Landing" and
+  // "[CCTV Landing] New Contact Form Submission from Anubhav Sharma" are both real.
   const looksRight =
-    /new lead/i.test(input.subject) ||
-    /new lead/i.test(text) ||
-    /request summary/i.test(text) ||
-    /sent from the get secure website/i.test(text);
+    isWebsiteLeadSender(input.fromAddress) ||
+    /new lead|contact form submission/i.test(input.subject) ||
+    /new lead|request summary|sent from the get secure website/i.test(text);
   if (!looksRight) return null;
 
   const labelled = splitLabels(text);
+  // A form always carries several labelled fields. Requiring that stops an ordinary email which
+  // happens to say "new lead" from being read as a submission and given perfect confidence.
+  if (labelled.size < 2) return null;
 
   // The enquirer's address is any address in the body that is not the sending robot.
   const sender = input.fromAddress.toLowerCase();

@@ -35,7 +35,40 @@ export async function processEmail(emailId: string, opts: { force?: boolean } = 
   try {
     const thread = email.thread;
 
-    // A. Thread already linked to a lead / customer / job → attach, no AI needed.
+    // A. Website enquiry forms come first, before any sender or thread matching.
+    //
+    // They are sent by a robot (noreply@…) with the customer's details in the body. If the sender
+    // check ran first, the robot's address would match whichever customer was once created from it
+    // and every future enquiry would be filed against that one person — which is exactly what
+    // happened before this ran first.
+    const website = parseWebsiteLead({
+      subject: email.subject ?? "",
+      text: email.textBody ?? "",
+      fromAddress: email.fromAddress,
+    });
+    if (website) {
+      // Match on the enquirer's own address from the body, never the robot's.
+      const enquirerEmail = website.extraction.email?.toLowerCase() ?? null;
+      const enquirerContact = enquirerEmail
+        ? await db.query.contacts.findFirst({ where: sql`lower(${contacts.email}) = ${enquirerEmail}`, columns: { id: true } })
+        : null;
+      await recordClassification(emailId, {
+        provider: "website-form",
+        model: null,
+        isLead: true,
+        confidence: 1,
+        result: website.extraction,
+        durationMs: 0,
+      });
+      const leadId = await createLeadFromEmail(emailId, {
+        actorId: null,
+        contactId: enquirerContact?.id ?? null,
+        jobId: null,
+      });
+      return { emailId, classification: "lead", leadId, contactId: enquirerContact?.id ?? null, detail: "website enquiry form" };
+    }
+
+    // B. Thread already linked to a lead / customer / job → attach, no AI needed.
     if (thread.leadId || thread.jobId || thread.contactId) {
       const leadId = thread.leadId ?? null;
       await db.transaction(async (tx) => {
@@ -48,15 +81,17 @@ export async function processEmail(emailId: string, opts: { force?: boolean } = 
       return { emailId, classification: "existing", leadId, contactId: thread.contactId, detail: "thread already linked" };
     }
 
-    // B. Known sender: match a customer by email, then their open lead / job.
-    const contact = email.fromAddress
-      ? await db.query.contacts.findFirst({ where: sql`lower(${contacts.email}) = ${email.fromAddress.toLowerCase()}` })
+    // C. Known sender: match a customer by email, then their open lead / job.
+    // A website robot address is never a customer, even if one was mistakenly created from it once.
+    const senderAddress = email.fromAddress && !isWebsiteLeadSender(email.fromAddress) ? email.fromAddress : null;
+    const contact = senderAddress
+      ? await db.query.contacts.findFirst({ where: sql`lower(${contacts.email}) = ${senderAddress.toLowerCase()}` })
       : null;
-    const openLead = email.fromAddress
+    const openLead = senderAddress
       ? await db.query.leads.findFirst({
           where: and(
             isNull(leads.archivedAt),
-            or(sql`lower(${leads.email}) = ${email.fromAddress.toLowerCase()}`, contact ? eq(leads.contactId, contact.id) : sql`false`),
+            or(sql`lower(${leads.email}) = ${senderAddress.toLowerCase()}`, contact ? eq(leads.contactId, contact.id) : sql`false`),
             notInArray(leads.status, ["won", "lost"]),
           ),
           orderBy: [desc(leads.updatedAt)],
@@ -85,34 +120,6 @@ export async function processEmail(emailId: string, opts: { force?: boolean } = 
       return { emailId, classification: "existing", leadId: openLead.id, contactId: contact?.id ?? openLead.contactId, detail: "matched open lead" };
     }
 
-    // C. Website enquiry forms. These come from a noreply@ robot with the customer's details in
-    // the body, so they are parsed exactly and skip both the automated-mail filter and the
-    // classifier. Nothing here is guessed.
-    const website =
-      isWebsiteLeadSender(email.fromAddress) || /new lead/i.test(email.subject ?? "")
-        ? parseWebsiteLead({
-            subject: email.subject ?? "",
-            text: email.textBody ?? "",
-            fromAddress: email.fromAddress,
-          })
-        : null;
-    if (website) {
-      await recordClassification(emailId, {
-        provider: "website-form",
-        model: null,
-        isLead: true,
-        confidence: 1,
-        result: website.extraction,
-        durationMs: 0,
-      });
-      const leadId = await createLeadFromEmail(emailId, {
-        actorId: null,
-        contactId: contact?.id ?? null,
-        jobId: openJob?.id ?? null,
-      });
-      return { emailId, classification: "lead", leadId, contactId: contact?.id ?? null, detail: "website enquiry form" };
-    }
-
     // D. Automated mail never goes to the model.
     const automated = isAutomatedMail({ headers: email.headers, from: { name: email.fromName, address: email.fromAddress }, subject: email.subject });
     if (automated) {
@@ -131,7 +138,7 @@ export async function processEmail(emailId: string, opts: { force?: boolean } = 
       return { emailId, classification: "not_lead", leadId: null, contactId: contact?.id ?? null, detail: automated };
     }
 
-    // D. Ask the classifier.
+    // E. Ask the classifier.
     const prior = await db.query.emails.findMany({
       where: and(eq(emails.threadId, thread.id), ne(emails.id, emailId)),
       orderBy: [asc(emails.receivedAt)],
