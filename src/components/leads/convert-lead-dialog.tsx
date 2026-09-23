@@ -91,7 +91,8 @@ export function ConvertLeadDialog({
     startTransition(async () => {
       const res = await convertLead(lead.id, payload);
       if (!res.ok) {
-        setError(res.error);
+        // This dialog has no per-field highlighting, so show the specific reason.
+        setError(Object.values(res.fieldErrors ?? {})[0]?.[0] ?? res.error);
         return;
       }
       onClose();

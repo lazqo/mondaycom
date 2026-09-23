@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseWebsiteLead } from "@/lib/email/website-lead";
+import { isWebsiteLeadSender, parseWebsiteLead, personalEmail } from "@/lib/email/website-lead";
 
 // The exact shape the Get Secure landing page sends, HTML flattened to text.
 const REAL = `New Lead · CCTV Landing
@@ -118,5 +118,27 @@ describe("website lead parser, home page form", () => {
   it("treats a slug timeline the same as words", () => {
     expect(parsed!.fields["Timeline"]).toBe("this-week");
     expect(parsed!.extraction.urgency).toBe("high");
+  });
+});
+
+describe("the website's sending address", () => {
+  it("is recognised even when LEAD_SENDER_ADDRESSES is not set", () => {
+    const saved = process.env.LEAD_SENDER_ADDRESSES;
+    delete process.env.LEAD_SENDER_ADDRESSES;
+    try {
+      expect(isWebsiteLeadSender("noreply@updates.getsecure.co.nz")).toBe(true);
+      expect(isWebsiteLeadSender(" NoReply@Updates.GetSecure.co.nz ")).toBe(true);
+      expect(isWebsiteLeadSender("chris@example.com")).toBe(false);
+      expect(isWebsiteLeadSender(null)).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.LEAD_SENDER_ADDRESSES;
+      else process.env.LEAD_SENDER_ADDRESSES = saved;
+    }
+  });
+
+  it("is never kept as a person's email", () => {
+    expect(personalEmail("noreply@updates.getsecure.co.nz")).toBeNull();
+    expect(personalEmail("dave@example.com")).toBe("dave@example.com");
+    expect(personalEmail("")).toBeNull();
   });
 });

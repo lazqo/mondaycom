@@ -11,6 +11,7 @@ import { logActivity } from "@/lib/activity";
 import { LEAD_SOURCES, LEAD_STATUSES, LEAD_URGENCIES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
+import { isWebsiteLeadSender, WEBSITE_SENDER_MESSAGE } from "@/lib/email/website-lead";
 
 const optionalText = z
   .string()
@@ -44,7 +45,8 @@ const leadInput = z.object({
     .transform((v) => (v === "" ? null : v))
     .pipe(z.string().email("Invalid email").nullable())
     .nullable()
-    .optional(),
+    .optional()
+    .refine((v) => !isWebsiteLeadSender(v), WEBSITE_SENDER_MESSAGE),
   service: optionalText,
   site: optionalText,
   status: z.enum(LEAD_STATUSES).optional(),
@@ -152,7 +154,7 @@ const convertInput = z.object({
     .object({
       name: z.string().trim().min(1, "Contact name is required"),
       company: optionalText,
-      email: optionalText,
+      email: optionalText.refine((v) => !isWebsiteLeadSender(v), WEBSITE_SENDER_MESSAGE),
       phone: optionalText,
       address: optionalText,
     })

@@ -23,7 +23,8 @@
     "ai:smoke": "tsx scripts/ai-smoke.ts",
     "env:check": "node scripts/env-check.mjs",
     "secrets:check": "bash scripts/check-secrets.sh",
-    "plaud:sync": "tsx scripts/plaud-sync.ts"
+    "plaud:sync": "tsx scripts/plaud-sync.ts",
+    "repair:website-leads": "tsx scripts/repair-website-leads.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

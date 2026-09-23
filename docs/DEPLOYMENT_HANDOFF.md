@@ -250,6 +250,23 @@ reject. Newsletters, invoices, bounces and auto-replies are filtered out before 
 **Settings → Email AI** shows the active classifier and recent decisions. It will say the offline
 rules classifier is in use, which is correct.
 
+### Website enquiries
+
+Mail from the website's sending address (`noreply@updates.getsecure.co.nz`, or whatever
+`LEAD_SENDER_ADDRESSES` lists) skips all of the above. The form is read field by field, and every
+enquiry becomes its own conversation and its own lead with the enquirer's name, phone and email.
+That address never belongs to a customer: the CRM refuses to save it on a customer or lead.
+
+Website enquiries that arrived before this was in place may be filed on the wrong customer. Run the
+repair once after updating. The first command only lists what it would change. The second command
+makes those changes. Nothing is deleted, and running it again is safe:
+
+```bash
+cd /opt/getsecure
+docker compose -f docker-compose.prod.yml exec -T web node_modules/.bin/tsx scripts/repair-website-leads.ts
+docker compose -f docker-compose.prod.yml exec -T web node_modules/.bin/tsx scripts/repair-website-leads.ts --apply
+```
+
 ### The limitation you need to know about
 
 **Forwarded enquiries lose their details.** If an enquiry is forwarded into the connected mailbox

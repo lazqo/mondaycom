@@ -6,7 +6,7 @@ import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 import { getClassifier, type ClassificationInput } from "@/lib/ai";
 import { isAutomatedMail, stripQuotedReply } from "./parse";
-import { isWebsiteLeadSender, parseWebsiteLead } from "./website-lead";
+import { isWebsiteLeadSender, parseWebsiteLead, personalEmail } from "./website-lead";
 
 
 export type ProcessOutcome = {
@@ -267,17 +267,21 @@ export async function createLeadFromEmail(
   if (!email) throw new Error("Email not found");
   const latest = await latestClassification(emailId);
   const x: ExtractedLead = { ...(latest?.result ?? emptyExtraction(email, "manual")), ...(opts.overrides ?? {}) };
-  const contactId = opts.contactId ?? email.contactId ?? null;
+  // A website enquiry is only ever tied to a customer by the enquirer's own details, which the
+  // caller has already looked up. Whatever the email was filed under before (by older code that
+  // matched the robot's address to a customer) must not carry over.
+  const fromWebsite = isWebsiteLeadSender(email.fromAddress);
+  const contactId = opts.contactId ?? (fromWebsite ? null : email.contactId) ?? null;
 
   const leadId = await db.transaction(async (tx) => {
     const [{ maxPos }] = await tx.select({ maxPos: max(leads.position) }).from(leads);
     const [row] = await tx
       .insert(leads)
       .values({
-        name: x.contact_name?.trim() || email.fromName || email.fromAddress,
+        name: x.contact_name?.trim() || (fromWebsite ? "Website enquiry" : email.fromName || email.fromAddress),
         company: x.company,
         phone: x.phone,
-        email: x.email ?? email.fromAddress,
+        email: personalEmail(x.email) ?? personalEmail(email.fromAddress),
         service: x.service,
         site: x.site_address,
         status: "new",
@@ -337,7 +341,7 @@ export async function markEmailNotLead(emailId: string, actorId: string) {
 }
 
 /** Link a whole thread (and its inbound emails) to an existing lead, customer and/or job. */
-export async function linkThread(threadId: string, target: { leadId?: string | null; contactId?: string | null; jobId?: string | null }, actorId: string) {
+export async function linkThread(threadId: string, target: { leadId?: string | null; contactId?: string | null; jobId?: string | null }, actorId: string | null) {
   const thread = await db.query.emailThreads.findFirst({ where: eq(emailThreads.id, threadId) });
   if (!thread) throw new Error("Thread not found");
   let leadId = target.leadId === undefined ? thread.leadId : target.leadId;

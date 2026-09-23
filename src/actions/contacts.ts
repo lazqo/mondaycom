@@ -8,6 +8,7 @@ import { contacts } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
+import { isWebsiteLeadSender, WEBSITE_SENDER_MESSAGE } from "@/lib/email/website-lead";
 
 const optionalText = z
   .string()
@@ -20,7 +21,7 @@ const optionalText = z
 const contactInput = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   company: optionalText,
-  email: optionalText,
+  email: optionalText.refine((v) => !isWebsiteLeadSender(v), WEBSITE_SENDER_MESSAGE),
   phone: optionalText,
   address: optionalText,
   notes: z.string().trim().max(10000).optional(),

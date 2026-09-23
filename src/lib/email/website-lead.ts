@@ -12,16 +12,39 @@
  */
 import type { ExtractedLead } from "@/lib/ai/types";
 
-/** Addresses whose mail is always a website enquiry. Comma-separated, case-insensitive. */
+/**
+ * The Get Secure website's sending address. It is never a person: it only ever carries enquiries,
+ * so it must never be saved as a customer's email or used to match one.
+ */
+export const DEFAULT_WEBSITE_SENDER = "noreply@updates.getsecure.co.nz";
+
+/**
+ * Addresses whose mail is always a website enquiry. Comma-separated, case-insensitive. Falls back
+ * to the Get Secure website's address when LEAD_SENDER_ADDRESSES is not set, so a server whose
+ * .env predates the setting still recognises it.
+ */
 export function websiteLeadSenders(): string[] {
-  return (process.env.LEAD_SENDER_ADDRESSES ?? "")
+  const configured = (process.env.LEAD_SENDER_ADDRESSES ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
+  return configured.length ? configured : [DEFAULT_WEBSITE_SENDER];
 }
 
-export function isWebsiteLeadSender(address: string): boolean {
+export function isWebsiteLeadSender(address: string | null | undefined): boolean {
+  if (!address) return false;
   return websiteLeadSenders().includes(address.trim().toLowerCase());
+}
+
+/** Shown when someone tries to save the robot's address against a person. */
+export const WEBSITE_SENDER_MESSAGE =
+  "That is the website's sending address, not the customer's. Use the email written in the enquiry.";
+
+/** An email address fit to store against a person: null for the website robot's address. */
+export function personalEmail(address: string | null | undefined): string | null {
+  const a = address?.trim();
+  if (!a || isWebsiteLeadSender(a)) return null;
+  return a;
 }
 
 /**

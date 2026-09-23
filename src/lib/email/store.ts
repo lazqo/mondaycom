@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { emailAttachments, emailThreads, emails } from "@/db/schema";
 import { makeSnippet, normalizeSubject, parseRawEmail, type ParsedEmail } from "./parse";
+import { isWebsiteLeadSender } from "./website-lead";
 
 export type IngestResult = { emailId: string; threadId: string; created: boolean; parsed: ParsedEmail };
 
@@ -47,7 +48,11 @@ export async function ingestRawMessage(opts: {
       threadId = parent?.threadId ?? null;
     }
     // 2. Thread by normalised subject + counterpart within the window.
-    if (!threadId && normalized && counterpart) {
+    //
+    // Never for the website's sending robot: every enquiry comes from that one address, often with
+    // the same subject ("New Lead · Home Page"), so this would merge different customers'
+    // enquiries into one conversation and the newest lead would take over the older emails.
+    if (!threadId && normalized && counterpart && !isWebsiteLeadSender(counterpart)) {
       const since = new Date(parsed.date.getTime() - THREAD_BY_SUBJECT_WINDOW_DAYS * 86400000);
       const t = await tx.query.emailThreads.findFirst({
         where: and(
