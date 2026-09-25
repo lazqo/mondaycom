@@ -51,6 +51,11 @@ jobs:
           sudo apt-get install -y -qq dovecot-imapd
           sudo systemctl stop dovecot || true
           tests/support/dovecot/start.sh 1143
+      - name: Start local CalDAV server (Radicale) standing in for the Titan calendar
+        run: |
+          python3 -m venv /tmp/radicale-venv
+          /tmp/radicale-venv/bin/pip install --quiet radicale
+          RADICALE_PYTHON=/tmp/radicale-venv/bin/python tests/support/caldav/start.sh 5232
       - run: pnpm db:migrate
       - run: pnpm test:integration
       - run: pnpm db:seed -- --sample

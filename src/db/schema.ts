@@ -181,12 +181,22 @@ export const events = pgTable(
     kind: eventKindEnum("kind").notNull().default("other"),
     jobId: uuid("job_id").references(() => jobs.id, { onDelete: "cascade" }),
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }), // site visits
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }), // customer appointments
+    /** Created in the connected Titan calendar rather than in the CRM. */
+    fromCalendar: boolean("from_calendar").notNull().default(false),
+    /** An occurrence of a repeating calendar event: change it in the calendar, not here. */
+    readOnly: boolean("read_only").notNull().default(false),
     assignedToId: uuid("assigned_to_id").references(() => users.id, { onDelete: "set null" }),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("events_starts_idx").on(t.startsAt), index("events_job_idx").on(t.jobId), index("events_lead_idx").on(t.leadId)],
+  (t) => [
+    index("events_starts_idx").on(t.startsAt),
+    index("events_job_idx").on(t.jobId),
+    index("events_lead_idx").on(t.leadId),
+    index("events_contact_idx").on(t.contactId),
+  ],
 );
 
 // ---------- Jobs: notes & photos ----------
@@ -351,6 +361,12 @@ export const mailboxes = pgTable("mailboxes", {
   lastUid: integer("last_uid").notNull().default(0),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastError: text("last_error"),
+  // Sent folder: mail sent from webmail, a phone or any other client, so the CRM sees both sides.
+  syncSent: boolean("sync_sent").notNull().default(true),
+  sentFolder: text("sent_folder"), // detected from the server's \Sent special-use flag when null
+  sentUidValidity: text("sent_uid_validity"),
+  sentLastUid: integer("sent_last_uid").notNull().default(0),
+  sentLastSyncAt: timestamp("sent_last_sync_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -417,6 +433,8 @@ export const emails = pgTable(
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
     contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
     sentById: uuid("sent_by_id").references(() => users.id, { onDelete: "set null" }),
+    /** Where the CRM got it: the inbox, the mailbox's Sent folder, or sent by the CRM itself. */
+    origin: text("origin").$type<"inbox" | "sent_folder" | "crm">().notNull().default("inbox"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -486,6 +504,59 @@ export const emailClassifications = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("email_classifications_email_idx").on(t.emailId)],
+);
+
+// ---------- Calendar sync (CalDAV, e.g. Titan) ----------
+
+export const calendarConnections = pgTable("calendar_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  serverUrl: text("server_url").notNull(),
+  username: text("username").notNull(),
+  passwordEncrypted: text("password_encrypted").notNull(),
+  calendarUrl: text("calendar_url").notNull(),
+  calendarName: text("calendar_name"),
+  /** Which CRM event kinds are copied to the calendar. */
+  pushKinds: jsonb("push_kinds").$type<string[]>().notNull().default(["site_visit", "job", "other"]),
+  active: boolean("active").notNull().default(true),
+  /** The collection's change tag at the last pull; unchanged means nothing to download. */
+  ctag: text("ctag"),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One calendar object (or one occurrence of a repeating one) and the CRM event it is paired with.
+ * The UID is stable, so the same event is updated in place rather than created again.
+ */
+export const calendarItems = pgTable(
+  "calendar_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => calendarConnections.id, { onDelete: "cascade" }),
+    /** Null once the CRM event is deleted: the next sync deletes it from the calendar too. */
+    eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+    uid: text("uid").notNull(),
+    /** "" for a single event; the occurrence start for one occurrence of a repeating event. */
+    recurrenceId: text("recurrence_id").notNull().default(""),
+    href: text("href").notNull(),
+    etag: text("etag"),
+    origin: text("origin").$type<"crm" | "calendar">().notNull(),
+    /** The calendar's own copy, so an update keeps alarms, attendees and anything else it holds. */
+    ics: text("ics"),
+    /** The CRM event's updatedAt when the two were last in step. */
+    syncedVersion: timestamp("synced_version", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("calendar_items_uid_idx").on(t.connectionId, t.uid, t.recurrenceId),
+    index("calendar_items_event_idx").on(t.eventId),
+  ],
 );
 
 // ---------- Relations ----------
@@ -564,7 +635,13 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
 export const eventsRelations = relations(events, ({ one }) => ({
   job: one(jobs, { fields: [events.jobId], references: [jobs.id] }),
   lead: one(leads, { fields: [events.leadId], references: [leads.id] }),
+  contact: one(contacts, { fields: [events.contactId], references: [contacts.id] }),
   assignedTo: one(users, { fields: [events.assignedToId], references: [users.id] }),
+}));
+
+export const calendarItemsRelations = relations(calendarItems, ({ one }) => ({
+  connection: one(calendarConnections, { fields: [calendarItems.connectionId], references: [calendarConnections.id] }),
+  event: one(events, { fields: [calendarItems.eventId], references: [events.id] }),
 }));
 
 export const recordingsRelations = relations(recordings, ({ one }) => ({
@@ -613,3 +690,5 @@ export type JobPhoto = typeof jobPhotos.$inferSelect;
 export type Recording = typeof recordings.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type CalendarConnection = typeof calendarConnections.$inferSelect;
+export type CalendarItem = typeof calendarItems.$inferSelect;

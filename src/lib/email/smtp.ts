@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { emails, mailboxes, type Mailbox } from "@/db/schema";
 import { connectionFromMailbox, createImapClient, type MailboxConnection } from "./imap";
-import { ingestRawMessage } from "./store";
+import { CRM_MESSAGE_HEADER, ingestRawMessage } from "./store";
 
 export function createSmtpTransport(c: MailboxConnection) {
   return nodemailer.createTransport({
@@ -58,6 +58,7 @@ export async function sendReply(input: SendReplyInput): Promise<{ emailId: strin
     inReplyTo: parent?.messageId,
     references: references.length ? references : undefined,
     date: new Date(),
+    headers: { [CRM_MESSAGE_HEADER]: messageId },
   });
   const raw = await composer.compile().build();
 
@@ -71,6 +72,7 @@ export async function sendReply(input: SendReplyInput): Promise<{ emailId: strin
     mailboxId: mailbox.id,
     raw,
     direction: "outbound",
+    origin: "crm",
     sentById: input.sentById,
     mailboxAddress: mailbox.emailAddress,
   });

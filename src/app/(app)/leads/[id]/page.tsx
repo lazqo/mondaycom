@@ -1,30 +1,31 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead, getActivity, listActiveUsers } from "@/queries";
+import { getLead, listActiveUsers } from "@/queries";
+import { getLeadTimeline, toTimelineEntries } from "@/queries/timeline";
+import { Timeline } from "@/components/timeline/timeline";
 import { requireOffice } from "@/lib/auth";
 import { getThreadForLead } from "@/queries/email";
 import { LeadEmailCard } from "@/components/leads/lead-email-card";
 import { SiteVisitCard } from "@/components/leads/site-visit-card";
 import { JourneyBar } from "@/components/journey/journey-bar";
 import { buildJourney } from "@/lib/journey";
-import { LEAD_URGENCY_META } from "@/lib/constants";
+import { LEAD_SOURCE_LABELS, LEAD_URGENCY_META } from "@/lib/constants";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { LeadForm } from "@/components/leads/lead-form";
 import { ConvertLeadButton } from "@/components/leads/convert-lead-dialog";
-import { ActivityFeed } from "@/components/activity-feed";
 import { StatusPill } from "@/components/leads/cells";
 import { JOB_STATUS_META, QUOTE_STATUS_META } from "@/lib/constants";
-import { formatDateTime, formatMoney } from "@/lib/utils";
+import { formatDateOnly, formatDateTime, formatMoney } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Lead" };
+export const metadata: Metadata = { title: "Lead profile" };
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireOffice();
   const { id } = await params;
   const [lead, users] = await Promise.all([getLead(id), listActiveUsers()]);
   if (!lead) notFound();
-  const [activity, thread] = await Promise.all([getActivity("lead", id), getThreadForLead(id)]);
+  const [timeline, thread] = await Promise.all([getLeadTimeline(id), getThreadForLead(id)]);
   const journey = buildJourney(
     {
       lead: { id: lead.id, status: lead.status, contactId: lead.contactId },
@@ -50,7 +51,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             {lead.aiConfidence ? <span className="text-xs font-normal text-gray-500">AI {Math.round(Number(lead.aiConfidence) * 100)}%</span> : null}
           </h1>
           <p className="text-sm text-gray-500">
-            {lead.company ? `${lead.company} · ` : ""}Created {formatDateTime(lead.createdAt)}
+            {lead.company ? `${lead.company} · ` : ""}
+            {LEAD_SOURCE_LABELS[lead.source]} · first contact {formatDateTime(timeline[0]?.at ?? lead.createdAt)}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -68,6 +70,15 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <JourneyBar steps={journey.steps} cta={journey.cta?.href.endsWith("#convert") ? null : journey.cta} />
 
+      <Card className="grid grid-cols-2 gap-x-4 gap-y-2 p-4 text-sm sm:grid-cols-3 lg:grid-cols-6" data-testid="lead-profile">
+        <Fact label="Phone">{lead.phone ? <a href={`tel:${lead.phone.replace(/\s+/g, "")}`} className="text-brand-700 hover:underline">{lead.phone}</a> : null}</Fact>
+        <Fact label="Email">{lead.email ? <a href={`mailto:${lead.email}`} className="break-all text-brand-700 hover:underline">{lead.email}</a> : null}</Fact>
+        <Fact label="Site">{lead.site}</Fact>
+        <Fact label="Service">{lead.service}</Fact>
+        <Fact label="Assigned to">{lead.assignedTo?.name}</Fact>
+        <Fact label="Follow-up">{lead.followUpAt ? formatDateOnly(lead.followUpAt) : null}</Fact>
+      </Card>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           {lead.summary ? (
@@ -77,13 +88,22 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             </Card>
           ) : null}
           <LeadEmailCard thread={thread} />
+          <Timeline
+            items={toTimelineEntries(timeline)}
+            target={{ type: "lead", id: lead.id }}
+            emptyHint="Emails, calls, notes, visits, quotes and jobs for this lead will appear here as they happen."
+          />
+
+        </div>
+
+        <div className="space-y-4">
+          <SiteVisitCard lead={{ id: lead.id, name: lead.name, site: lead.site }} events={lead.events} users={users} />
           <Card>
             <CardHeader title="Details" />
             <div className="p-4">
               <LeadForm lead={lead} users={users} />
             </div>
           </Card>
-
           <Card>
             <CardHeader
               title="Quotes"
@@ -140,18 +160,18 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               )}
             </div>
           </Card>
-        </div>
 
-        <div className="space-y-4">
-          <SiteVisitCard lead={{ id: lead.id, name: lead.name, site: lead.site }} events={lead.events} users={users} />
-          <Card>
-            <CardHeader title="Activity" />
-            <div className="p-4">
-              <ActivityFeed items={activity} />
-            </div>
-          </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="truncate text-gray-900">{children || <span className="text-gray-400">—</span>}</p>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, max, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, emailClassifications, emailThreads, emails, jobs, leads, type ExtractedLead } from "@/db/schema";
+import { contacts, emailClassifications, emailThreads, emails, jobs, leads, users, type ExtractedLead } from "@/db/schema";
 import { env } from "@/lib/env";
 import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
@@ -387,4 +387,66 @@ function nextBusinessDay(from: Date): string {
   const day = new Date(Date.UTC(y, m - 1, d + 1));
   while (day.getUTCDay() === 0 || day.getUTCDay() === 6) day.setUTCDate(day.getUTCDate() + 1);
   return day.toISOString().slice(0, 10);
+}
+
+/**
+ * Attach a message sent from outside the CRM (webmail, a phone, Outlook) to the right records.
+ *
+ * Replies thread by Message-ID, In-Reply-To and References when the message is stored, so a reply
+ * to a customer's email lands on their conversation and inherits its lead, customer and job. A new
+ * message is matched on its recipients: a customer with that address, then a lead with it.
+ */
+export async function linkOutboundEmail(emailId: string): Promise<{ leadId: string | null; contactId: string | null; detail: string }> {
+  const email = await db.query.emails.findFirst({ where: eq(emails.id, emailId), with: { thread: true, mailbox: { columns: { emailAddress: true } } } });
+  if (!email) throw new Error("Email not found");
+
+  // Who sent it, when the From address is a member of staff.
+  if (!email.sentById && email.fromAddress) {
+    const sender = await db.query.users.findFirst({ where: sql`lower(${users.email}) = ${email.fromAddress.toLowerCase()}`, columns: { id: true } });
+    if (sender) await db.update(emails).set({ sentById: sender.id }).where(eq(emails.id, emailId));
+  }
+
+  const thread = email.thread;
+  if (thread.leadId || thread.contactId || thread.jobId) {
+    await db.transaction(async (tx) => {
+      await tx.update(emails).set({ leadId: thread.leadId, contactId: thread.contactId }).where(eq(emails.id, emailId));
+      if (thread.leadId) await touchLead(tx, thread.leadId, email.receivedAt);
+    });
+    return { leadId: thread.leadId, contactId: thread.contactId, detail: "reply on a linked conversation" };
+  }
+
+  const own = new Set([email.mailbox.emailAddress.toLowerCase(), email.fromAddress.toLowerCase()]);
+  const staff = new Set((await db.query.users.findMany({ columns: { email: true } })).map((u) => u.email.toLowerCase()));
+  const recipients = [...email.to, ...email.cc]
+    .map((a) => a.address.toLowerCase())
+    .filter((a) => a && !own.has(a) && !staff.has(a) && !isWebsiteLeadSender(a));
+
+  for (const address of recipients) {
+    const contact = await db.query.contacts.findFirst({ where: sql`lower(${contacts.email}) = ${address}`, columns: { id: true } });
+    // Their most recent lead, preferring one still open, so the email shows on the lead's history too.
+    const lead = await db.query.leads.findFirst({
+      where: and(isNull(leads.archivedAt), or(sql`lower(${leads.email}) = ${address}`, contact ? eq(leads.contactId, contact.id) : sql`false`)),
+      orderBy: [sql`case when ${leads.status} in ('won','lost') then 1 else 0 end`, desc(leads.updatedAt)],
+      columns: { id: true, contactId: true },
+    });
+    if (!contact && !lead) continue;
+    const contactId = contact?.id ?? lead?.contactId ?? null;
+    const openJob = contactId
+      ? await db.query.jobs.findFirst({
+          where: and(eq(jobs.contactId, contactId), inArray(jobs.status, OPEN_JOB_STATUSES)),
+          orderBy: [desc(jobs.updatedAt)],
+          columns: { id: true },
+        })
+      : null;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(emailThreads)
+        .set({ leadId: lead?.id ?? null, contactId, jobId: openJob?.id ?? null, updatedAt: new Date() })
+        .where(eq(emailThreads.id, thread.id));
+      await tx.update(emails).set({ leadId: lead?.id ?? null, contactId }).where(eq(emails.threadId, thread.id));
+      if (lead) await touchLead(tx, lead.id, email.receivedAt);
+    });
+    return { leadId: lead?.id ?? null, contactId, detail: `matched recipient ${address}` };
+  }
+  return { leadId: null, contactId: null, detail: "no matching customer or lead" };
 }

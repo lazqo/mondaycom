@@ -36,7 +36,17 @@ export type CalendarEvent = {
   assignedToName: string | null;
   job: { id: string; number: number; status: JobStatus; contactName: string; siteAddress: string | null; title: string } | null;
   lead: { id: string; name: string; site: string | null } | null;
+  contact?: { id: string; name: string } | null;
+  /** Made in the connected Titan calendar. */
+  fromCalendar?: boolean;
+  /** One occurrence of a repeating calendar event: moved or edited in the calendar only. */
+  readOnly?: boolean;
 };
+
+/** Where clicking an event goes: the job, lead or customer it belongs to, if any. */
+export function eventHref(ev: CalendarEvent): string | null {
+  return ev.job ? `/jobs/${ev.job.id}` : ev.lead ? `/leads/${ev.lead.id}` : ev.contact ? `/contacts/${ev.contact.id}` : null;
+}
 export type UnassignedJob = { id: string; number: number; title: string; contactName: string; siteAddress: string | null; service: string | null };
 type UserOption = { id: string; name: string };
 type View = "day" | "week" | "month";
@@ -383,7 +393,7 @@ function Slot({ column, slot, onNew }: { column: Column; slot: number; onNew: (d
 }
 
 function PositionedEvent({ event, users, onOpen, placement, colWidth }: { event: CalendarEvent; users: UserOption[]; onOpen: (ev: CalendarEvent) => void; placement: { lane: number; lanes: number }; colWidth: number }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event:${event.id}`, data: { type: "event", event } });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `event:${event.id}`, data: { type: "event", event }, disabled: !!event.readOnly });
   const noClickAfterDrag = useNoClickAfterDrag();
   const { start: START_HOUR, slots: SLOTS } = React.useContext(HoursCtx);
   const s = new Date(event.startsAt);
@@ -394,10 +404,13 @@ function PositionedEvent({ event, users, onOpen, placement, colWidth }: { event:
   const color = event.job ? JOB_STATUS_META[event.job.status].color : event.kind === "site_visit" ? "#ff9900" : techColor(event.assignedToId, users);
   const label = event.job ? `J-${event.job.number} ${event.job.contactName}` : event.lead ? `Site visit: ${event.lead.name}` : event.title;
   const where = event.job?.siteAddress ?? event.lead?.site ?? event.location;
-  const href = event.job ? `/jobs/${event.job.id}` : event.lead ? `/leads/${event.lead.id}` : null;
+  const href = eventHref(event);
   const body = (
     <>
-      <p className="truncate text-[11px] font-semibold leading-4 text-gray-900">{label}</p>
+      <p className="truncate text-[11px] font-semibold leading-4 text-gray-900">
+        {event.fromCalendar ? <span className="mr-1 rounded bg-gray-100 px-1 text-[9px] font-medium text-gray-600">Titan</span> : null}
+        {label}
+      </p>
       <p className="truncate text-[10px] leading-4 text-gray-600">
         {timeLabel(event.startsAt)}–{timeLabel(event.endsAt)}
         {event.assignedToName ? ` · ${event.assignedToName}` : ""}
@@ -411,7 +424,11 @@ function PositionedEvent({ event, users, onOpen, placement, colWidth }: { event:
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={cn("absolute cursor-grab overflow-hidden rounded border-l-4 bg-white px-1.5 py-0.5 shadow-sm ring-1 ring-gray-200 hover:z-30 hover:ring-brand-400", isDragging && "opacity-40")}
+      className={cn(
+        "absolute overflow-hidden rounded border-l-4 bg-white px-1.5 py-0.5 shadow-sm ring-1 ring-gray-200 hover:z-30 hover:ring-brand-400",
+        event.readOnly ? "cursor-pointer" : "cursor-grab",
+        isDragging && "opacity-40",
+      )}
       style={{
         top,
         height,
@@ -512,8 +529,9 @@ function MonthGrid({ current, events, users, todayStr, onNew, onOpen }: { curren
                     </>
                   );
                   const cls = "flex w-full items-center gap-1.5 rounded px-1.5 text-left text-xs leading-6 hover:bg-gray-100";
-                  return ev.job || ev.lead ? (
-                    <Link key={ev.id} href={ev.job ? `/jobs/${ev.job.id}` : `/leads/${ev.lead!.id}`} className={cls} data-testid={`event-${ev.id}`}>
+                  const to = eventHref(ev);
+                  return to ? (
+                    <Link key={ev.id} href={to} className={cls} data-testid={`event-${ev.id}`}>
                       {inner}
                     </Link>
                   ) : (

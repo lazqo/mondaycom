@@ -17,7 +17,7 @@ export function SyncNowButton({ mailboxes }: { mailboxes: { id: string; emailAdd
       const parts: string[] = [];
       for (const m of mailboxes) {
         const res = await syncMailboxNow(m.id);
-        parts.push(res.ok ? `${m.emailAddress}: ${res.data.stored} new, ${res.data.leads} leads, ${res.data.review} to review` : `${m.emailAddress}: ${res.error}`);
+        parts.push(res.ok ? `${m.emailAddress}: ${res.data.stored} new, ${res.data.sent} sent, ${res.data.leads} leads, ${res.data.review} to review` : `${m.emailAddress}: ${res.error}`);
       }
       setMsg(parts.join(" · "));
       router.refresh();

@@ -23,9 +23,13 @@ export type MailboxView = {
   lastUid: number;
   lastSyncAt: string | null;
   lastError: string | null;
+  syncSent: boolean;
+  sentFolder: string | null;
+  sentLastUid: number;
+  sentLastSyncAt: string | null;
 };
 
-const TITAN_DEFAULTS = { imapHost: "imap.titan.email", imapPort: 993, imapSecure: true, smtpHost: "smtp.titan.email", smtpPort: 465, smtpSecure: true, folder: "INBOX" };
+const TITAN_DEFAULTS = { imapHost: "imap.titan.email", imapPort: 993, imapSecure: true, smtpHost: "smtp.titan.email", smtpPort: 465, smtpSecure: true, folder: "INBOX", syncSent: true };
 
 export function MailboxesAdmin({ mailboxes }: { mailboxes: MailboxView[] }) {
   const router = useRouter();
@@ -37,7 +41,7 @@ export function MailboxesAdmin({ mailboxes }: { mailboxes: MailboxView[] }) {
     setMsg(null);
     startTransition(async () => {
       const res = await syncMailboxNow(m.id);
-      setMsg(res.ok ? `${m.emailAddress}: fetched ${res.data.fetched}, stored ${res.data.stored}, leads ${res.data.leads}, review ${res.data.review}` : `${m.emailAddress}: ${res.error}`);
+      setMsg(res.ok ? `${m.emailAddress}: fetched ${res.data.fetched}, stored ${res.data.stored}, sent ${res.data.sent}, leads ${res.data.leads}, review ${res.data.review}` : `${m.emailAddress}: ${res.error}`);
       router.refresh();
     });
   }
@@ -78,6 +82,11 @@ export function MailboxesAdmin({ mailboxes }: { mailboxes: MailboxView[] }) {
                 </p>
                 <p className="text-xs text-gray-500">
                   {m.imapHost}:{m.imapPort} / {m.smtpHost}:{m.smtpPort} · folder {m.folder} · cursor UID {m.lastUid} · last sync {m.lastSyncAt ? formatDateTime(m.lastSyncAt) : "never"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {m.syncSent
+                    ? `Sent mail: ${m.sentFolder ?? "folder found on first sync"} · cursor UID ${m.sentLastUid} · last sync ${m.sentLastSyncAt ? formatDateTime(m.sentLastSyncAt) : "never"}`
+                    : "Sent mail is not synced"}
                 </p>
                 {m.lastError ? <p className="mt-1 text-xs text-red-600">Last error: {m.lastError}</p> : null}
               </div>
@@ -181,6 +190,9 @@ function MailboxDialog({ state, onClose, onSaved }: { state: MailboxView | "new"
           </Field>
           <label className="mt-6 flex items-center gap-2 text-sm">
             <input type="checkbox" name="active" defaultChecked={d.active} /> Active (ingest new mail)
+          </label>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" name="syncSent" defaultChecked={d.syncSent} /> Also sync sent mail, so emails sent from webmail, a phone or Outlook show up too
           </label>
         </div>
         {testResult ? (

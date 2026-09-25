@@ -2,21 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getContact } from "@/queries";
-import { getContactHistory } from "@/queries/contact-history";
-import { ContactHistory } from "@/components/contacts/contact-history";
+import { getContactTimeline, toTimelineEntries } from "@/queries/timeline";
+import { Timeline } from "@/components/timeline/timeline";
+import { requireUser } from "@/lib/auth";
+import { OFFICE_ROLES } from "@/lib/constants";
 import { Badge, Card, CardHeader, LinkButton } from "@/components/ui";
 import { ContactForm } from "@/components/contacts/contact-form";
 import { StatusPill } from "@/components/leads/cells";
 import { JOB_STATUS_META, QUOTE_STATUS_META } from "@/lib/constants";
 import { formatDateTime, formatMoney } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Customer" };
+export const metadata: Metadata = { title: "Customer profile" };
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser();
   const { id } = await params;
   const contact = await getContact(id);
   if (!contact) notFound();
-  const history = await getContactHistory(id);
+  const timeline = await getContactTimeline(id);
+  const canWrite = OFFICE_ROLES.includes(user.role);
 
   return (
     <div className="space-y-4">
@@ -26,7 +30,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             ← Customers
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-gray-900">{contact.name}</h1>
-          {contact.company ? <p className="text-sm text-gray-500">{contact.company}</p> : null}
+          <p className="text-sm text-gray-500">
+            {contact.company ? `${contact.company} · ` : ""}
+            {contact.leads.length} lead{contact.leads.length === 1 ? "" : "s"} · {contact.quotes.length} quote{contact.quotes.length === 1 ? "" : "s"} · {contact.jobs.length} job
+            {contact.jobs.length === 1 ? "" : "s"}
+            {timeline[0] ? ` · customer since ${formatDateTime(timeline[0].at)}` : ""}
+          </p>
         </div>
         <div className="flex gap-2">
           <LinkButton variant="secondary" href={`/quotes/new?contactId=${contact.id}`}>
@@ -38,13 +47,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <Card>
-            <CardHeader title="Details" />
-            <div className="p-4">
-              <ContactForm contact={contact} />
-            </div>
-          </Card>
-          <ContactHistory contactId={contact.id} items={history} />
+          <Timeline
+            items={toTimelineEntries(timeline)}
+            target={{ type: "contact", id: contact.id }}
+            title="Timeline"
+            canWrite={canWrite}
+            emptyHint="Emails, calls, notes, leads, quotes, jobs and site visits for this customer will appear here as they happen."
+          />
           <Card>
             <CardHeader title="Jobs" />
             <div className="divide-y divide-gray-100">
@@ -87,7 +96,13 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
             </div>
           </Card>
         </div>
-        <div>
+        <div className="space-y-4">
+          <Card>
+            <CardHeader title="Details" />
+            <div className="p-4">
+              <ContactForm contact={contact} />
+            </div>
+          </Card>
           <Card>
             <CardHeader title="Leads" />
             <div className="divide-y divide-gray-100">

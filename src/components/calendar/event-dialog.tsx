@@ -73,8 +73,15 @@ export function EventDialog({
   }
 
   return (
-    <Dialog open={state !== null} onClose={onClose} title={ev ? "Edit event" : "New event"}>
+    <Dialog open={state !== null} onClose={onClose} title={ev ? (ev.readOnly ? "Calendar event" : "Edit event") : "New event"}>
       <form key={key} onSubmit={submit} className="space-y-4">
+        {ev?.readOnly ? (
+          <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            This is one occurrence of a repeating event in your Titan calendar. Change or delete it in the calendar; the CRM follows.
+          </p>
+        ) : ev?.fromCalendar ? (
+          <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-600">From your Titan calendar. Changes made here are copied back to it.</p>
+        ) : null}
         <Field label="Title *" htmlFor="ev-title">
           <Input id="ev-title" name="title" defaultValue={ev?.title ?? (state?.mode === "create" ? (state.title ?? "") : "")} required autoFocus />
         </Field>
@@ -110,7 +117,7 @@ export function EventDialog({
         </Field>
         <FormError message={error} />
         <div className="flex items-center justify-between">
-          {ev ? (
+          {ev && !ev.readOnly ? (
             <Button type="button" variant="ghost" className="text-red-600 hover:bg-red-50" onClick={remove} disabled={pending}>
               Delete
             </Button>
@@ -121,9 +128,11 @@ export function EventDialog({
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : ev ? "Save" : "Create event"}
-            </Button>
+            {ev?.readOnly ? null : (
+              <Button type="submit" disabled={pending}>
+                {pending ? "Saving…" : ev ? "Save" : "Create event"}
+              </Button>
+            )}
           </div>
         </div>
       </form>

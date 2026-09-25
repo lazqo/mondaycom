@@ -19,6 +19,8 @@ const schema = z.object({
     .optional()
     .transform((v) => v === "true" || v === "1"),
   INGEST_POLL_SECONDS: z.coerce.number().int().min(15).max(3600).default(120),
+  // Calendar sync (Settings -> Calendar). An idle pass is one small request, so this can be short.
+  CALENDAR_SYNC_SECONDS: z.coerce.number().int().min(60).max(3600).default(300),
 });
 
 const parsed = schema.safeParse(process.env);

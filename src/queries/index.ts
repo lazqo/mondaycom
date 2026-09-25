@@ -119,6 +119,7 @@ export async function listEventsBetween(from: Date, to: Date) {
       assignedTo: { columns: { id: true, name: true } },
       job: { columns: { id: true, number: true, status: true, siteAddress: true, title: true }, with: { contact: { columns: { name: true } } } },
       lead: { columns: { id: true, name: true, site: true } },
+      contact: { columns: { id: true, name: true } },
     },
     orderBy: [asc(events.startsAt)],
   });

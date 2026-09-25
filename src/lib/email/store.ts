@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { emailAttachments, emailThreads, emails } from "@/db/schema";
 import { makeSnippet, normalizeSubject, parseRawEmail, type ParsedEmail } from "./parse";
@@ -7,6 +7,51 @@ import { isWebsiteLeadSender } from "./website-lead";
 export type IngestResult = { emailId: string; threadId: string; created: boolean; parsed: ParsedEmail };
 
 const THREAD_BY_SUBJECT_WINDOW_DAYS = 30;
+
+/**
+ * Header the CRM puts on every message it sends. Some servers give a message a new Message-ID when
+ * they file the sent copy; this header survives that, so the copy in Sent is still recognised.
+ */
+export const CRM_MESSAGE_HEADER = "X-GetSecure-CRM-Message";
+
+/** How close in time a Sent-folder copy must be to a CRM-sent message to be the same message. */
+const SENT_COPY_WINDOW_MS = 15 * 60_000;
+
+/**
+ * Is this message from the Sent folder a copy of one the CRM already sent and stored? Message-ID is
+ * checked first by the caller; this catches the copy a server re-stamped with a new one.
+ */
+async function findCrmSentCopy(mailboxId: string, parsed: ParsedEmail): Promise<{ id: string; threadId: string } | null> {
+  const tagged = parsed.headers[CRM_MESSAGE_HEADER.toLowerCase()]?.trim();
+  if (tagged) {
+    const byTag = await db.query.emails.findFirst({
+      where: and(eq(emails.mailboxId, mailboxId), eq(emails.messageId, tagged)),
+      columns: { id: true, threadId: true },
+    });
+    if (byTag) return byTag;
+  }
+  const firstTo = parsed.to[0]?.address;
+  if (!firstTo) return null;
+  const candidates = await db.query.emails.findMany({
+    where: and(
+      eq(emails.mailboxId, mailboxId),
+      eq(emails.direction, "outbound"),
+      eq(emails.origin, "crm"),
+      gte(emails.receivedAt, new Date(parsed.date.getTime() - SENT_COPY_WINDOW_MS)),
+      lte(emails.receivedAt, new Date(parsed.date.getTime() + SENT_COPY_WINDOW_MS)),
+    ),
+    columns: { id: true, threadId: true, subject: true, to: true, textBody: true },
+  });
+  const body = (t: string | null) => (t ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+  return (
+    candidates.find(
+      (c) =>
+        normalizeSubject(c.subject) === normalizeSubject(parsed.subject) &&
+        c.to[0]?.address?.toLowerCase() === firstTo.toLowerCase() &&
+        body(c.textBody) === body(parsed.text),
+    ) ?? null
+  );
+}
 
 /**
  * Store one raw RFC822 message for a mailbox: parse, dedupe on Message-ID, attach to the right
@@ -20,18 +65,26 @@ export async function ingestRawMessage(opts: {
   direction?: "inbound" | "outbound";
   sentById?: string | null;
   mailboxAddress?: string;
+  origin?: "inbox" | "sent_folder" | "crm";
 }): Promise<IngestResult> {
   const parsed = await parseRawEmail(opts.raw);
   const direction = opts.direction ?? "inbound";
+  const origin = opts.origin ?? (direction === "outbound" ? "crm" : "inbox");
 
   const existing = await db.query.emails.findFirst({
     where: and(eq(emails.mailboxId, opts.mailboxId), eq(emails.messageId, parsed.messageId)),
     columns: { id: true, threadId: true },
   });
   if (existing) return { emailId: existing.id, threadId: existing.threadId, created: false, parsed };
+  if (origin === "sent_folder") {
+    const copy = await findCrmSentCopy(opts.mailboxId, parsed);
+    if (copy) return { emailId: copy.id, threadId: copy.threadId, created: false, parsed };
+  }
 
-  const counterpart =
-    direction === "inbound" ? parsed.from.address : (parsed.to[0]?.address ?? parsed.cc[0]?.address ?? null);
+  // The other party: the sender of inbound mail, the first outside recipient of outbound mail.
+  const own = opts.mailboxAddress?.toLowerCase();
+  const recipients = [...parsed.to, ...parsed.cc].map((a) => a.address).filter((a) => a && a.toLowerCase() !== own);
+  const counterpart = direction === "inbound" ? parsed.from.address : (recipients[0] ?? parsed.to[0]?.address ?? null);
   const normalized = normalizeSubject(parsed.subject);
   const rawText = typeof opts.raw === "string" ? opts.raw : opts.raw.toString("utf8");
 
@@ -107,6 +160,7 @@ export async function ingestRawMessage(opts: {
         receivedAt: parsed.date,
         classification: direction === "outbound" ? "outbound" : "pending",
         sentById: opts.sentById ?? null,
+        origin,
       })
       .returning({ id: emails.id });
 

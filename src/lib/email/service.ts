@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 import { syncMailboxOnce, watchMailbox, type SyncSummary } from "./imap";
 import { processPendingEmails } from "./pipeline";
 import { runAutomationsIfDue } from "@/lib/automations/runner";
+import { runCalendarSyncIfDue } from "@/lib/calendar/sync";
 
 /** One pass over every active mailbox, then classify anything still pending. */
 export async function runIngestionOnce(log: (m: string) => void = () => {}): Promise<Record<string, SyncSummary | { error: string }>> {
@@ -40,17 +41,23 @@ export function startIngestionLoop(log: (m: string) => void = console.log): () =
   const refresh = async () => {
     if (controller.signal.aborted) return;
     try {
-      const boxes = await db.query.mailboxes.findMany({ where: eq(mailboxes.active, true), columns: { id: true, emailAddress: true } });
+      const boxes = await db.query.mailboxes.findMany({ where: eq(mailboxes.active, true), columns: { id: true, emailAddress: true, syncSent: true } });
       for (const m of boxes) {
-        if (watched.has(m.id)) continue;
-        watched.add(m.id);
-        void watchMailbox(m.id, { pollSeconds: env.INGEST_POLL_SECONDS, signal: controller.signal, log })
-          .catch((err) => log(`[${m.emailAddress}] watcher stopped: ${err instanceof Error ? err.message : String(err)}`))
-          .finally(() => watched.delete(m.id));
+        // One watcher for the inbox, and one for the Sent folder so mail sent from webmail or a phone
+        // is picked up too.
+        for (const folder of m.syncSent ? (["inbox", "sent"] as const) : (["inbox"] as const)) {
+          const key = `${m.id}:${folder}`;
+          if (watched.has(key)) continue;
+          watched.add(key);
+          void watchMailbox(m.id, { pollSeconds: env.INGEST_POLL_SECONDS, signal: controller.signal, log, folder })
+            .catch((err) => log(`[${m.emailAddress} ${folder}] watcher stopped: ${err instanceof Error ? err.message : String(err)}`))
+            .finally(() => watched.delete(key));
+        }
       }
       await processPendingEmails();
       const run = await runAutomationsIfDue(5);
       if (run && (run.created || run.resolved)) log(`automations: ${run.created} new reminders, ${run.resolved} resolved`);
+      await runCalendarSyncIfDue(env.CALENDAR_SYNC_SECONDS, log);
     } catch (err) {
       log(`ingestion refresh error: ${err instanceof Error ? err.message : String(err)}`);
     }

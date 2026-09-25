@@ -9,6 +9,7 @@ import { notifyJobScheduled } from "@/lib/automations/runner";
 import { EVENT_KINDS } from "@/lib/constants";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { queueCalendarSync } from "@/lib/calendar/sync";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 
 const optionalText = z
@@ -36,7 +37,10 @@ const eventInput = z.object({
   assignedToId: optionalUuid,
   kind: z.enum(EVENT_KINDS).optional(),
   leadId: optionalUuid,
+  contactId: optionalUuid,
 });
+
+const READ_ONLY = "This is one occurrence of a repeating event from the Titan calendar. Change it in the calendar.";
 export type EventInput = z.input<typeof eventInput>;
 
 export async function createEvent(input: unknown): Promise<ActionResult<{ id: string }>> {
@@ -63,6 +67,7 @@ export async function createEvent(input: unknown): Promise<ActionResult<{ id: st
     revalidatePath("/leads");
   }
   await logActivity({ entity: "event", entityId: row.id, actorId: user.id, action: "created" });
+  queueCalendarSync();
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
   return ok({ id: row.id });
@@ -76,6 +81,7 @@ export async function moveEvent(id: string, input: { startsAt: string; endsAt: s
   if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return fail("Invalid time range");
   const ev = await db.query.events.findFirst({ where: eq(events.id, id), with: { job: true } });
   if (!ev) return fail("Event not found");
+  if (ev.readOnly) return fail(READ_ONLY);
   const assignedToId = input.assignedToId === undefined ? ev.assignedToId : input.assignedToId;
   await db.transaction(async (tx) => {
     await tx.update(events).set({ startsAt, endsAt, assignedToId, updatedAt: new Date() }).where(eq(events.id, id));
@@ -85,6 +91,7 @@ export async function moveEvent(id: string, input: { startsAt: string; endsAt: s
     }
   });
   if (ev.job) await notifyJobScheduled({ ...ev.job, assignedToId }, startsAt, endsAt);
+  queueCalendarSync();
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
   revalidatePath("/my-day");
@@ -97,12 +104,16 @@ export async function updateEvent(id: string, input: unknown): Promise<ActionRes
   const parsed = eventInput.partial().safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid input");
   const d = parsed.data;
+  const current = await db.query.events.findFirst({ where: eq(events.id, id), columns: { readOnly: true } });
+  if (!current) return fail("Event not found");
+  if (current.readOnly) return fail(READ_ONLY);
   const patch: Partial<typeof events.$inferInsert> = { ...d, startsAt: undefined, endsAt: undefined, updatedAt: new Date() };
   if (d.startsAt) patch.startsAt = new Date(d.startsAt);
   if (d.endsAt) patch.endsAt = new Date(d.endsAt);
   if (patch.startsAt && patch.endsAt && patch.endsAt <= patch.startsAt) return fail("End time must be after start time");
   await db.update(events).set(patch).where(eq(events.id, id));
   await logActivity({ entity: "event", entityId: id, actorId: user.id, action: "updated" });
+  queueCalendarSync();
   revalidatePath("/calendar");
   return ok(undefined);
 }
@@ -112,8 +123,10 @@ export async function deleteEvent(id: string): Promise<ActionResult<undefined>> 
   const ev = await db.query.events.findFirst({ where: eq(events.id, id) });
   if (!ev) return fail("Event not found");
   if (ev.jobId) return fail("This event belongs to a job. Unschedule the job instead.");
+  if (ev.readOnly) return fail(READ_ONLY);
   await db.delete(events).where(eq(events.id, id));
   await logActivity({ entity: "event", entityId: id, actorId: user.id, action: "deleted" });
+  queueCalendarSync();
   revalidatePath("/calendar");
   return ok(undefined);
 }

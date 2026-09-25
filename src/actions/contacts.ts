@@ -50,13 +50,3 @@ export async function updateContact(id: string, input: unknown): Promise<ActionR
   revalidatePath(`/contacts/${id}`);
   return ok(undefined);
 }
-
-export async function addContactNote(id: string, body: string): Promise<ActionResult<undefined>> {
-  const user = await requireUser();
-  const text = body.trim();
-  if (!text) return fail("Write a note first");
-  if (text.length > 5000) return fail("Note is too long");
-  await logActivity({ entity: "contact", entityId: id, actorId: user.id, action: "note", detail: { body: text } });
-  revalidatePath(`/contacts/${id}`);
-  return ok(undefined);
-}

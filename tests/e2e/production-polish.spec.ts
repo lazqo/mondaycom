@@ -68,20 +68,20 @@ test.describe("Production polish", () => {
     await expect(page.getByRole("link", { name: new RegExp(customerName) })).toBeVisible();
   });
 
-  test("customer page has a history timeline and takes notes", async ({ page }) => {
+  test("customer page has a timeline and takes notes", async ({ page }) => {
     await login(page);
     await page.goto(`/search?q=${encodeURIComponent(customerName)}`);
     await page.getByRole("link", { name: new RegExp(customerName) }).click();
     await page.getByLabel("New note").fill(`Called about pricing, will decide next week ${RUN}`);
     await page.getByRole("button", { name: "Add note" }).click();
-    await expect(page.getByTestId("history-note")).toContainText(`will decide next week ${RUN}`);
+    await expect(page.locator('[data-testid="timeline-item"][data-kind="note"]')).toContainText(`will decide next week ${RUN}`);
     await page.getByRole("link", { name: "New job" }).click();
     await page.getByLabel("Title *").fill(`History job ${RUN}`);
     await page.getByRole("button", { name: "Create job" }).click();
     await expect(page).toHaveURL(/\/jobs\/[0-9a-f-]+$/);
     await expect(page.getByTestId("journey-bar")).toContainText("Job J-");
     await page.getByRole("link", { name: customerName }).first().click();
-    await expect(page.getByTestId("history-job").first()).toContainText(`History job ${RUN}`);
+    await expect(page.locator('[data-testid="timeline-item"][data-kind="job"]').filter({ hasText: `History job ${RUN}` }).first()).toBeVisible();
   });
 
   test("technicians only see their screens", async ({ page }) => {

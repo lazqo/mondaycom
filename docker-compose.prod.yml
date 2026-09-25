@@ -42,6 +42,9 @@ services:
       # Backstop only. New mail arrives via IMAP IDLE (the server pushes), so this poll just
       # re-checks for anything IDLE missed. Each poll is one cheap SEARCH, not a re-download.
       INGEST_POLL_SECONDS: ${INGEST_POLL_SECONDS:-300}
+      # Titan calendar (Settings -> Calendar sync). Changes in Titan are checked for this often; an
+      # idle check is one small request. CRM changes are sent straight away.
+      CALENDAR_SYNC_SECONDS: ${CALENDAR_SYNC_SECONDS:-300}
       # Voice recordings. PLAUD_ENABLED=true turns the Plaud sync on; the CLI and its token are
       # mounted from the host (see scripts/plaud-login.sh).
       PLAUD_ENABLED: ${PLAUD_ENABLED:-false}

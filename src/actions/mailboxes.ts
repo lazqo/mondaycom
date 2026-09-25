@@ -24,12 +24,13 @@ const mailboxInput = z.object({
   password: z.string().optional(),
   folder: z.string().trim().min(1).default("INBOX"),
   active: z.coerce.boolean().default(true),
+  syncSent: z.coerce.boolean().default(true),
 });
 export type MailboxInput = z.input<typeof mailboxInput>;
 
 function formToObject(fd: FormData) {
   const o = Object.fromEntries(fd) as Record<string, unknown>;
-  for (const k of ["imapSecure", "smtpSecure", "active"]) o[k] = o[k] === "on" || o[k] === "true";
+  for (const k of ["imapSecure", "smtpSecure", "active", "syncSent"]) o[k] = o[k] === "on" || o[k] === "true";
   return o;
 }
 
@@ -100,7 +101,7 @@ export async function testMailbox(id: string | null, formData: FormData): Promis
   return ok({ imap, smtp });
 }
 
-export async function syncMailboxNow(id: string): Promise<ActionResult<{ fetched: number; stored: number; leads: number; review: number }>> {
+export async function syncMailboxNow(id: string): Promise<ActionResult<{ fetched: number; stored: number; sent: number; leads: number; review: number }>> {
   await requireUser();
   try {
     const s = await syncMailboxOnce(id);
@@ -110,6 +111,7 @@ export async function syncMailboxNow(id: string): Promise<ActionResult<{ fetched
     return ok({
       fetched: s.fetched,
       stored: s.stored,
+      sent: s.sentStored ?? 0,
       leads: s.outcomes.filter((o) => o.classification === "lead").length,
       review: s.outcomes.filter((o) => o.classification === "needs_review").length,
     });

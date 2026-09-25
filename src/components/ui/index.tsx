@@ -78,12 +78,14 @@ export function Field({
   label,
   htmlFor,
   error,
+  hint,
   children,
   className,
 }: {
   label: string;
   htmlFor?: string;
   error?: string;
+  hint?: string;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -91,6 +93,7 @@ export function Field({
     <div className={className}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
+      {hint && !error ? <p className="mt-1 text-xs text-gray-500">{hint}</p> : null}
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
     </div>
   );

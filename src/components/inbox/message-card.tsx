@@ -21,6 +21,7 @@ type Msg = {
   classification: EmailClassification;
   attachments: { id: string; filename: string; contentType: string; size: number }[];
   sentBy: { id: string; name: string } | null;
+  origin: "inbox" | "sent_folder" | "crm";
 };
 
 function fmtAddr(a: EmailAddress) {
@@ -37,7 +38,11 @@ export function MessageCard({ email, mailboxAddress }: { email: Msg; mailboxAddr
       <header className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3" onClick={() => setExpanded((v) => !v)}>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-gray-900">
-            {outbound ? `${email.sentBy?.name ?? "Get Secure"} <${mailboxAddress}>` : email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress}
+            {outbound
+              ? `${email.sentBy?.name ?? email.fromName ?? "Get Secure"} <${email.fromAddress || mailboxAddress}>`
+              : email.fromName
+                ? `${email.fromName} <${email.fromAddress}>`
+                : email.fromAddress}
           </p>
           <p className="truncate text-xs text-gray-500">
             to {email.to.map(fmtAddr).join(", ") || "—"}
@@ -45,7 +50,11 @@ export function MessageCard({ email, mailboxAddress }: { email: Msg; mailboxAddr
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 text-xs text-gray-500">
-          {outbound ? <Badge className="bg-brand-100 text-brand-800">Sent from CRM</Badge> : <Badge className={`${meta.bg} ${meta.text}`}>{meta.label}</Badge>}
+          {outbound ? (
+            <Badge className="bg-brand-100 text-brand-800">{email.origin === "sent_folder" ? "Sent from Titan" : "Sent from CRM"}</Badge>
+          ) : (
+            <Badge className={`${meta.bg} ${meta.text}`}>{meta.label}</Badge>
+          )}
           <span suppressHydrationWarning>{formatDateTime(email.receivedAt)}</span>
         </div>
       </header>

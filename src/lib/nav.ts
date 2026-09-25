@@ -1,4 +1,4 @@
-import { Users, Briefcase, FileText, Calendar, Kanban, Settings, Inbox, Mail, Sun, Smartphone, BellRing, Sparkles, Activity, Mic } from "lucide-react";
+import { Users, Briefcase, FileText, Calendar, CalendarSync, Kanban, Settings, Inbox, Mail, Sun, Smartphone, BellRing, Sparkles, Activity, Mic } from "lucide-react";
 import type { UserRole } from "@/lib/constants";
 
 export type NavItem = { label: string; href: string; icon: React.ComponentType<{ className?: string }>; roles: UserRole[] };
@@ -18,6 +18,7 @@ const SETTINGS: NavItem[] = [
   { label: "Reminders", href: "/settings/automations", icon: BellRing, roles: ["admin"] },
   { label: "Email AI", href: "/settings/ai", icon: Sparkles, roles: ["admin"] },
   { label: "Email accounts", href: "/settings/mailboxes", icon: Mail, roles: ["admin"] },
+  { label: "Calendar sync", href: "/settings/calendar", icon: CalendarSync, roles: ["admin"] },
   { label: "Staff", href: "/settings/users", icon: Settings, roles: ["admin"] },
   { label: "System status", href: "/settings/status", icon: Activity, roles: ["admin"] },
 ];

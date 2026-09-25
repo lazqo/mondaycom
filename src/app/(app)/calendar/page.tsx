@@ -32,6 +32,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     assignedToName: e.assignedTo?.name ?? null,
     job: e.job ? { id: e.job.id, number: e.job.number, status: e.job.status, contactName: e.job.contact.name, siteAddress: e.job.siteAddress, title: e.job.title } : null,
     lead: e.lead ? { id: e.lead.id, name: e.lead.name, site: e.lead.site } : null,
+    contact: e.contact ? { id: e.contact.id, name: e.contact.name } : null,
+    fromCalendar: e.fromCalendar,
+    readOnly: e.readOnly,
   }));
   const unassigned: UnassignedJob[] = jobs
     .filter((j) => j.status === "unscheduled")

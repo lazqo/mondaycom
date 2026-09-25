@@ -107,22 +107,23 @@ be committed. `deploy/env.example` is the template you copied.
 | --- | --- | --- |
 | `DOMAIN` | `hermes.aucklandsecuritysystems.co.nz` | Your domain from step 2.4. Caddy gets the certificate for exactly this name. |
 | `APP_URL` | `https://hermes.aucklandsecuritysystems.co.nz` | The same name with `https://`. Used in links and staff notifications. |
-| `POSTGRES_PASSWORD` | run `openssl rand -base64 32` | Generate on the server. The database password; nothing else needs to know it. |
+| `POSTGRES_PASSWORD` | run `openssl rand -hex 32` | Generate on the server. The database password; nothing else needs to know it. Hex only: it goes inside the database URL, where `/`, `+` and `=` break it. |
 | `AUTH_SECRET` | run `openssl rand -base64 32` | Generate on the server. Signs login cookies; changing it signs everyone out. |
-| `ENCRYPTION_KEY` | run `openssl rand -base64 32` | Generate on the server. Encrypts the Titan mailbox password stored in the database. |
+| `ENCRYPTION_KEY` | run `openssl rand -base64 32` | Generate on the server. Encrypts the Titan mailbox and calendar passwords stored in the database. |
 | `HEALTH_TOKEN` | run `openssl rand -hex 16` | Generate on the server. Lets an uptime monitor read detailed health. |
 | `APP_TIMEZONE` | `Pacific/Auckland` | Fixed. Drives "Today", follow-up dates and business hours. |
 | `AI_PROVIDER` | `rules` | Fixed. Built-in offline classifier. No external AI service, no per-email cost. |
 | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Fixed. At or above this a lead is created automatically; below it goes to Needs review. |
+| `CALENDAR_SYNC_SECONDS` | `300` | Optional. How often Titan calendar changes are checked for. CRM changes go out straight away. |
 
 `bash deploy/init-env.sh <domain>` in section 3 generates all four and sets the domain for you, so
 you only fill these in by hand if you skipped it.
 
 Store `AUTH_SECRET` and `ENCRYPTION_KEY` in a password manager. A database backup cannot be used
-without them: the sessions and the saved mailbox password are tied to those two values.
+without them: the sessions and the saved mailbox and calendar passwords are tied to those two values.
 
-**The Titan mailbox password is not in this file.** You enter it inside the app, where it is
-encrypted before being stored (section 8).
+**The Titan mailbox and calendar passwords are not in this file.** You enter them inside the app,
+where they are encrypted before being stored (section 8).
 
 `INGEST_IN_PROCESS`, `INGEST_POLL_SECONDS` and `PORT` are set by the Compose file; leave them alone.
 
@@ -225,10 +226,48 @@ Then in the CRM, as an admin:
 4. Press **Connect**, then **Check for new email**. The first sync pulls the last 14 days; after that
    only new messages, tracked by IMAP UID so nothing is imported twice.
 
+**Sent mail.** "Also sync sent mail" is on by default. The CRM then also reads the mailbox's Sent
+folder, so emails you send from Titan webmail, your phone or Outlook show on the right lead and
+customer timeline, not only replies written in the CRM. Replies are matched to their conversation by
+Message-ID, In-Reply-To and References; new emails by recipient. Messages the CRM sent itself are
+recognised when their copy turns up in Sent and are not stored twice. This uses one more IMAP
+connection (the Sent folder is watched with IDLE, like the inbox), and the first sync reads the last
+14 days of Sent.
+
 **Connect the mailbox customers actually write to. Do not forward into it** — see section 9.
 
 The password is encrypted with `ENCRYPTION_KEY` before it is written to the database. It is never in
 an environment variable, never in the repository and never shown again in the UI.
+
+### Connecting the Titan calendar
+
+The CRM calendar and the Titan calendar of `chris@getsecure.co.nz` stay in step both ways over
+CalDAV. Site visits, jobs and appointments made in the CRM appear in Titan, and so on any phone or
+computer showing that calendar. Events added, moved or deleted in Titan appear, move or disappear in
+the CRM.
+
+As an admin, **Settings → Calendar sync**:
+
+1. Calendar server: `https://dav.flockmail.com` (pre-filled; EU-hosted Titan accounts use
+   `https://dav-eu.titan.email`).
+2. Username: the full address, `chris@getsecure.co.nz`. Password: the same password or app password
+   used for the mailbox.
+3. **Find calendars**, choose the calendar, tick which CRM events to copy (all three by default),
+   then **Connect calendar**. The first sync copies existing upcoming CRM events across.
+
+How it behaves:
+
+- Each CRM event has a fixed ID in the calendar, so it is updated in place and never created twice.
+- An event made in the CRM keeps its link: clicking it in the CRM calendar opens the lead, customer
+  or job, and the Titan copy has an "Open in Get Secure CRM" link in its notes.
+- Moving a site visit or job in Titan moves it in the CRM and is noted on the lead or job timeline.
+  Deleting a job's event in Titan puts the job back to unscheduled.
+- If both sides changed the same event, the later change wins.
+- Repeating events from Titan show each occurrence in the CRM, read-only; change them in Titan.
+- Titan changes are picked up every 5 minutes (`CALENDAR_SYNC_SECONDS`). A check where nothing
+  changed is a single small request. **Sync now** checks immediately.
+
+The calendar password is encrypted with `ENCRYPTION_KEY`, exactly like the mailbox password.
 
 ---
 
@@ -321,6 +360,15 @@ pass — Needs review means the classifier was not confident, which is the behav
 reply arrives in your personal inbox, it appears threaded under the original message rather than as a
 new conversation, and it shows on the CRM thread as an outbound message. What you type is exactly
 what goes; the CRM never writes or sends anything to a customer on its own.
+
+**Sent from outside the CRM.** From Titan webmail or your phone, reply to the test enquiry and also
+send a new email to the same person. Within a minute (or after **Check for new email**) both show on
+that lead's timeline marked "Sent from Titan". The reply from the CRM shows once, marked "Sent from
+the CRM".
+
+**Calendar.** Book a site visit on the lead. Within a few seconds it is in the Titan calendar on your
+phone. Move it in Titan, press **Sync now** in Settings → Calendar sync, and the CRM shows the new
+time.
 
 Then repeat the first test with a **forwarded** enquiry, so you see for yourself what section 9
 describes before you rely on it.

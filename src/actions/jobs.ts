@@ -9,6 +9,7 @@ import { notifyJobScheduled } from "@/lib/automations/runner";
 import { logActivity as log } from "@/lib/activity";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { queueCalendarSync } from "@/lib/calendar/sync";
 import { JOB_STATUSES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
@@ -87,10 +88,11 @@ export async function updateJob(id: string, input: unknown): Promise<ActionResul
     entityId: id,
     actorId: user.id,
     action: parsed.data.status ? "status_changed" : "updated",
-    detail: parsed.data,
+    detail: statusChanged ? { ...parsed.data, from: before.status } : parsed.data,
   });
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${id}`);
+  queueCalendarSync();
   revalidatePath("/calendar");
   return ok(undefined);
 }
@@ -159,6 +161,7 @@ export async function scheduleJob(id: string, input: unknown): Promise<ActionRes
   await notifyJobScheduled({ ...job, assignedToId }, startsAt, endsAt);
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${id}`);
+  queueCalendarSync();
   revalidatePath("/calendar");
   return ok({ eventId });
 }
@@ -172,6 +175,7 @@ export async function unscheduleJob(id: string): Promise<ActionResult<undefined>
   await logActivity({ entity: "job", entityId: id, actorId: user.id, action: "unscheduled" });
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${id}`);
+  queueCalendarSync();
   revalidatePath("/calendar");
   return ok(undefined);
 }
