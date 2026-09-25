@@ -82,14 +82,14 @@ export async function restoreRecording(recordingId: string): Promise<ActionResul
 }
 
 /** Pull anything new from Plaud now, rather than waiting for the next scheduled run. */
-export async function syncRecordingsNow(): Promise<ActionResult<{ imported: number; attached: number; review: number }>> {
+export async function syncRecordingsNow(): Promise<ActionResult<{ imported: number; attached: number; review: number; cleaned: number }>> {
   await requireUser();
   if (!plaudConfigured()) return fail("Plaud is not switched on. Set PLAUD_ENABLED=true on the server.");
   try {
     const s = await importRecentRecordings({});
-    if (s.errors.length && s.imported === 0) return fail(s.errors[0]);
+    if (s.errors.length && s.imported === 0 && s.cleaned === 0) return fail(s.errors[0]);
     revalidatePath("/recordings");
-    return ok({ imported: s.imported, attached: s.attached, review: s.review });
+    return ok({ imported: s.imported, attached: s.attached, review: s.review, cleaned: s.cleaned });
   } catch (err) {
     return fail(err instanceof Error ? err.message : "Could not reach Plaud");
   }

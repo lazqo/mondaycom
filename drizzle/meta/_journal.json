@@ -43,6 +43,13 @@
       "when": 1790321252593,
       "tag": "0005_smart_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790333270549,
+      "tag": "0006_optimal_wasp",
+      "breakpoints": true
     }
   ]
 }

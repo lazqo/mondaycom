@@ -74,6 +74,27 @@ export async function listRecent(days = 7): Promise<PlaudRecording[]> {
   return parseRecentOutput(await plaud(["recent", "-d", String(days)]));
 }
 
-export async function fetchTranscript(externalId: string): Promise<string> {
-  return cleanTranscript(await plaud(["transcript", externalId], 120_000));
+/**
+ * The transcript in the CLI's output, or null when the CLI printed a notice instead: it says so
+ * (and exits normally) when a recording has no cleaned-up transcript yet.
+ */
+export function parseTranscriptOutput(stdout: string): string | null {
+  if (!/^\s*Transcript:/m.test(stdout)) return null;
+  return cleanTranscript(stdout) || null;
+}
+
+/** One transcript: the AI-cleaned one with `polished`, else the original. Null if there is none yet. */
+export async function fetchTranscript(externalId: string, opts: { polished?: boolean } = {}): Promise<string | null> {
+  return parseTranscriptOutput(await plaud(["transcript", externalId, ...(opts.polished ? ["--polished"] : [])], 120_000));
+}
+
+/**
+ * The best transcript available: Plaud's cleaned-up version (punctuation, filler words and
+ * mis-hearings fixed) when it has been generated, otherwise the original.
+ */
+export async function fetchBestTranscript(externalId: string): Promise<{ text: string; polished: boolean } | null> {
+  const polished = await fetchTranscript(externalId, { polished: true });
+  if (polished) return { text: polished, polished: true };
+  const original = await fetchTranscript(externalId);
+  return original ? { text: original, polished: false } : null;
 }

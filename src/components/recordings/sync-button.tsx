@@ -24,7 +24,16 @@ export function SyncRecordingsButton({ enabled }: { enabled: boolean }) {
           startTransition(async () => {
             const res = await syncRecordingsNow();
             if (!res.ok) return setError(res.error);
-            setNote(res.data.imported === 0 ? "Nothing new." : `${res.data.imported} new · ${res.data.attached} filed · ${res.data.review} to review`);
+            setNote(
+              res.data.imported === 0 && res.data.cleaned === 0
+                ? "Nothing new."
+                : [
+                    res.data.imported ? `${res.data.imported} new · ${res.data.attached} filed · ${res.data.review} to review` : null,
+                    res.data.cleaned ? `${res.data.cleaned} switched to the cleaned-up transcript` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+            );
             router.refresh();
           });
         }}

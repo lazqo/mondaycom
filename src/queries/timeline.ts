@@ -487,7 +487,7 @@ async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
   // ---- Voice recordings ----
   for (const r of recordingRows) {
     const minutes = r.durationSeconds ? `${Math.round(r.durationSeconds / 60)} min` : null;
-    items.push({ id: `rec-${r.id}`, at: r.recordedAt ?? r.createdAt, kind: "recording", title: `Recorded conversation: ${r.title}`, meta: [minutes, "Plaud"].filter(Boolean).join(" · "), body: r.transcript, source: leadLabel(r.leadId), href: "/recordings" });
+    items.push({ id: `rec-${r.id}`, at: r.recordedAt ?? r.createdAt, kind: "recording", title: `Recorded conversation: ${r.title}`, meta: [minutes, "Plaud", r.transcriptPolished ? "cleaned-up transcript" : "original transcript"].filter(Boolean).join(" · "), body: r.transcript, source: leadLabel(r.leadId), href: "/recordings" });
   }
 
   // Oldest first; ties keep the order they were added (enquiry before the emails that follow it).

@@ -12,6 +12,7 @@ export type RecordingRowData = {
   id: string;
   title: string;
   transcript: string;
+  transcriptPolished: boolean;
   preview: string;
   recordedAt: Date | null;
   durationSeconds: number | null;
@@ -76,6 +77,9 @@ export function RecordingRow({
               </Link>
             ) : null}
             {row.matchedBy ? <Badge className="bg-gray-100 text-gray-600">{row.matchedBy}</Badge> : null}
+            <Badge className={row.transcriptPolished ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}>
+              {row.transcriptPolished ? "Cleaned-up transcript" : "Original transcript"}
+            </Badge>
           </div>
           <p className="mt-0.5 truncate text-xs text-gray-500">
             {row.recordedAt ? formatDate(row.recordedAt) : "no date"}

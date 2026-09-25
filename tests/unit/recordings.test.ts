@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRecentOutput, parseDuration, cleanTranscript } from "@/lib/recordings/plaud";
+import { parseRecentOutput, parseDuration, cleanTranscript, parseTranscriptOutput } from "@/lib/recordings/plaud";
 import { phoneCandidates, nameCandidates, transcriptPreview, digits } from "@/lib/recordings/match";
 
 // Exactly what `plaud recent` printed on the server.
@@ -80,5 +80,16 @@ describe("matching signals", () => {
 
   it("finds nothing to match on when there is nothing distinctive", () => {
     expect(phoneCandidates("no numbers here at all")).toHaveLength(0);
+  });
+});
+
+describe("transcript output", () => {
+  it("reads a transcript, cleaned-up or original, without the CLI's header", () => {
+    expect(parseTranscriptOutput(`\n${TRANSCRIPT}\n`)?.startsWith("[00:00")).toBe(true);
+  });
+
+  it("treats the CLI's notice as no transcript yet", () => {
+    expect(parseTranscriptOutput(`No "transaction_polish" transcript for this recording. Available: transaction.`)).toBeNull();
+    expect(parseTranscriptOutput("The cleaned-up (polished) transcript hasn't been generated for this recording yet.")).toBeNull();
   });
 });

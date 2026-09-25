@@ -45,6 +45,7 @@ export default async function RecordingsPage({ searchParams }: { searchParams: P
     id: r.id,
     title: r.title,
     transcript: r.transcript,
+    transcriptPolished: r.transcriptPolished,
     preview: transcriptPreview(r.transcript),
     recordedAt: r.recordedAt,
     durationSeconds: r.durationSeconds,

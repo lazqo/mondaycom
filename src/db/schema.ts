@@ -301,6 +301,10 @@ export const recordings = pgTable(
     source: text("source").notNull().default("plaud"),
     title: text("title").notNull(),
     transcript: text("transcript").notNull(),
+    /** True once the transcript is Plaud's AI-cleaned version rather than the raw one. */
+    transcriptPolished: boolean("transcript_polished").notNull().default(false),
+    /** When Plaud was last asked for the cleaned version, so a missing one is not asked for every run. */
+    polishCheckedAt: timestamp("polish_checked_at", { withTimezone: true }),
     recordedAt: timestamp("recorded_at", { withTimezone: true }),
     durationSeconds: integer("duration_seconds"),
     status: recordingStatusEnum("status").notNull().default("review"),

@@ -16,9 +16,9 @@ async function main() {
   }
   const days = Number(process.argv[2] ?? 7);
   const s = await importRecentRecordings({ days, log: (m) => console.log(m) });
-  console.log(`checked ${s.checked} · imported ${s.imported} · filed automatically ${s.attached} · waiting for you ${s.review}`);
+  console.log(`checked ${s.checked} · imported ${s.imported} · filed automatically ${s.attached} · waiting for you ${s.review} · switched to the cleaned-up transcript ${s.cleaned}`);
   for (const e of s.errors) console.error(`error: ${e}`);
-  if (s.errors.length && s.imported === 0) process.exitCode = 1;
+  if (s.errors.length && s.imported === 0 && s.cleaned === 0) process.exitCode = 1;
 }
 
 main().catch((err) => {
