@@ -495,8 +495,8 @@ Chris; it never sends, books or promises anything.
 **What the update puts in (nothing priced, nothing approved on Chris's behalf)**
 
 - **Suppliers**: IT Plus (default), Clear Digital, SWL / Security Wholesale, Atlas Gentech, IOT
-  Technologies, Vesta Electrical. Play Digital and Dicker Data (from v0.1) are marked deprecated
-  unless they already hold prices.
+  Technologies, Vesta Electrical: the current, active list. Play Digital and Dicker Data (older,
+  provisional v0.1 information) are kept only as deprecated history and are never quoted from.
 - **Brand routing** (Suppliers & routing tab): VIGI/HiLook/TVT/AAP → IT Plus; Hikvision → IT Plus,
   Atlas for commercial; Tiandy → IOT; Dahua/Ajax → Clear Digital then IOT; Uniview → IT Plus, Clear
   Digital, IOT; Axis/Hanwha/Inner Range → Atlas; Akuvox → IT Plus then IOT; Gallagher/Aiphone →

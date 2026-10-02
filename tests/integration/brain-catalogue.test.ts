@@ -52,20 +52,55 @@ afterAll(async () => {
 });
 
 describe("supplier registry", () => {
-  it("has the six Get Secure suppliers, IT Plus as default", async () => {
+  it("has the six current Get Secure suppliers approved, IT Plus as default, older ones only as history", async () => {
     const rows = await db.query.suppliers.findMany();
-    const live = rows.filter((r) => r.status !== "deprecated").map((r) => r.name);
-    for (const n of ["IT Plus", "Clear Digital", "SWL / Security Wholesale", "Atlas Gentech", "IOT Technologies", "Vesta Electrical"]) expect(live).toContain(n);
+    const current = ["IT Plus", "Clear Digital", "SWL / Security Wholesale", "Atlas Gentech", "IOT Technologies", "Vesta Electrical"];
+    for (const n of current) expect(rows.find((r) => r.name === n)?.status, n).toBe("getsecure_approved");
     expect(rows.filter((r) => r.isDefault).map((r) => r.name)).toEqual(["IT Plus"]);
+    for (const n of ["Play Digital", "Dicker Data"]) {
+      const r = rows.find((x) => x.name === n);
+      if (r) expect(r.status).toBe("deprecated");
+    }
   });
-  it("stores the brand routing matrix as editable preference data", async () => {
+  it("stores the starting brand routing matrix as editable preference data", async () => {
     const rows = await db.select({ r: supplierBrandRoutes, s: suppliers.name }).from(supplierBrandRoutes).innerJoin(suppliers, eq(supplierBrandRoutes.supplierId, suppliers.id));
-    const route = (brand: string) => rows.filter((x) => x.r.brand === brand).sort((a, b) => a.r.rank - b.r.rank).map((x) => `${x.s}:${x.r.market}`);
-    expect(route("Hikvision")).toEqual(["IT Plus:both", "Atlas Gentech:commercial"]);
-    expect(route("Tiandy")).toEqual(["IOT Technologies:both"]);
-    expect(route("Uniview")).toEqual(["IT Plus:both", "Clear Digital:both", "IOT Technologies:both"]);
-    expect(route("Provision-ISR")).toEqual(["SWL / Security Wholesale:both"]);
+    const route = (brand: string) =>
+      rows
+        .filter((x) => x.r.brand === brand && x.r.market !== "commercial")
+        .sort((a, b) => a.r.rank - b.r.rank)
+        .map((x) => x.s)
+        .join(" / ");
+    const expected: Record<string, string> = {
+      "TP-Link VIGI": "IT Plus",
+      HiLook: "IT Plus",
+      Hikvision: "IT Plus",
+      TVT: "IT Plus",
+      Tiandy: "IOT Technologies",
+      Dahua: "Clear Digital / IOT Technologies",
+      Ajax: "Clear Digital / IOT Technologies",
+      Uniview: "IT Plus / Clear Digital / IOT Technologies",
+      Axis: "Atlas Gentech",
+      Hanwha: "Atlas Gentech",
+      "Inner Range": "Atlas Gentech",
+      AAP: "IT Plus",
+      Akuvox: "IT Plus / IOT Technologies",
+      Gallagher: "Clear Digital",
+      Aiphone: "Clear Digital",
+      "Provision-ISR": "SWL / Security Wholesale",
+    };
+    for (const [brand, want] of Object.entries(expected)) expect(route(brand), brand).toBe(want);
+    // Commercial-only alternative from the brief.
+    expect(rows.filter((x) => x.r.brand === "Hikvision" && x.r.market === "commercial").map((x) => x.s)).toEqual(["Atlas Gentech"]);
     expect(rows.every((x) => x.r.status === "getsecure_approved")).toBe(true);
+  });
+  it("never quotes from a deprecated supplier's listing", async () => {
+    const old = await db.query.suppliers.findFirst({ where: eq(suppliers.name, "Play Digital") });
+    if (!old) return;
+    const pid = await productId("TP-Link", "VIGI C340(2.8mm)");
+    const r = await brain.recordSupplierPrice({ productId: pid, supplierId: old.id, costExGst: 1, source: "test" }, chris);
+    offerIds.push(r.offerId);
+    const cat = await brain.loadCatalogue();
+    expect(cat.products.find((p) => p.id === pid)!.offers!.some((o) => o.supplier === "Play Digital")).toBe(false);
   });
 });
 

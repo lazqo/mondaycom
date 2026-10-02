@@ -71,6 +71,13 @@
       "when": 1790969336089,
       "tag": "0009_small_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790971915280,
+      "tag": "0010_current_suppliers",
+      "breakpoints": true
     }
   ]
 }
