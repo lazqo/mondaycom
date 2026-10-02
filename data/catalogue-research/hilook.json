@@ -1,0 +1,335 @@
+{
+ "products": [
+  {
+   "manufacturer": "HiLook",
+   "family": "HiLook",
+   "model": "IPC-T361H-MU",
+   "category": "camera",
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/05/IPC-T361H-MU_datasheet.pdf",
+   "verifiedAt": "2026-10-02",
+   "specs": {
+    "formFactor": "turret",
+    "resolutionMp": 6,
+    "horizontalPixels": 3200,
+    "verticalPixels": 1800,
+    "codecs": [
+     "H.265+",
+     "H.265",
+     "H.264+",
+     "H.264"
+    ],
+    "bitrateKbps": [
+     32,
+     16000
+    ],
+    "bitrateText": "Video Bit Rate 32 Kbps to 16 Mbps",
+    "wdrDb": 120,
+    "colourNight": false,
+    "microphone": true,
+    "dcInput": "12 VDC",
+    "poeStandard": "802.3af",
+    "ingress": [
+     "IP67"
+    ],
+    "operatingTempC": [
+     -30,
+     60
+    ],
+    "operatingHumidity": "95% or less (non-condensing)",
+    "ecosystem": [
+     "HiLookVision",
+     "iVMS-4200"
+    ],
+    "storage": "microSD up to 512 GB",
+    "material": "metal",
+    "lensOptions": [
+     2.8,
+     4
+    ],
+    "hfovByLensDeg": {
+     "2.8": 105,
+     "4": 78
+    },
+    "irRangeM": 30,
+    "analytics": [
+     "human_vehicle",
+     "line_crossing",
+     "intrusion",
+     "motion_detection",
+     "video_tampering"
+    ],
+    "poeMaxW": 9.5,
+    "onvifProfiles": [
+     "S",
+     "G"
+    ]
+   },
+   "orderableVariants": [
+    "IPC-T361H-MU(2.8mm)",
+    "IPC-T361H-MU(4mm)"
+   ],
+   "unverified": [
+    "speaker",
+    "vandal",
+    "whiteLightRangeM"
+   ],
+   "notes": [
+    "Official HiLook datasheet hosted by IT Plus (NZ distributor); hilook.com and hilookglobal.com were unreachable from this environment.",
+    "6 MP Intelligent Dual IR fixed turret. 120 dB true WDR, IR up to 30 m, arrayed dual microphone (datasheet audio rows are labelled -2U).",
+    "PoE: IEEE 802.3af, Class 3, max. 9.5 W; 12 VDC max. 8 W.",
+    "Accessories listed on the datasheet also include DS-1275ZJ-SUS (pole) and DS-1276ZJ-SUS (corner), DS-1273ZJ-130-TRL / -130B-TRL (wall), DS-2280ZJ-WA130 (junction box); only DS-1280ZJ-DM8 is linked here."
+   ]
+  },
+  {
+   "manufacturer": "HiLook",
+   "family": "HiLook",
+   "model": "IPC-T363H-MU",
+   "category": "camera",
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/06/IPC-T363H-MU_datasheet.pdf",
+   "verifiedAt": "2026-10-02",
+   "specs": {
+    "formFactor": "turret",
+    "resolutionMp": 6,
+    "horizontalPixels": 3200,
+    "verticalPixels": 1800,
+    "codecs": [
+     "H.265+",
+     "H.265",
+     "H.264+",
+     "H.264"
+    ],
+    "bitrateKbps": [
+     32,
+     16000
+    ],
+    "bitrateText": "Video Bit Rate 32 Kbps to 16 Mbps",
+    "wdrDb": 120,
+    "colourNight": false,
+    "microphone": true,
+    "dcInput": "12 VDC",
+    "poeStandard": "802.3af",
+    "ingress": [
+     "IP67"
+    ],
+    "operatingTempC": [
+     -30,
+     60
+    ],
+    "operatingHumidity": "95% or less (non-condensing)",
+    "ecosystem": [
+     "HiLookVision",
+     "iVMS-4200"
+    ],
+    "storage": "microSD up to 512 GB",
+    "material": "metal",
+    "lensOptions": [
+     2.8,
+     4
+    ],
+    "hfovByLensDeg": {
+     "2.8": 119.6,
+     "4": 96.8
+    },
+    "supplementLightRangeM": 30,
+    "supplementLightType": "IR, White Light (Smart Hybrid Light)",
+    "analytics": [
+     "human_vehicle",
+     "line_crossing",
+     "intrusion",
+     "motion_detection",
+     "video_tampering"
+    ],
+    "poeMaxW": 6.5,
+    "onvifProfiles": [
+     "S",
+     "T",
+     "G"
+    ]
+   },
+   "orderableVariants": [
+    "IPC-T363H-MU (2.8mm)",
+    "IPC-T363H-MU (4mm)"
+   ],
+   "unverified": [
+    "speaker",
+    "vandal",
+    "separate IR and white-light ranges"
+   ],
+   "notes": [
+    "Official HiLook datasheet hosted by IT Plus (NZ distributor); hilook.com and hilookglobal.com were unreachable from this environment.",
+    "6 MP Smart Hybrid Light fixed turret: colour image when events happen (not full-time colour). One supplement light range printed for IR and white light together: up to 30 m.",
+    "PoE: IEEE 802.3af, Class 3, max. 6.5 W; 12 VDC max. 5 W."
+   ]
+  },
+  {
+   "manufacturer": "HiLook",
+   "family": "HiLook",
+   "model": "NVR-104MH-K/4P(B)",
+   "category": "nvr",
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2023/09/NVR-104MH-K_4P.pdf",
+   "verifiedAt": "2026-10-02",
+   "specs": {
+    "poePorts": 4,
+    "poeStandard": "802.3af/at",
+    "recordingResolutionMaxMp": 8,
+    "decoding": {
+     "8": 2,
+     "4": 4,
+     "1080p": 8
+    },
+    "decodingText": "AI on: 1-ch@8 MP/3-ch@4 MP/6-ch@1080p (30 fps); AI off: 2-ch@8 MP/4-ch@4 MP/8-ch@1080p (30 fps)",
+    "hddBays": 1,
+    "maxHddTb": 10,
+    "maxTotalTb": 10,
+    "codecs": [
+     "H.265+",
+     "H.265",
+     "H.264+",
+     "H.264"
+    ],
+    "analytics": [
+     "human_vehicle",
+     "motion_detection",
+     "face_detection",
+     "smart_search"
+    ],
+    "audioIn": 1,
+    "audioOut": 1,
+    "ecosystem": [
+     "HiLookVision"
+    ],
+    "hdmiOutput": "1-ch, up to 4K (3840 × 2160)/30 Hz",
+    "vgaOutput": "1-ch, 1920 × 1080/60 Hz",
+    "lanPort": "1 RJ-45 10/100/1000 Mbps",
+    "operatingTempC": [
+     -10,
+     55
+    ],
+    "channels": 4,
+    "poeBudgetW": 50,
+    "incomingMbps": 40,
+    "outgoingMbps": 80
+   },
+   "unverified": [
+    "poePerPortW",
+    "onvifProfiles",
+    "alarmIn",
+    "alarmOut",
+    "compatibleFamilies"
+   ],
+   "notes": [
+    "Official HiLook datasheet hosted by IT Plus (NZ distributor); hilook.com and hilookglobal.com were unreachable from this environment.",
+    "4-ch PoE NVR (K series): 40 Mbps incoming, PoE power ≤ 50 W total (per-port limit not printed), 1 SATA up to 10 TB. Available model NVR-104MH-K/4P(B)/AUS.",
+    "Decoding map uses the AI-off line; with AI on it is lower (see decodingText).",
+    "ONVIF is not mentioned on the datasheet."
+   ]
+  },
+  {
+   "manufacturer": "HiLook",
+   "family": "HiLook",
+   "model": "NVR-108MH-K/8P(B)",
+   "category": "nvr",
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2023/09/NVR-108MH-K_8P.pdf",
+   "verifiedAt": "2026-10-02",
+   "specs": {
+    "poePorts": 8,
+    "poeStandard": "802.3af/at",
+    "recordingResolutionMaxMp": 8,
+    "decoding": {
+     "8": 2,
+     "4": 4,
+     "1080p": 8
+    },
+    "decodingText": "AI on: 1-ch@8 MP/3-ch@4 MP/6-ch@1080p (30 fps); AI off: 2-ch@8 MP/4-ch@4 MP/8-ch@1080p (30 fps)",
+    "hddBays": 1,
+    "maxHddTb": 10,
+    "maxTotalTb": 10,
+    "codecs": [
+     "H.265+",
+     "H.265",
+     "H.264+",
+     "H.264"
+    ],
+    "analytics": [
+     "human_vehicle",
+     "motion_detection",
+     "face_detection",
+     "smart_search"
+    ],
+    "audioIn": 1,
+    "audioOut": 1,
+    "ecosystem": [
+     "HiLookVision"
+    ],
+    "hdmiOutput": "1-ch, up to 4K (3840 × 2160)/30 Hz",
+    "vgaOutput": "1-ch, 1920 × 1080/60 Hz",
+    "lanPort": "1 RJ-45 10/100/1000 Mbps",
+    "operatingTempC": [
+     -10,
+     55
+    ],
+    "channels": 8,
+    "poeBudgetW": 75,
+    "incomingMbps": 80,
+    "outgoingMbps": 80
+   },
+   "unverified": [
+    "poePerPortW",
+    "onvifProfiles",
+    "alarmIn",
+    "alarmOut",
+    "compatibleFamilies"
+   ],
+   "notes": [
+    "Official HiLook datasheet hosted by IT Plus (NZ distributor); hilook.com and hilookglobal.com were unreachable from this environment.",
+    "8-ch PoE NVR (K series): 80 Mbps incoming, PoE power ≤ 75 W total (per-port limit not printed), 1 SATA up to 10 TB. Available model NVR-108MH-K/8P(B)/AUS.",
+    "Decoding map uses the AI-off line; with AI on it is lower (see decodingText).",
+    "ONVIF is not mentioned on the datasheet."
+   ]
+  },
+  {
+   "manufacturer": "Hikvision",
+   "family": "Hikvision",
+   "model": "DS-1280ZJ-DM8",
+   "category": "junction_box",
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1280ZJ-DM8.pdf",
+   "verifiedAt": "2026-10-02",
+   "specs": {
+    "material": "aluminium alloy",
+    "dimensionsMm": "Φ126.7 × 35",
+    "weightG": 210,
+    "maxLoadKg": 1,
+    "waterproof": "waterproof design; waterproof rubber necessary outdoors"
+   },
+   "unverified": [
+    "ingress"
+   ],
+   "notes": [
+    "Hikvision junction box for dome/turret cameras, listed as the junction box on both HiLook IPC-T361H-MU and IPC-T363H-MU datasheets.",
+    "Official HiLook datasheet hosted by IT Plus (NZ distributor); hilook.com and hilookglobal.com were unreachable from this environment."
+   ]
+  }
+ ],
+ "compatibility": [
+  {
+   "kind": "camera_junction_box",
+   "from": "IPC-T361H-MU",
+   "to": "DS-1280ZJ-DM8",
+   "qty": 1,
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/05/IPC-T361H-MU_datasheet.pdf",
+   "note": "Listed under Accessory > Optional (Junction box) on the camera datasheet"
+  },
+  {
+   "kind": "camera_junction_box",
+   "from": "IPC-T363H-MU",
+   "to": "DS-1280ZJ-DM8",
+   "qty": 1,
+   "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/06/IPC-T363H-MU_datasheet.pdf",
+   "note": "Listed under Accessory > Optional (Junction box) on the camera datasheet"
+  }
+ ],
+ "notes": [
+  "HiLook specs from the official HiLook datasheet PDFs hosted on IT Plus NZ product pages (hilook.com unreachable). Pages: https://www.itplus.co.nz/products/hilook-ipc-t361h-mu-2-8mm/ , https://www.itplus.co.nz/products/hilook-ipc-t363h-mu-2-8mm/ , https://www.itplus.co.nz/products/hilook-nvr-104mh-k-4p/ , https://www.itplus.co.nz/products/hilook-nvr-108mh-k-8p/",
+  "No prices recorded."
+ ]
+}

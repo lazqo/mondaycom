@@ -128,7 +128,7 @@ describe("the reference catalogue", () => {
   const products = referenceProducts();
   it("holds real, sourced products for every residential family and the commercial catalogue", () => {
     const families = new Set(products.filter((p) => p.category === "camera").map((p) => p.family));
-    for (const f of ["TP-Link VIGI", "Hikvision", "TVT", "Dahua", "Tiandy", "Uniview", "Ajax", "Axis", "Hanwha"]) expect(families).toContain(f);
+    for (const f of ["TP-Link VIGI", "HiLook", "Hikvision", "TVT", "Dahua", "Tiandy", "Uniview", "Ajax", "Axis", "Hanwha"]) expect(families).toContain(f);
     expect(REFERENCE_CATALOGUE.products.every((p) => /^https?:\/\//.test(p.sourceUrl) && p.verifiedAt)).toBe(true);
   });
   it("stores no prices and no Get Secure planning bitrate", () => {
@@ -194,6 +194,57 @@ describe("Scenario A: 4-camera VIGI good/value residential system", () => {
     expect(p.costing.unpriced.join(" ")).toMatch(/no approved price/);
     expect(p.costing.unpriced.join(" ")).toMatch(/hours and price not set/);
     expect(p.labour.package?.name).toBe("Residential 3–4 cameras, single storey");
+  });
+});
+
+describe("Scenario B: 4-camera HiLook better residential system", () => {
+  const checks = (p: ReturnType<typeof run>) => p.nvr.evaluated.find((x) => x.product.id === p.nvr.selected!.id)!.checks;
+  const check = (p: ReturnType<typeof run>, name: string) => checks(p).find((c) => c.name === name)!;
+  it("selects real HiLook 6 MP cameras and a HiLook recorder (HiLook is first in the better tier)", () => {
+    const p = run(house({ requestedTier: "better" }));
+    expect(p.recommendedTier).toBe("better");
+    expect(p.cameras).toHaveLength(4);
+    expect(p.cameras.every((c) => c.product?.family === "HiLook" && c.product.resolutionMp === 6)).toBe(true);
+    expect(p.nvr.selected?.family).toBe("HiLook");
+    expect(hardware(p).every((x) => REF_IDS.has(x.id))).toBe(true);
+  });
+  it("on the maximum published bitrate the 40 Mbps 4-channel recorder is shown failing bandwidth, and the 8-channel is used", () => {
+    const p = run(house({ requestedTier: "better" }));
+    const four = p.nvr.evaluated.find((e) => e.product.model === "NVR-104MH-K/4P(B)")!;
+    expect(four.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: false });
+    expect(four.checks.find((c) => c.name === "channels")!.pass).toBe(true);
+    expect(p.nvr.selected?.model).toBe("NVR-108MH-K/8P(B)");
+    expect(p.approvals.map((a) => a.key)).toContain("expected_bitrate");
+  });
+  it("with Get Secure's expected bitrate entered, the 4-channel HiLook recorder passes each check on its own", () => {
+    // What Chris would enter as the planning bitrate (test value).
+    const p = run(house({ requestedTier: "better" }), realCatalogue(withSpecs((x) => x.family === "HiLook" && x.category === "camera", { expectedBitrateMbps: 6 })));
+    expect(p.nvr.selected?.model).toBe("NVR-104MH-K/4P(B)");
+    expect(check(p, "channels")).toMatchObject({ pass: true });
+    expect(check(p, "channels").detail).toMatch(/4 camera\(s\), 4 channel\(s\) needed, recorder has 4/);
+    expect(check(p, "bandwidth")).toMatchObject({ pass: true });
+    expect(check(p, "bandwidth").detail).toMatch(/24\.0 Mbps from cameras, recorder accepts 40 Mbps/);
+    expect(check(p, "poe")).toMatchObject({ pass: true }); // per-port limit not published; total within 50 W
+    expect(check(p, "poe").detail).toMatch(/budget 50 W/);
+    expect(check(p, "storage")).toMatchObject({ pass: true });
+    expect(check(p, "recording")).toMatchObject({ pass: true });
+    expect(check(p, "decoding")).toMatchObject({ pass: true, unverified: false });
+    expect(check(p, "decoding").detail).toMatch(/at 8 MP/);
+    expect(check(p, "features")).toMatchObject({ pass: true });
+    expect(check(p, "compatibility")).toMatchObject({ pass: true, unverified: false });
+    expect(check(p, "compatibility").detail).toMatch(/same family/);
+    expect(p.recording.storage.status).toBe("meets_target");
+  });
+  it("names the documented junction box for the HiLook cameras without charging it", () => {
+    const p = run(house({ requestedTier: "better", mountingSurface: "brick" }));
+    const jb = p.installation.materials.find((m) => m.key.startsWith("junction_box"))!;
+    expect(jb.product?.model).toBe("DS-1280ZJ-DM8");
+    expect(jb.charged).toBe(false);
+  });
+  it("marks what HiLook does not publish as unverified rather than guessing", () => {
+    const nvr = REFERENCE_CATALOGUE.products.find((x) => x.model === "NVR-104MH-K/4P(B)")!;
+    expect(nvr.unverifiedFields).toEqual(expect.arrayContaining(["poePerPortW", "onvifProfiles"]));
+    expect(nvr.specs.poePerPortW).toBeUndefined();
   });
 });
 
