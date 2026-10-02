@@ -27,6 +27,14 @@ enquiries appear within seconds. That needs a process that stays alive, which is
 run this app** — its functions are frozen between requests, so the mailbox watcher would die on every
 cold start and no email would ever be detected automatically.
 
+**The "Vercel" check on GitHub is not this deployment.** A Vercel project
+(`chris-projects-ae98c80a/mondaycom`) is still connected to the repository from earlier, so Vercel
+tried to build every push and reported "Deployment has failed" next to the green CI tick. It has
+failed on every commit and never served the CRM. `vercel.json` now turns Vercel's Git deployments
+off, so new pushes should no longer produce a Vercel failure. To remove it entirely: Vercel
+dashboard → the `mondaycom` project → Settings → Git → Disconnect (or delete the project). The only
+checks that matter are **GitHub Actions → CI** and the server itself (section 12).
+
 **Plan: KVM 2** (2 vCPU, 8 GB RAM, 100 GB NVMe, about USD 9/month). KVM 1 (1 vCPU, 4 GB) also runs
 the app fine, but the first Docker build takes noticeably longer on one core. Either is cheaper than
 a managed platform, and this is the whole bill — there are no per-request or per-email costs.
