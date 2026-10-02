@@ -56,6 +56,13 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/leads/${lead.id}/assessment`}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            data-testid="open-assessment"
+          >
+            CCTV assessment
+          </Link>
           {lead.contact ? (
             <Link
               href={`/contacts/${lead.contact.id}`}

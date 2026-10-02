@@ -19,7 +19,8 @@ const emptyLine = (): QuoteLineItem => ({ description: "", quantity: 1, unitPric
 export function QuoteEditor(props: Props) {
   const router = useRouter();
   const quote = props.mode === "edit" ? props.quote : null;
-  const locked = quote ? quote.status === "accepted" : false;
+  const locked = quote ? quote.status === "accepted" || quote.status === "superseded" || (quote.origin === "brain" && (quote.status === "sent" || quote.status === "declined")) : false;
+  const [voided, setVoided] = React.useState(false);
   const [title, setTitle] = React.useState(quote?.title ?? "");
   const [contactId, setContactId] = React.useState(quote?.contactId ?? (props.mode === "create" ? (props.defaultContactId ?? "") : ""));
   const [taxRate, setTaxRate] = React.useState<number>(quote ? Number(quote.taxRate) : DEFAULT_TAX_RATE);
@@ -41,7 +42,8 @@ export function QuoteEditor(props: Props) {
     setSaved(false);
     const payload = {
       title,
-      contactId,
+      // A prepared quote for a lead that is not a customer yet has no customer to keep.
+      contactId: contactId || undefined,
       leadId: props.mode === "create" ? (props.leadId ?? null) : undefined,
       taxRate,
       lineItems: lines.filter((l) => l.description.trim() !== ""),
@@ -57,6 +59,7 @@ export function QuoteEditor(props: Props) {
         const res = await updateQuote(props.quote.id, payload);
         if (!res.ok) return setError(res.error);
         setSaved(true);
+        setVoided(res.data.approvalVoided);
         router.refresh();
       }
     });
@@ -71,8 +74,8 @@ export function QuoteEditor(props: Props) {
             <Input id="q-title" value={title} onChange={(e) => setTitle(e.target.value)} required disabled={locked} />
           </Field>
           <Field label="Customer *" htmlFor="q-contact">
-            <Select id="q-contact" value={contactId} onChange={(e) => setContactId(e.target.value)} required disabled={locked}>
-              <option value="">Choose a customer…</option>
+            <Select id="q-contact" value={contactId} onChange={(e) => setContactId(e.target.value)} required={!(quote && !quote.contactId)} disabled={locked}>
+              <option value="">{quote && !quote.contactId ? "Not yet a customer (lead)" : "Choose a customer…"}</option>
               {props.contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -199,13 +202,14 @@ export function QuoteEditor(props: Props) {
       <FormError message={error} />
       {!locked ? (
         <div className="flex items-center justify-end gap-3">
-          {saved ? <span className="text-sm text-green-700">Saved</span> : null}
-          <Button type="submit" disabled={pending || !contactId}>
+          {saved ? <span className="text-sm text-green-700">{voided ? "Saved. The quote changed after approval, so it needs approving again." : "Saved"}</span> : null}
+          {quote?.status === "approved" ? <span className="text-xs text-amber-700">Changing an approved quote sends it back for review.</span> : null}
+          <Button type="submit" disabled={pending || (!contactId && !(quote && !quote.contactId))}>
             {pending ? "Saving…" : props.mode === "create" ? "Create quote" : "Save quote"}
           </Button>
         </div>
       ) : (
-        <p className="text-right text-sm text-gray-500">Accepted quotes are locked.</p>
+        <p className="text-right text-sm text-gray-500">{quote?.status === "superseded" ? "Superseded by a newer revision." : quote?.status === "accepted" ? "Accepted quotes are locked." : "Sent quotes are locked; make a revision instead."}</p>
       )}
     </form>
   );

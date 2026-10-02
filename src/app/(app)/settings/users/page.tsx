@@ -8,5 +8,5 @@ export const metadata: Metadata = { title: "Staff" };
 export default async function UsersPage() {
   const me = await requireAdmin();
   const users = await listUsers();
-  return <UsersAdmin users={users} meId={me.id} />;
+  return <UsersAdmin users={users} meId={me.id} meCanApprove={!!me.canApprove} />;
 }

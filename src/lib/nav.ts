@@ -1,4 +1,4 @@
-import { Users, Briefcase, FileText, Calendar, CalendarSync, Kanban, Settings, Inbox, Mail, Sun, Smartphone, BellRing, Sparkles, Activity, Mic } from "lucide-react";
+import { Users, Briefcase, FileText, Calendar, CalendarSync, Kanban, Settings, Inbox, Mail, Sun, Smartphone, BellRing, Sparkles, Activity, Mic, ShieldCheck, Brain } from "lucide-react";
 import type { UserRole } from "@/lib/constants";
 
 export type NavItem = { label: string; href: string; icon: React.ComponentType<{ className?: string }>; roles: UserRole[] };
@@ -8,6 +8,7 @@ const ITEMS: NavItem[] = [
   { label: "My day", href: "/my-day", icon: Smartphone, roles: ["admin", "member", "field"] },
   { label: "Inbox", href: "/inbox", icon: Inbox, roles: ["admin", "member"] },
   { label: "Leads", href: "/leads", icon: Kanban, roles: ["admin", "member"] },
+  { label: "Approvals", href: "/approvals", icon: ShieldCheck, roles: ["admin", "member"] },
   { label: "Customers", href: "/contacts", icon: Users, roles: ["admin", "member", "field"] },
   { label: "Recordings", href: "/recordings", icon: Mic, roles: ["admin", "member"] },
   { label: "Quotes", href: "/quotes", icon: FileText, roles: ["admin", "member"] },
@@ -19,6 +20,7 @@ const SETTINGS: NavItem[] = [
   { label: "Email AI", href: "/settings/ai", icon: Sparkles, roles: ["admin"] },
   { label: "Email accounts", href: "/settings/mailboxes", icon: Mail, roles: ["admin"] },
   { label: "Calendar sync", href: "/settings/calendar", icon: CalendarSync, roles: ["admin"] },
+  { label: "Business Brain", href: "/settings/brain", icon: Brain, roles: ["admin"] },
   { label: "Staff", href: "/settings/users", icon: Settings, roles: ["admin"] },
   { label: "System status", href: "/settings/status", icon: Activity, roles: ["admin"] },
 ];

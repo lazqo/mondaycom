@@ -473,6 +473,49 @@ from hPanel, which returns the whole machine to that point.
 
 ---
 
+## 14. CCTV Business Brain (v0.1)
+
+The Business Brain works out a CCTV system for a lead — cameras, recorder, storage, network,
+materials, labour and price — with fixed rules, not AI. It **prepares** reply drafts and quotes for
+Chris; it never sends, books or promises anything.
+
+**Where it is**
+
+- **Lead → CCTV assessment**: check the enquiry details, press **Run assessment**, read the decision
+  packet, then **Prepare reply draft** / **Prepare quote**.
+- **Approvals** (left menu): every prepared email and quote waits here. Only an approver can approve,
+  and only an approved email can be sent. Changing anything after approval takes the approval away.
+  Saving a draft never marks the lead as Contacted. **Put in Titan Drafts** copies a draft into the
+  Titan Drafts folder if Chris prefers to send from Titan; the CRM notices when it goes out.
+- **Settings → Business Brain**: rules, products and prices, suppliers, installation packages.
+- **Settings → Staff → Approver**: who may approve and send. The first admin (and every admin that
+  existed when this update was deployed) is an approver; only an approver can change this column.
+
+**What Chris must fill in before quotes are complete.** Nothing is pre-loaded as products or prices,
+and no old Hermes/Mission Control pricing was imported.
+
+1. **Products** — add each camera, recorder, drive and switch from its datasheet (the form shows the
+   fields each type needs). Mark it *Get Secure approved* once checked.
+2. **Supplier prices** — record the cost against IT Plus (or Play Digital / Dicker Data once
+   verified), then approve it. A later change of more than 5% is held for review instead of quietly
+   changing quotes.
+3. **Installation packages** — e.g. "1–4 cameras, single storey", with hours and the price.
+4. **Rules** — set the standard materials allowance value and the internal labour cost, and approve
+   or change the rules still marked *provisional* (markup, storage allowance, tiers…). The assessment
+   lists every provisional rule it relied on.
+
+Until these are in, assessments still run but show "Not fully priced" and say exactly what is missing.
+
+**Supplier logins** typed under Suppliers are stored encrypted with `ENCRYPTION_KEY`, are never shown again
+and are not available to any agent. **Hermes is not connected**; the code refuses any customer-facing
+action (sending, confirming, discounting, accepting) that is not done by an approver.
+
+**Rollback note:** this update makes a quote's customer optional (Brain quotes can exist before the
+lead is converted). Rolling the code back past it is still safe, but delete any Brain-prepared quotes
+without a customer first: `docker compose -f docker-compose.prod.yml exec db psql -U getsecure -d getsecure -c "delete from quotes where contact_id is null"`.
+
+---
+
 ## Keeping secrets out of GitHub
 
 Rules, and what enforces them:

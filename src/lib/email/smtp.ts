@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { emails, mailboxes, type Mailbox } from "@/db/schema";
 import { connectionFromMailbox, createImapClient, type MailboxConnection } from "./imap";
 import { CRM_MESSAGE_HEADER, ingestRawMessage } from "./store";
+import { type Actor, assertMayActOnCustomer } from "@/lib/guard/actor";
 
 export function createSmtpTransport(c: MailboxConnection) {
   return nodemailer.createTransport({
@@ -23,14 +24,18 @@ export async function testSmtpConnection(c: MailboxConnection): Promise<void> {
 
 export type SendReplyInput = {
   mailboxId: string;
-  threadId: string;
+  /** The conversation to reply on; null starts a new one. */
+  threadId: string | null;
   inReplyToEmailId?: string | null;
   to: string[];
   cc?: string[];
   subject: string;
   text: string;
-  sentById: string;
+  /** Who is sending. Must be a person: agents and automations are refused. */
+  actor: Actor;
   fromName?: string | null;
+  /** Extra headers, e.g. the CRM draft this message came from. */
+  headers?: Record<string, string>;
 };
 
 /**
@@ -39,6 +44,8 @@ export type SendReplyInput = {
  * the mailbox's own webmail shows it too.
  */
 export async function sendReply(input: SendReplyInput): Promise<{ emailId: string; messageId: string }> {
+  // The one place the CRM emails a customer. Only a signed-in person gets past here.
+  assertMayActOnCustomer(input.actor, "send_email");
   const mailbox = await db.query.mailboxes.findFirst({ where: eq(mailboxes.id, input.mailboxId) });
   if (!mailbox) throw new Error("Mailbox not found");
   const conn = connectionFromMailbox(mailbox);
@@ -58,7 +65,7 @@ export async function sendReply(input: SendReplyInput): Promise<{ emailId: strin
     inReplyTo: parent?.messageId,
     references: references.length ? references : undefined,
     date: new Date(),
-    headers: { [CRM_MESSAGE_HEADER]: messageId },
+    headers: { [CRM_MESSAGE_HEADER]: messageId, ...(input.headers ?? {}) },
   });
   const raw = await composer.compile().build();
 
@@ -73,11 +80,11 @@ export async function sendReply(input: SendReplyInput): Promise<{ emailId: strin
     raw,
     direction: "outbound",
     origin: "crm",
-    sentById: input.sentById,
+    sentById: input.actor.userId,
     mailboxAddress: mailbox.emailAddress,
   });
   // Outbound replies always belong to the thread they were written from.
-  if (stored.threadId !== input.threadId) {
+  if (input.threadId && stored.threadId !== input.threadId) {
     await db.update(emails).set({ threadId: input.threadId }).where(eq(emails.id, stored.emailId));
   }
 

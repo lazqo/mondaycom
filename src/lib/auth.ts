@@ -49,7 +49,7 @@ export async function destroySession() {
   store.delete(SESSION_COOKIE);
 }
 
-export type SessionUser = Pick<User, "id" | "email" | "name" | "role">;
+export type SessionUser = Pick<User, "id" | "email" | "name" | "role" | "canApprove">;
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const store = await cookies();
@@ -59,7 +59,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   if (!userId) return null;
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
-    columns: { id: true, email: true, name: true, role: true, active: true },
+    columns: { id: true, email: true, name: true, role: true, active: true, canApprove: true },
   });
   if (!user || !user.active) return null;
   const { active: _active, ...rest } = user;

@@ -8,6 +8,7 @@ import { emails, emailThreads, type ExtractedLead } from "@/db/schema";
 import { requireOffice as requireUser } from "@/lib/auth";
 import { createLeadFromEmail, linkThread, markEmailNotLead, processEmail } from "@/lib/email/pipeline";
 import { sendReply } from "@/lib/email/smtp";
+import { humanFromUser } from "@/lib/guard/actor";
 import { LEAD_URGENCIES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 
@@ -136,7 +137,7 @@ export async function sendThreadReply(input: unknown): Promise<ActionResult<{ em
       cc: splitAddresses(d.cc),
       subject: d.subject,
       text: d.text,
-      sentById: user.id,
+      actor: humanFromUser(user),
       fromName: user.name,
     });
     revalidateInbox(thread.id);

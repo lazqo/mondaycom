@@ -323,7 +323,7 @@ describe.skipIf(!dovecotUp)("IMAP + SMTP against local Dovecot", () => {
         to: [addr("sarah@harbourview.co.nz")],
         subject: "Re: CCTV quote for apartment block",
         text: "Hi Sarah, Tuesday 2pm works for us. See you then.",
-        sentById: userId,
+        actor: { kind: "human", userId: userId, name: "Integration Tester", canApprove: true },
         fromName: "Get Secure",
       });
       expect(sink.messages).toHaveLength(1);

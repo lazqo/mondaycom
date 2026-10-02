@@ -5,7 +5,7 @@ import { activityLog, contacts, events, jobs, leads, quotes, users } from "@/db/
 
 export async function listUsers() {
   return db.query.users.findMany({
-    columns: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
+    columns: { id: true, name: true, email: true, role: true, active: true, canApprove: true, createdAt: true },
     orderBy: [asc(users.name)],
   });
 }
@@ -81,7 +81,7 @@ export async function listQuotes() {
 export async function getQuote(id: string) {
   return db.query.quotes.findFirst({
     where: eq(quotes.id, id),
-    with: { contact: true, lead: { columns: { id: true, name: true } }, jobs: { columns: { id: true, number: true, title: true } } },
+    with: { contact: true, lead: { columns: { id: true, name: true } }, jobs: { columns: { id: true, number: true, title: true } }, approvedBy: { columns: { name: true } } },
   });
 }
 

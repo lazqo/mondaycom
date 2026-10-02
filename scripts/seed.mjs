@@ -27,8 +27,8 @@ try {
     const name = process.env.SEED_ADMIN_NAME ?? "Admin";
     const hash = await bcrypt.hash(password, 10);
     const [row] = await sql`
-      insert into users (email, name, password_hash, role)
-      values (${email}, ${name}, ${hash}, 'admin') returning id`;
+      insert into users (email, name, password_hash, role, can_approve)
+      values (${email}, ${name}, ${hash}, 'admin', true) returning id`;
     adminId = row.id;
     console.log(`Created admin user ${email}`);
   } else {

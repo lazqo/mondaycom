@@ -41,13 +41,34 @@ export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   other: "Other",
 };
 
-export const QUOTE_STATUSES = ["draft", "sent", "accepted", "declined"] as const;
+/**
+ * Quote statuses. "draft" is a quote a person is writing. Quotes prepared by the Business Brain go
+ * ai_prepared → needs_review → approved (by Chris) → sent; any change after approval sends them back
+ * to needs_review. A newer revision supersedes an older one.
+ */
+export const QUOTE_STATUSES = ["draft", "sent", "accepted", "declined", "ai_prepared", "needs_review", "approved", "superseded"] as const;
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 export const QUOTE_STATUS_META: Record<QuoteStatus, { label: string; bg: string; text: string }> = {
   draft: { label: "Draft", bg: "bg-gray-400", text: "text-white" },
+  ai_prepared: { label: "Prepared", bg: "bg-gray-400", text: "text-white" },
+  needs_review: { label: "Needs review", bg: "bg-[#ffcb00]", text: "text-gray-900" },
+  approved: { label: "Approved", bg: "bg-[#9cd326]", text: "text-white" },
   sent: { label: "Sent", bg: "bg-[#0086c0]", text: "text-white" },
+  superseded: { label: "Superseded", bg: "bg-gray-300", text: "text-gray-700" },
   accepted: { label: "Accepted", bg: "bg-[#00c875]", text: "text-white" },
   declined: { label: "Declined", bg: "bg-[#e2445c]", text: "text-white" },
+};
+
+export const DRAFT_STATUSES = ["draft", "ready_for_review", "approved", "revision_requested", "rejected", "sent", "cancelled"] as const;
+export type DraftStatus = (typeof DRAFT_STATUSES)[number];
+export const DRAFT_STATUS_META: Record<DraftStatus, { label: string; bg: string; text: string }> = {
+  draft: { label: "Draft", bg: "bg-gray-400", text: "text-white" },
+  ready_for_review: { label: "Ready for review", bg: "bg-[#ffcb00]", text: "text-gray-900" },
+  approved: { label: "Approved", bg: "bg-[#9cd326]", text: "text-white" },
+  revision_requested: { label: "Revision requested", bg: "bg-[#fdab3d]", text: "text-white" },
+  rejected: { label: "Rejected", bg: "bg-[#e2445c]", text: "text-white" },
+  sent: { label: "Sent", bg: "bg-[#0086c0]", text: "text-white" },
+  cancelled: { label: "Cancelled", bg: "bg-gray-300", text: "text-gray-700" },
 };
 
 export const JOB_STATUSES = ["unscheduled", "scheduled", "en_route", "on_site", "done", "invoiced", "cancelled"] as const;

@@ -43,10 +43,16 @@ export default async function QuotesPage() {
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-gray-700">
-                    <Link href={`/contacts/${q.contact.id}`} className="hover:underline">
-                      {q.contact.name}
-                    </Link>
-                    {q.contact.company ? <span className="text-gray-500"> · {q.contact.company}</span> : null}
+                    {q.contact ? (
+                      <>
+                        <Link href={`/contacts/${q.contact.id}`} className="hover:underline">
+                          {q.contact.name}
+                        </Link>
+                        {q.contact.company ? <span className="text-gray-500"> · {q.contact.company}</span> : null}
+                      </>
+                    ) : (
+                      <span className="text-gray-500">Lead, not yet a customer</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <Badge className={`${QUOTE_STATUS_META[q.status].bg} ${QUOTE_STATUS_META[q.status].text}`}>{QUOTE_STATUS_META[q.status].label}</Badge>

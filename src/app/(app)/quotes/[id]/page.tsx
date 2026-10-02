@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { requireOffice } from "@/lib/auth";
 import Link from "next/link";
+import { formatDateTime } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import { getQuote, listContacts, getActivity } from "@/queries";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { QuoteEditor } from "@/components/quotes/quote-editor";
 import { QuoteStatusActions } from "@/components/quotes/quote-status-actions";
 import { ActivityFeed } from "@/components/activity-feed";
+import { QuoteApprovalPanel } from "@/components/quotes/quote-approval-panel";
 import { QUOTE_STATUS_META } from "@/lib/constants";
 import { JourneyBar } from "@/components/journey/journey-bar";
 import { buildJourney } from "@/lib/journey";
@@ -15,7 +17,7 @@ import { getJourneyForQuote } from "@/queries/journey";
 export const metadata: Metadata = { title: "Quote" };
 
 export default async function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireOffice();
+  const user = await requireOffice();
   const { id } = await params;
   const [quote, contacts, activity] = await Promise.all([getQuote(id), listContacts(), getActivity("quote", id)]);
   if (!quote) notFound();
@@ -34,9 +36,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             <Badge className={`${meta.bg} ${meta.text}`}>{meta.label}</Badge>
           </h1>
           <p className="text-sm text-gray-500">
-            <Link href={`/contacts/${quote.contact.id}`} className="hover:underline">
-              {quote.contact.name}
-            </Link>
+            {quote.contact ? (
+              <Link href={`/contacts/${quote.contact.id}`} className="hover:underline">
+                {quote.contact.name}
+              </Link>
+            ) : (
+              <span>Not yet a customer</span>
+            )}
             {quote.lead ? (
               <>
                 {" · from lead "}
@@ -62,12 +68,27 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         <div className="lg:col-span-2">
           <QuoteEditor mode="edit" quote={quote} contacts={contacts} />
         </div>
-        <Card>
-          <CardHeader title="Activity" />
-          <div className="p-4">
-            <ActivityFeed items={activity} />
-          </div>
-        </Card>
+        <div className="space-y-4">
+          {quote.origin === "brain" ? (
+            <QuoteApprovalPanel
+              canApprove={!!user.canApprove}
+              quote={{
+                id: quote.id,
+                status: quote.status,
+                approvedBy: quote.approvedBy?.name ?? null,
+                approvedAt: quote.approvedAt ? formatDateTime(quote.approvedAt) : null,
+                internalCosting: quote.internalCosting,
+                confidence: quote.confidence,
+              }}
+            />
+          ) : null}
+          <Card>
+            <CardHeader title="Activity" />
+            <div className="p-4">
+              <ActivityFeed items={activity} />
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

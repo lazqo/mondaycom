@@ -1,16 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { jobs, leads, quotes } from "@/db/schema";
+import { quotes } from "@/db/schema";
 import { computeTotals } from "@/lib/quotes";
 import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
-import { QUOTE_STATUSES } from "@/lib/constants";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
+import { humanFromUser } from "@/lib/guard/actor";
+import { approveQuote, returnQuoteForReview, setQuoteStatus as setStatus, updateQuoteContent } from "@/lib/quotes/workflow";
 
 const lineItem = z.object({
   description: z.string().trim().min(1, "Line description is required").max(500),
@@ -57,93 +57,61 @@ export async function createQuote(input: unknown): Promise<ActionResult<{ id: st
   return ok({ id });
 }
 
-export async function updateQuote(id: string, input: unknown): Promise<ActionResult<undefined>> {
+export async function updateQuote(id: string, input: unknown): Promise<ActionResult<{ approvalVoided: boolean }>> {
   const user = await requireUser();
   const parsed = quoteInput.partial().safeParse(input);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid input");
-  const existing = await db.query.quotes.findFirst({ where: eq(quotes.id, id) });
-  if (!existing) return fail("Quote not found");
-  const lineItems = parsed.data.lineItems ?? existing.lineItems;
-  const taxRate = parsed.data.taxRate ?? Number(existing.taxRate);
-  const totals = computeTotals(lineItems, taxRate);
-  await db
-    .update(quotes)
-    .set({
-      ...parsed.data,
-      lineItems,
-      taxRate: taxRate.toFixed(2),
-      subtotal: totals.subtotal,
-      total: totals.total,
-      updatedAt: new Date(),
-    })
-    .where(eq(quotes.id, id));
-  await logActivity({ entity: "quote", entityId: id, actorId: user.id, action: "updated" });
-  revalidatePath("/quotes");
-  revalidatePath(`/quotes/${id}`);
-  return ok(undefined);
+  try {
+    const r = await updateQuoteContent(id, parsed.data, humanFromUser(user));
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath("/approvals");
+    return ok(r);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
 }
 
+/** Mark sent, accepted, declined, or reopen as draft. Customer-facing: a person only. */
 export async function setQuoteStatus(id: string, status: string): Promise<ActionResult<{ jobId: string | null }>> {
   const user = await requireUser();
-  const parsedStatus = z.enum(QUOTE_STATUSES).safeParse(status);
+  const parsedStatus = z.enum(["draft", "sent", "accepted", "declined"]).safeParse(status);
   if (!parsedStatus.success) return fail("Invalid status");
-  const quote = await db.query.quotes.findFirst({ where: eq(quotes.id, id), with: { jobs: true } });
-  if (!quote) return fail("Quote not found");
-  const s = parsedStatus.data;
+  try {
+    const r = await setStatus(id, parsedStatus.data, humanFromUser(user));
+    revalidatePath("/quotes");
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath("/jobs");
+    revalidatePath("/leads");
+    revalidatePath("/approvals");
+    return ok(r);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
 
-  const jobId = await db.transaction(async (tx) => {
-    await tx
-      .update(quotes)
-      .set({
-        status: s,
-        sentAt: s === "sent" && !quote.sentAt ? new Date() : quote.sentAt,
-        acceptedAt: s === "accepted" ? new Date() : quote.acceptedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(quotes.id, id));
+/** Chris approves a prepared quote exactly as it stands. */
+export async function approveQuoteAction(id: string): Promise<ActionResult<undefined>> {
+  const user = await requireUser();
+  try {
+    await approveQuote(id, humanFromUser(user));
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath("/quotes");
+    revalidatePath("/approvals");
+    return ok(undefined);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
 
-    // Keep the originating lead in step with the quote.
-    if (quote.leadId) {
-      const leadStatus = s === "sent" ? "quote_sent" : s === "accepted" ? "won" : s === "declined" ? "lost" : null;
-      if (leadStatus) {
-        await tx.update(leads).set({ status: leadStatus, updatedAt: new Date() }).where(eq(leads.id, quote.leadId));
-        await logActivity({
-          entity: "lead",
-          entityId: quote.leadId,
-          actorId: user.id,
-          action: "status_changed",
-          detail: { changes: { status: { to: leadStatus } }, via: `quote #${quote.number}` },
-        });
-      }
-    }
-
-    // Accepting a quote creates the job if there isn't one yet.
-    if (s === "accepted" && quote.jobs.length === 0) {
-      const number = await nextNumber(tx, "jobs");
-      const lead = quote.leadId ? await tx.query.leads.findFirst({ where: eq(leads.id, quote.leadId) }) : null;
-      const [row] = await tx
-        .insert(jobs)
-        .values({
-          number,
-          title: quote.title,
-          contactId: quote.contactId,
-          leadId: quote.leadId,
-          quoteId: quote.id,
-          service: lead?.service ?? null,
-          siteAddress: lead?.site ?? null,
-          assignedToId: lead?.assignedToId ?? null,
-        })
-        .returning({ id: jobs.id });
-      await logActivity({ entity: "job", entityId: row.id, actorId: user.id, action: "created", detail: { fromQuoteId: id } });
-      return row.id;
-    }
-    return quote.jobs[0]?.id ?? null;
-  });
-
-  await logActivity({ entity: "quote", entityId: id, actorId: user.id, action: "status_changed", detail: { to: s } });
-  revalidatePath("/quotes");
-  revalidatePath(`/quotes/${id}`);
-  revalidatePath("/jobs");
-  revalidatePath("/leads");
-  return ok({ jobId });
+export async function returnQuoteAction(id: string, note: string): Promise<ActionResult<undefined>> {
+  const user = await requireUser();
+  try {
+    await returnQuoteForReview(id, humanFromUser(user), note.trim() || null);
+    revalidatePath(`/quotes/${id}`);
+    revalidatePath("/approvals");
+    return ok(undefined);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
 }

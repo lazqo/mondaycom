@@ -3,14 +3,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { createUser, setUserActive, resetUserPassword, setUserRole } from "@/actions/users";
+import { createUser, setUserActive, setUserApprover, resetUserPassword, setUserRole } from "@/actions/users";
 import { USER_ROLES, USER_ROLE_META, type UserRole } from "@/lib/constants";
 import { Badge, Button, Dialog, Field, FormError, Input, Select } from "@/components/ui";
 import { formatDateTime } from "@/lib/utils";
 
-type Row = { id: string; name: string; email: string; role: UserRole; active: boolean; createdAt: Date };
+type Row = { id: string; name: string; email: string; role: UserRole; active: boolean; canApprove: boolean; createdAt: Date };
 
-export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
+export function UsersAdmin({ users, meId, meCanApprove }: { users: Row[]; meId: string; meCanApprove: boolean }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -64,6 +64,7 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
               <th className="px-3 py-2 text-left">Name</th>
               <th className="px-3 py-2 text-left">Email</th>
               <th className="px-3 py-2 text-left">Role</th>
+              <th className="px-3 py-2 text-left" title="Can approve and send emails and quotes prepared by the Business Brain">Approver</th>
               <th className="px-3 py-2 text-left">Status</th>
               <th className="px-3 py-2 text-left">Added</th>
               <th className="px-3 py-2" />
@@ -96,6 +97,22 @@ export function UsersAdmin({ users, meId }: { users: Row[]; meId: string }) {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`${u.name} can approve`}
+                    className="h-4 w-4"
+                    checked={u.canApprove}
+                    disabled={pending || !meCanApprove || u.id === meId}
+                    onChange={(e) =>
+                      startTransition(async () => {
+                        const res = await setUserApprover(u.id, e.target.checked);
+                        if (!res.ok) alert(res.error);
+                        router.refresh();
+                      })
+                    }
+                  />
                 </td>
                 <td className="px-3 py-2">
                   <Badge className={u.active ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-700"}>{u.active ? "Active" : "Inactive"}</Badge>

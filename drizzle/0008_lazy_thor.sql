@@ -1,0 +1,1 @@
+ALTER TABLE "brain_policies" ALTER COLUMN "value" DROP NOT NULL;

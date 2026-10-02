@@ -103,14 +103,14 @@ export const RULES: Rule[] = [
       return rows.map((q) => ({
         ruleKey: "quote_no_response",
         entityId: q.id,
-        title: `Follow up quote Q-${q.number}: ${q.contact.name}`,
+        title: `Follow up quote Q-${q.number}: ${q.contact?.name ?? q.title}`,
         detail: `Sent ${formatDate(q.sentAt)}, no response yet.`,
         dueAt: today,
         assignedToId: q.lead?.assignedToId ?? null,
         link: `/quotes/${q.id}`,
         quoteId: q.id,
         leadId: q.lead?.id ?? null,
-        contactId: q.contact.id,
+        contactId: q.contact?.id ?? null,
       }));
     },
   },

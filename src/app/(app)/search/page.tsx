@@ -90,7 +90,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             {r.quotes.map((qt) => (
               <Link key={qt.id} href={`/quotes/${qt.id}`} className={row}>
                 <span className="truncate">
-                  <span className="font-medium text-gray-900">Q-{qt.number}</span> {qt.title} · <span className="text-gray-500">{qt.contact.name}</span>
+                  <span className="font-medium text-gray-900">Q-{qt.number}</span> {qt.title} · <span className="text-gray-500">{qt.contact?.name ?? "Lead, not yet a customer"}</span>
                 </span>
                 <span className="flex items-center gap-2 text-xs">
                   {formatMoney(qt.total)}

@@ -50,6 +50,20 @@
       "when": 1790333270549,
       "tag": "0006_optimal_wasp",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790937323216,
+      "tag": "0007_uneven_golden_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790937767580,
+      "tag": "0008_lazy_thor",
+      "breakpoints": true
     }
   ]
 }

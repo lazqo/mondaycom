@@ -27,7 +27,7 @@ export async function createFirstAdmin(_prev: FirstAdminState, formData: FormDat
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   const [row] = await db
     .insert(users)
-    .values({ name: parsed.data.name, email: parsed.data.email, passwordHash: await hashPassword(parsed.data.password), role: "admin" })
+    .values({ name: parsed.data.name, email: parsed.data.email, passwordHash: await hashPassword(parsed.data.password), role: "admin", canApprove: true })
     .returning({ id: users.id });
   await createSession(row.id);
   redirect("/setup");

@@ -24,7 +24,9 @@ import {
   TASK_STATUSES,
   EVENT_KINDS,
   USER_ROLES,
+  DRAFT_STATUSES,
 } from "@/lib/constants";
+import { KNOWLEDGE_STATUSES } from "@/lib/brain/types";
 
 export { LEAD_STATUSES, LEAD_SOURCES, QUOTE_STATUSES, JOB_STATUSES, EMAIL_CLASSIFICATIONS, LEAD_URGENCIES, TASK_STATUSES, EVENT_KINDS };
 export type { LeadStatus, LeadSource, QuoteStatus, JobStatus, EmailClassification, LeadUrgency, TaskStatus, EventKind } from "@/lib/constants";
@@ -45,6 +47,8 @@ export const emailDirectionEnum = pgEnum("email_direction", ["inbound", "outboun
 export const leadUrgencyEnum = pgEnum("lead_urgency", LEAD_URGENCIES);
 export const taskStatusEnum = pgEnum("task_status", TASK_STATUSES);
 export const eventKindEnum = pgEnum("event_kind", EVENT_KINDS);
+export const knowledgeStatusEnum = pgEnum("knowledge_status", KNOWLEDGE_STATUSES);
+export const draftStatusEnum = pgEnum("draft_status", DRAFT_STATUSES);
 
 // ---------- Tables ----------
 
@@ -55,6 +59,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: userRoleEnum("role").notNull().default("member"),
   active: boolean("active").notNull().default(true),
+  /** May approve customer-facing actions (emails, quotes, commitments) prepared by the system. */
+  canApprove: boolean("can_approve").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -125,11 +131,22 @@ export const quotes = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     number: integer("number").notNull().unique(),
     title: text("title").notNull(),
-    contactId: uuid("contact_id")
-      .notNull()
-      .references(() => contacts.id, { onDelete: "restrict" }),
+    // A quote prepared for a lead that is not yet a customer has no contact until it converts.
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
     status: quoteStatusEnum("status").notNull().default("draft"),
+    /** "manual" when a person wrote it; "brain" when prepared from a CCTV assessment. */
+    origin: text("origin").$type<"manual" | "brain">().notNull().default("manual"),
+    assessmentId: uuid("assessment_id"),
+    version: integer("version").notNull().default(1),
+    revisionOfId: uuid("revision_of_id"),
+    approvedById: uuid("approved_by_id").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** Fingerprint of what was approved; any change to it voids the approval. */
+    approvalHash: text("approval_hash"),
+    /** Internal costing (supplier cost, markup, margin). Never shown to the customer. */
+    internalCosting: jsonb("internal_costing").$type<Record<string, unknown>>(),
+    confidence: jsonb("confidence").$type<Record<string, unknown>>(),
     lineItems: jsonb("line_items").$type<QuoteLineItem[]>().notNull().default([]),
     taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull().default("15.00"),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -563,6 +580,193 @@ export const calendarItems = pgTable(
   ],
 );
 
+// ---------- Business Brain ----------
+
+/** Where a piece of knowledge came from, and whether Get Secure has approved it. */
+const provenance = () => ({
+  status: knowledgeStatusEnum("status").notNull().default("requires_review"),
+  source: text("source"),
+  sourceUrl: text("source_url"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  approvedById: uuid("approved_by_id").references(() => users.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  confidence: numeric("confidence", { precision: 3, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Rules and settings the CCTV engine uses (labour rates, retention, markup…), each with provenance. */
+export const brainPolicies = pgTable("brain_policies", {
+  key: text("key").primaryKey(),
+  /** Null when Get Secure has not set the value yet (e.g. labour cost rate). */
+  value: jsonb("value"),
+  ...provenance(),
+});
+
+export const suppliers = pgTable("suppliers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  website: text("website"),
+  accountStatus: text("account_status"),
+  /** manual | csv | portal | api */
+  priceSourceType: text("price_source_type").notNull().default("manual"),
+  integrationMethod: text("integration_method"),
+  lastPriceSyncAt: timestamp("last_price_sync_at", { withTimezone: true }),
+  priority: integer("priority").notNull().default(100),
+  brands: jsonb("brands").$type<string[]>().notNull().default([]),
+  ...provenance(),
+});
+
+/** Supplier logins, encrypted, in their own table so nothing that reads suppliers can see them. */
+export const supplierCredentials = pgTable("supplier_credentials", {
+  supplierId: uuid("supplier_id")
+    .primaryKey()
+    .references(() => suppliers.id, { onDelete: "cascade" }),
+  username: text("username"),
+  secretEncrypted: text("secret_encrypted").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    manufacturer: text("manufacturer").notNull(),
+    model: text("model").notNull(),
+    category: text("category").notNull(),
+    /** residential | commercial | both */
+    market: text("market").notNull().default("both"),
+    tier: text("tier"),
+    /** Category-specific specification (resolution, bitrate, PoE, channels, capacity…). */
+    specs: jsonb("specs").$type<Record<string, unknown>>().notNull().default({}),
+    warranty: text("warranty"),
+    alternatives: jsonb("alternatives").$type<string[]>().notNull().default([]),
+    ...provenance(),
+  },
+  (t) => [uniqueIndex("products_model_idx").on(t.manufacturer, t.model), index("products_category_idx").on(t.category)],
+);
+
+/** One supplier's offer for a product. Cost changes go through price history and review. */
+export const supplierProducts = pgTable(
+  "supplier_products",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "cascade" }),
+    supplierSku: text("supplier_sku"),
+    /** The cost quotes use: approved, ex GST. */
+    costExGst: numeric("cost_ex_gst", { precision: 12, scale: 2 }),
+    costIncGst: numeric("cost_inc_gst", { precision: 12, scale: 2 }),
+    priceApproved: boolean("price_approved").notNull().default(false),
+    /** A new cost waiting for review because it moved too much. Not used for quoting. */
+    pendingCostExGst: numeric("pending_cost_ex_gst", { precision: 12, scale: 2 }),
+    stock: text("stock"),
+    sourceUrl: text("source_url"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    priceConfidence: numeric("price_confidence", { precision: 3, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("supplier_products_idx").on(t.productId, t.supplierId)],
+);
+
+export const productPriceHistory = pgTable(
+  "product_price_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    supplierProductId: uuid("supplier_product_id")
+      .notNull()
+      .references(() => supplierProducts.id, { onDelete: "cascade" }),
+    oldCostExGst: numeric("old_cost_ex_gst", { precision: 12, scale: 2 }),
+    newCostExGst: numeric("new_cost_ex_gst", { precision: 12, scale: 2 }).notNull(),
+    changedPct: numeric("changed_pct", { precision: 8, scale: 2 }),
+    source: text("source").notNull(),
+    /** approved | not_reviewed | rejected */
+    reviewStatus: text("review_status").notNull().default("not_reviewed"),
+    reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("price_history_offer_idx").on(t.supplierProductId, t.recordedAt)],
+);
+
+export const installationPackages = pgTable("installation_packages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  propertyType: text("property_type").notNull().default("residential"),
+  minCameras: integer("min_cameras").notNull(),
+  maxCameras: integer("max_cameras").notNull(),
+  storeys: integer("storeys"),
+  estimatedHours: numeric("estimated_hours", { precision: 6, scale: 2 }).notNull(),
+  allowanceExGst: numeric("allowance_ex_gst", { precision: 12, scale: 2 }).notNull(),
+  includedMaterials: jsonb("included_materials").$type<string[]>().notNull().default([]),
+  assumptions: jsonb("assumptions").$type<string[]>().notNull().default([]),
+  exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
+  version: integer("version").notNull().default(1),
+  ...provenance(),
+});
+
+/** A stored run of the CCTV engine for a lead: what went in and the decision packet that came out. */
+export const cctvAssessments = pgTable(
+  "cctv_assessments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    input: jsonb("input").$type<Record<string, unknown>>().notNull(),
+    packet: jsonb("packet").$type<Record<string, unknown>>().notNull(),
+    engineVersion: text("engine_version").notNull(),
+    markupOverride: numeric("markup_override", { precision: 5, scale: 2 }),
+    /** "user", "agent:<name>" or "system". */
+    actor: text("actor").notNull(),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("cctv_assessments_lead_idx").on(t.leadId, t.createdAt)],
+);
+
+/**
+ * Prepared customer communication waiting for Chris: email replies, follow-ups, proposed bookings.
+ * Creating one is not contact with the customer and changes nothing on the lead.
+ */
+export const drafts = pgTable(
+  "drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** email | follow_up | booking */
+    kind: text("kind").notNull().default("email"),
+    status: draftStatusEnum("status").notNull().default("draft"),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    threadId: uuid("thread_id").references(() => emailThreads.id, { onDelete: "set null" }),
+    assessmentId: uuid("assessment_id").references(() => cctvAssessments.id, { onDelete: "set null" }),
+    toAddresses: jsonb("to_addresses").$type<string[]>().notNull().default([]),
+    ccAddresses: jsonb("cc_addresses").$type<string[]>().notNull().default([]),
+    subject: text("subject").notNull().default(""),
+    body: text("body").notNull().default(""),
+    /** "user", "agent:<name>" or "system". */
+    createdByActor: text("created_by_actor").notNull(),
+    createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    reviewNote: text("review_note"),
+    approvedById: uuid("approved_by_id").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvalHash: text("approval_hash"),
+    /** Message-ID of the copy placed in the mailbox's Drafts folder, if any. */
+    mailboxDraftMessageId: text("mailbox_draft_message_id"),
+    sentEmailId: uuid("sent_email_id").references(() => emails.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("drafts_status_idx").on(t.status, t.createdAt), index("drafts_lead_idx").on(t.leadId)],
+);
+
 // ---------- Relations ----------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -622,6 +826,7 @@ export const emailClassificationsRelations = relations(emailClassifications, ({ 
 export const quotesRelations = relations(quotes, ({ one, many }) => ({
   contact: one(contacts, { fields: [quotes.contactId], references: [contacts.id] }),
   lead: one(leads, { fields: [quotes.leadId], references: [leads.id] }),
+  approvedBy: one(users, { fields: [quotes.approvedById], references: [users.id] }),
   jobs: many(jobs),
 }));
 
@@ -641,6 +846,29 @@ export const eventsRelations = relations(events, ({ one }) => ({
   lead: one(leads, { fields: [events.leadId], references: [leads.id] }),
   contact: one(contacts, { fields: [events.contactId], references: [contacts.id] }),
   assignedTo: one(users, { fields: [events.assignedToId], references: [users.id] }),
+}));
+
+export const productsRelations = relations(products, ({ many }) => ({ offers: many(supplierProducts) }));
+export const supplierProductsRelations = relations(supplierProducts, ({ one, many }) => ({
+  product: one(products, { fields: [supplierProducts.productId], references: [products.id] }),
+  supplier: one(suppliers, { fields: [supplierProducts.supplierId], references: [suppliers.id] }),
+  history: many(productPriceHistory),
+}));
+export const suppliersRelations = relations(suppliers, ({ many }) => ({ offers: many(supplierProducts) }));
+export const productPriceHistoryRelations = relations(productPriceHistory, ({ one }) => ({
+  offer: one(supplierProducts, { fields: [productPriceHistory.supplierProductId], references: [supplierProducts.id] }),
+}));
+export const cctvAssessmentsRelations = relations(cctvAssessments, ({ one }) => ({
+  lead: one(leads, { fields: [cctvAssessments.leadId], references: [leads.id] }),
+  createdBy: one(users, { fields: [cctvAssessments.createdById], references: [users.id] }),
+}));
+export const draftsRelations = relations(drafts, ({ one }) => ({
+  lead: one(leads, { fields: [drafts.leadId], references: [leads.id] }),
+  contact: one(contacts, { fields: [drafts.contactId], references: [contacts.id] }),
+  thread: one(emailThreads, { fields: [drafts.threadId], references: [emailThreads.id] }),
+  assessment: one(cctvAssessments, { fields: [drafts.assessmentId], references: [cctvAssessments.id] }),
+  approvedBy: one(users, { fields: [drafts.approvedById], references: [users.id] }),
+  sentEmail: one(emails, { fields: [drafts.sentEmailId], references: [emails.id] }),
 }));
 
 export const calendarItemsRelations = relations(calendarItems, ({ one }) => ({
@@ -696,3 +924,7 @@ export type Task = typeof tasks.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type CalendarConnection = typeof calendarConnections.$inferSelect;
 export type CalendarItem = typeof calendarItems.$inferSelect;
+export type Draft = typeof drafts.$inferSelect;
+export type CctvAssessment = typeof cctvAssessments.$inferSelect;
+export type ProductRow = typeof products.$inferSelect;
+export type Supplier = typeof suppliers.$inferSelect;

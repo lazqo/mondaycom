@@ -26,6 +26,19 @@ export async function setUserRole(id: string, role: string): Promise<ActionResul
   return ok(undefined);
 }
 
+/**
+ * Who may approve and send customer-facing work (Business Brain drafts and quotes). Only an existing
+ * approver can change it, and nobody can remove their own approval right.
+ */
+export async function setUserApprover(id: string, canApprove: boolean): Promise<ActionResult<undefined>> {
+  const admin = await requireAdmin();
+  if (!admin.canApprove) return fail("Only an approver can change who approves");
+  if (admin.id === id && !canApprove) return fail("You cannot remove your own approval right");
+  await db.update(users).set({ canApprove }).where(eq(users.id, id));
+  revalidatePath("/settings/users");
+  return ok(undefined);
+}
+
 export async function createUser(input: unknown): Promise<ActionResult<{ id: string }>> {
   await requireAdmin();
   const parsed = userInput.safeParse(input);

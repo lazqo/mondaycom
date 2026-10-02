@@ -37,4 +37,8 @@ namespace inbox {
     special_use = \Sent
     auto = subscribe
   }
+  mailbox Drafts {
+    special_use = \Drafts
+    auto = subscribe
+  }
 }

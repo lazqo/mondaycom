@@ -123,7 +123,12 @@ export async function syncFolderWithClient(client: ImapFlow, mailbox: Mailbox, k
     if (kind === "inbox") {
       for (const id of newEmailIds) summary.outcomes.push(await processEmail(id));
     } else {
-      for (const id of newEmailIds) await linkOutboundEmail(id);
+      // A message sent from Titan may be one of the CRM's drafts going out: mark it sent.
+      const { matchSentEmailToDraft } = await import("@/lib/drafts/workflow");
+      for (const id of newEmailIds) {
+        await linkOutboundEmail(id);
+        await matchSentEmailToDraft(id);
+      }
     }
     return summary;
   } finally {

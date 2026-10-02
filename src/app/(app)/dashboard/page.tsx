@@ -176,7 +176,7 @@ export default async function DashboardPage() {
             {d.quotesDraft.slice(0, MAX_ROWS).map((q) => (
               <Link key={q.id} href={`/quotes/${q.id}`} className={row}>
                 <span className="truncate">
-                  <span className="font-medium text-gray-900">Q-{q.number}</span> {q.title} · <span className="text-gray-500">{q.contact.name}</span>
+                  <span className="font-medium text-gray-900">Q-{q.number}</span> {q.title} · <span className="text-gray-500">{q.contact?.name ?? "Lead, not yet a customer"}</span>
                 </span>
                 <span className="flex items-center gap-2 text-xs"><span>{formatMoney(q.total)}</span><Badge className="bg-gray-400 text-white">Draft</Badge></span>
               </Link>
@@ -184,7 +184,7 @@ export default async function DashboardPage() {
             {d.quotesSent.slice(0, Math.max(0, MAX_ROWS - d.quotesDraft.length)).map((q) => (
               <Link key={q.id} href={`/quotes/${q.id}`} className={row}>
                 <span className="truncate">
-                  <span className="font-medium text-gray-900">Q-{q.number}</span> {q.title} · <span className="text-gray-500">{q.contact.name}</span>
+                  <span className="font-medium text-gray-900">Q-{q.number}</span> {q.title} · <span className="text-gray-500">{q.contact?.name ?? "Lead, not yet a customer"}</span>
                 </span>
                 <span className="flex items-center gap-2 text-xs"><span className="whitespace-nowrap">sent {formatDate(q.sentAt)}</span><Badge className="bg-[#0086c0] text-white">Sent</Badge></span>
               </Link>

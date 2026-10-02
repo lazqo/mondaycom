@@ -25,7 +25,7 @@ export function QuoteStatusActions({ quoteId, status, hasJob }: { quoteId: strin
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex gap-2">
-        {status === "draft" ? (
+        {status === "draft" || status === "approved" ? (
           <Button variant="secondary" onClick={() => go("sent")} disabled={pending}>
             Mark as sent
           </Button>

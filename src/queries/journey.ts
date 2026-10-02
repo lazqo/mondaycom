@@ -20,7 +20,7 @@ async function forLead(leadId: string | null, contactId: string | null): Promise
   };
 }
 
-export async function getJourneyForQuote(q: { leadId: string | null; contactId: string }) {
+export async function getJourneyForQuote(q: { leadId: string | null; contactId: string | null }) {
   return forLead(q.leadId, q.contactId);
 }
 export async function getJourneyForJob(j: { leadId: string | null; contactId: string }) {

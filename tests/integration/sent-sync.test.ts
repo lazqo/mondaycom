@@ -165,7 +165,7 @@ describe.skipIf(!dovecotUp)("syncing the Sent folder", () => {
         to: [CUSTOMER],
         subject: `Re: Quote for 4 CCTV cameras ${RUN}`,
         text: `Thursday at 10am is booked. ${RUN}`,
-        sentById: userId,
+        actor: { kind: "human", userId: userId, name: "Integration Tester", canApprove: true },
       });
       const s = await syncMailboxOnce(mailboxId);
       expect(s.sentStored).toBe(0);
