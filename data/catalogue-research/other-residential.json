@@ -1,0 +1,1383 @@
+{
+  "products": [
+    {
+      "manufacturer": "Shenzhen TVT Digital Technology Co., Ltd.",
+      "family": "TVT",
+      "model": "TD-9544E4B-A(D/PE/AW2)",
+      "category": "camera",
+      "sourceUrl": "https://en.tvt.net.cn/products/1945.html",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 4,
+        "horizontalPixels": 2688,
+        "verticalPixels": 1520,
+        "lensOptions": [
+          2.8,
+          3.6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 100,
+          "3.6": 85
+        },
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264",
+          "MJPEG"
+        ],
+        "bitrateKbps": [
+          32,
+          8000
+        ],
+        "bitrateText": "32 Kbps ~ 8 Mbps",
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "illuminationText": "IR range: 20~30 m; white light range: 20~30 m (dual illumination / smart supplement light)",
+        "microphone": true,
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "human_vehicle",
+          "loitering",
+          "people_counting",
+          "face_detection",
+          "audio_exception",
+          "illegal parking",
+          "abandoned/missing object",
+          "people gathering",
+          "heat map",
+          "video metadata"
+        ],
+        "poeMaxW": 7.8,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "<95% non-condensing",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "M",
+          "T"
+        ],
+        "ecosystem": [
+          "NVMS"
+        ],
+        "storage": "microSD up to 512 GB",
+        "audioPorts": "1CH audio input; 1CH audio output; 1CH built-in microphone",
+        "dimensionsMm": "Ø94.6 × 82.8",
+        "material": "Aluminum alloy body",
+        "datasheet": "TD-9544E4B-A CD45E-datasheet- 20260427.pdf (download on product page)"
+      },
+      "unverified": [
+        "speaker",
+        "activeDeterrence",
+        "vandal",
+        "colourNight"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Shenzhen TVT Digital Technology Co., Ltd.",
+      "family": "TVT",
+      "model": "TD-9584S4-D(D/PE/AW2)",
+      "category": "camera",
+      "sourceUrl": "https://en.tvt.net.cn/products/1986.html",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensOptions": [
+          2.8,
+          3.6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 106,
+          "3.6": 87
+        },
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264",
+          "MJPEG"
+        ],
+        "bitrateKbps": [
+          64,
+          12000
+        ],
+        "bitrateText": "64 Kbps ~ 12Mbps",
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "illuminationText": "IR range: 20 ~ 30 m; white light range: 20 ~ 30 m",
+        "microphone": true,
+        "speaker": false,
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "human_vehicle",
+          "abandoned/missing object",
+          "video exception"
+        ],
+        "poeMaxW": 7.9,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "<95% non-condensing",
+        "ecosystem": [
+          "NVMS"
+        ],
+        "storage": "microSD up to 256 GB",
+        "mainStreamText": "8MP(1~20fps) / 6MP/4MP/2K/1080P (50Hz: 1~25fps)",
+        "audioPorts": "1CH audio input; 1CH built-in MIC (no audio output listed)",
+        "dimensionsMm": "Ø94.6 × 82.8",
+        "material": "Aluminum alloy body",
+        "datasheet": "TD-9584S4-D-CD45E-datasheet-20260608.pdf (download on product page)"
+      },
+      "unverified": [
+        "onvifProfiles (datasheet says only 'ONVIF')",
+        "activeDeterrence",
+        "vandal",
+        "colourNight"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Shenzhen TVT Digital Technology Co., Ltd.",
+      "family": "TVT",
+      "model": "TD-3104H1-4P-B2-B",
+      "category": "nvr",
+      "sourceUrl": "https://en.tvt.net.cn/products/1400.html",
+      "specs": {
+        "channels": 4,
+        "poePorts": 4,
+        "poeBudgetW": 48,
+        "decoding": {
+          "8": 1,
+          "4": 4
+        },
+        "decodingText": "Non-AI Mode:1×8MP@30fps/ 4×4MP@30fps; AI Mode: 1×8MP@30fps/ 4×3MP@30fps",
+        "powerSupply": "DC 48V/1.25A",
+        "poeStandard": "802.3af/at",
+        "recordingResolutionMaxMp": 8,
+        "hddBays": 1,
+        "maxHddTb": 10,
+        "maxTotalTb": 10,
+        "codecs": [
+          "H.265S",
+          "H.265+",
+          "H.265",
+          "H.264"
+        ],
+        "onvif": true,
+        "audioIn": 1,
+        "audioOut": 1,
+        "hdmiOutput": "1 × HDMI, 3840 × 2160 max",
+        "vgaOutput": "1 × VGA, 1920 × 1080 max",
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "analytics": [
+          "face_detection",
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "abandoned/missing object",
+          "smart_search",
+          "lpr (AI by IPC)"
+        ],
+        "alarmText": "Supports IPC alarm input/output (no local alarm I/O listed)",
+        "network": "1 × RJ45 10/100/1000 Mbps",
+        "operatingTempC": [
+          -10,
+          50
+        ]
+      },
+      "unverified": [
+        "poePerPortW",
+        "alarmIn",
+        "alarmOut",
+        "onvifProfiles"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Shenzhen TVT Digital Technology Co., Ltd.",
+      "family": "TVT",
+      "model": "TD-3108H1-8P-B2-B",
+      "category": "nvr",
+      "sourceUrl": "https://en.tvt.net.cn/products/1400.html",
+      "specs": {
+        "channels": 8,
+        "poePorts": 8,
+        "poeBudgetW": 72,
+        "decoding": {
+          "8": 1,
+          "4": 4,
+          "720p": 8
+        },
+        "decodingText": "Non-AI Mode:1×8MP@30fps/ 4×4MP@30fps/8×720P@30fps; AI Mode: 1×8MP@30fps/ 4×3MP@30fps/8×720P@30fps",
+        "powerSupply": "DC 48V/1.8A",
+        "poeStandard": "802.3af/at",
+        "recordingResolutionMaxMp": 8,
+        "hddBays": 1,
+        "maxHddTb": 10,
+        "maxTotalTb": 10,
+        "codecs": [
+          "H.265S",
+          "H.265+",
+          "H.265",
+          "H.264"
+        ],
+        "onvif": true,
+        "audioIn": 1,
+        "audioOut": 1,
+        "hdmiOutput": "1 × HDMI, 3840 × 2160 max",
+        "vgaOutput": "1 × VGA, 1920 × 1080 max",
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "analytics": [
+          "face_detection",
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "abandoned/missing object",
+          "smart_search",
+          "lpr (AI by IPC)"
+        ],
+        "alarmText": "Supports IPC alarm input/output (no local alarm I/O listed)",
+        "network": "1 × RJ45 10/100/1000 Mbps",
+        "operatingTempC": [
+          -10,
+          50
+        ]
+      },
+      "unverified": [
+        "poePerPortW",
+        "alarmIn",
+        "alarmOut",
+        "onvifProfiles"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Shenzhen TVT Digital Technology Co., Ltd.",
+      "family": "TVT",
+      "model": "TD-YXH0301",
+      "category": "junction_box",
+      "sourceUrl": "https://en.tvt.net.cn/products/1007.html",
+      "specs": {
+        "compatibleModels": [
+          "TD-9544E4B-A",
+          "TD-9584S4-D"
+        ],
+        "material": "Aluminum alloy",
+        "dimensionsMm": "117.9 x 47 (as printed)",
+        "colour": "White",
+        "netWeightG": 380,
+        "operatingTempC": [
+          -40,
+          60
+        ],
+        "description": "Junction box for cameras, wall or ceiling mounting; bottom and side inlet; 'water-proof design'"
+      },
+      "unverified": [
+        "ingress (only 'water-proof design' printed, no IP rating)"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Dahua Technology",
+      "family": "Dahua",
+      "model": "DH-IPC-HDW3667EM-S-IL-ANZ",
+      "category": "camera",
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20260821/DH-IPC-HDW3667EM-S-IL-ANZ.pdf",
+      "specs": {
+        "productPage": "https://www.dahuasecurity.com/au/products/network-products/network-cameras/wizsense-3-series/smart-dual-light/ipc-hdw3667em-s-il-anz",
+        "formFactor": "turret",
+        "formFactorPrinted": "Eyeball",
+        "resolutionMp": 6,
+        "horizontalPixels": 3288,
+        "verticalPixels": 1850,
+        "lensOptions": [
+          2.8,
+          3.6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 110,
+          "3.6": 86
+        },
+        "codecs": [
+          "H.265",
+          "H.264",
+          "H.264H",
+          "H.264B",
+          "MJPEG (sub stream only)",
+          "Smart H.265+",
+          "Smart H.264+",
+          "AI H.265",
+          "AI H.264"
+        ],
+        "bitrateKbps": [
+          3,
+          16384
+        ],
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "illuminationText": "Up to 30 m IR; up to 30 m warm light (Smart Dual Light)",
+        "microphone": true,
+        "analytics": [
+          "intrusion",
+          "line_crossing",
+          "human_vehicle",
+          "smart_search",
+          "audio_exception",
+          "SMD 4.0",
+          "AcuPick"
+        ],
+        "poeMaxW": 9.5,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -40,
+          60
+        ],
+        "operatingHumidity": "≤95% RH non-condensing",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T",
+          "M"
+        ],
+        "ecosystem": [
+          "Smart PSS Lite",
+          "DSS",
+          "DMSS",
+          "DoLynk Care"
+        ],
+        "storage": "microSD up to 512 GB",
+        "casing": "Metal",
+        "netWeightKg": 0.53
+      },
+      "unverified": [
+        "speaker (not listed)",
+        "activeDeterrence",
+        "vandal",
+        "dimensionsMm (drawing only)",
+        "exact lens-variant order codes (datasheet lists 2.8 mm; 3.6 mm under one model)",
+        "colourNight"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Dahua Technology",
+      "family": "Dahua",
+      "model": "DH-IPC-HFW3667E-AS-IL-ANZ",
+      "category": "camera",
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20250416/DH-IPC-HFW3667E-AS-IL-ANZ.pdf",
+      "specs": {
+        "productPage": "https://www.dahuasecurity.com/au/products/network-products/network-cameras/wizsense-3-series/smart-dual-light/ipc-hfw3667e-as-il-anz",
+        "formFactor": "bullet",
+        "resolutionMp": 6,
+        "horizontalPixels": 3288,
+        "verticalPixels": 1850,
+        "lensOptions": [
+          2.8,
+          3.6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 110,
+          "3.6": 86
+        },
+        "codecs": [
+          "Smart H.265+",
+          "Smart H.264+",
+          "H.265",
+          "H.264",
+          "H.264H",
+          "H.264B",
+          "MJPEG (sub stream only)",
+          "AI H.265",
+          "AI H.264"
+        ],
+        "bitrateKbps": [
+          3,
+          16384
+        ],
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "illuminationText": "Up to 30 m IR; up to 30 m warm light (Smart Dual Light)",
+        "microphone": true,
+        "analytics": [
+          "intrusion",
+          "line_crossing",
+          "human_vehicle",
+          "smart_search",
+          "audio_exception",
+          "SMD 4.0",
+          "AcuPick"
+        ],
+        "alarmIn": 1,
+        "alarmOut": 1,
+        "audioIn": "1 channel (RCA)",
+        "audioOut": "1 channel (RCA)",
+        "poeMaxW": 10,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -40,
+          60
+        ],
+        "operatingHumidity": "≤95% RH non-condensing",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T",
+          "M"
+        ],
+        "ecosystem": [
+          "Smart PSS Lite",
+          "DSS",
+          "DMSS",
+          "DoLynk Care"
+        ],
+        "storage": "microSD up to 512 GB",
+        "dimensionsMm": "192.7 × 70.5 × 66.4 (L × W × H)",
+        "casing": "Metal",
+        "netWeightG": 610
+      },
+      "unverified": [
+        "speaker (not listed)",
+        "activeDeterrence",
+        "vandal",
+        "exact lens-variant order codes",
+        "colourNight"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Dahua Technology",
+      "family": "Dahua",
+      "model": "DHI-NVR4104HS-P-AI/ANZ",
+      "category": "nvr",
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20251224/DHI-NVR4104HS-P-AIANZ.pdf",
+      "specs": {
+        "productPage": "https://www.dahuasecurity.com/au/products/network-products/network-recorders/wizsense-series/nvr4x-aianz-series/1hdd/nvr4104hs-p-ai/anz",
+        "channels": 4,
+        "poePorts": 4,
+        "poeBudgetW": 45,
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "decoding": {
+          "16": 2,
+          "12": 2,
+          "8": 4
+        },
+        "decodingText": "AI disabled: 2-channel 16 MP@30 fps; 2-channel 12 MP@30 fps; 4-channel 8 MP@30 fps. AI enabled: 1-channel 16 MP@30 fps; 2-channel 12 MP@30 fps; 3-channel 8 MP@30 fps; 3-channel 6 MP@30 fps; 4-channel 5 MP@30 fps",
+        "decodingSummaryText": "Max. decoding capability: 16 × 1080p@30 fps or 4 × 8 MP@30 fps.",
+        "network": "1 × RJ-45 10/100 Mbps",
+        "powerSupply": "53 VDC, 1.226 A",
+        "poePerPortW": 25.5,
+        "poeStandard": "802.3af/at",
+        "recordingResolutionMaxMp": 16,
+        "hddBays": 1,
+        "maxHddTb": 20,
+        "maxTotalTb": 20,
+        "codecs": [
+          "Smart H.265+",
+          "H.265",
+          "Smart H.264+",
+          "H.264",
+          "MJPEG"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "T",
+          "S",
+          "G"
+        ],
+        "audioIn": 1,
+        "audioOut": 1,
+        "hdmiOutput": "1 × HDMI, up to 3840 × 2160",
+        "vgaOutput": "1 × VGA, up to 1920 × 1080",
+        "analytics": [
+          "face_detection",
+          "face recognition",
+          "perimeter protection",
+          "human_vehicle",
+          "SMD Plus",
+          "lpr (by camera)",
+          "people_counting (by camera)",
+          "heat map (by camera)",
+          "smart_search"
+        ],
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "thirdPartyAccess": "Panasonic, Sony, Hanwha, Axis, Pelco, Arecont, ONVIF, Canon",
+        "hddNote": "1 SATA port, up to 20 TB. The maximum HDD capacity varies with environment temperature."
+      },
+      "unverified": [
+        "alarmIn",
+        "alarmOut"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Dahua Technology",
+      "family": "Dahua",
+      "model": "DHI-NVR4108HS-8P-AI/ANZ",
+      "category": "nvr",
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20251224/DHI-NVR4108HS-8P-AIANZ.pdf",
+      "specs": {
+        "productPage": "https://www.dahuasecurity.com/au/products/network-products/network-recorders/wizsense-series/nvr4x-aianz-series/1hdd/nvr4108hs-8p-ai/anz",
+        "channels": 8,
+        "poePorts": 8,
+        "poeBudgetW": 78,
+        "incomingMbps": 256,
+        "outgoingMbps": 256,
+        "bandwidthText": "AI disabled: 256 Mbps incoming/recording/outgoing; AI enabled: 180 Mbps incoming/recording/outgoing",
+        "decoding": {
+          "16": 2,
+          "12": 2,
+          "8": 4,
+          "6": 4,
+          "5": 6,
+          "4": 8
+        },
+        "decodingText": "AI disabled: 2-channel 16 MP@30 fps; 2-channel 12 MP@30 fps; 4-channel 8 MP@30 fps; 4-channel 6 MP@30 fps; 6-channel 5 MP@30 fps; 8-channel 4 MP@30 fps. AI enabled: 1-channel 16 MP@30 fps; 2-channel 12 MP@30 fps; 3-channel 8 MP@30 fps; 3-channel 6 MP@30 fps; 4-channel 5 MP@30 fps; 6-channel 4 MP@30 fps; 8-channel 1080p@30 fps",
+        "decodingSummaryText": "Max. decoding capability: 16 × 1080p@30 fps or 4 × 8 MP@30 fps.",
+        "network": "1 × RJ-45 10/100/1000 Mbps",
+        "powerSupply": "53 VDC, 1.812 A",
+        "poePerPortW": 25.5,
+        "poeStandard": "802.3af/at",
+        "recordingResolutionMaxMp": 16,
+        "hddBays": 1,
+        "maxHddTb": 20,
+        "maxTotalTb": 20,
+        "codecs": [
+          "Smart H.265+",
+          "H.265",
+          "Smart H.264+",
+          "H.264",
+          "MJPEG"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "T",
+          "S",
+          "G"
+        ],
+        "audioIn": 1,
+        "audioOut": 1,
+        "hdmiOutput": "1 × HDMI, up to 3840 × 2160",
+        "vgaOutput": "1 × VGA, up to 1920 × 1080",
+        "analytics": [
+          "face_detection",
+          "face recognition",
+          "perimeter protection",
+          "human_vehicle",
+          "SMD Plus",
+          "lpr (by camera)",
+          "people_counting (by camera)",
+          "heat map (by camera)",
+          "smart_search"
+        ],
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "thirdPartyAccess": "Panasonic, Sony, Hanwha, Axis, Pelco, Arecont, ONVIF, Canon",
+        "hddNote": "1 SATA port, up to 20 TB. The maximum HDD capacity varies with environment temperature."
+      },
+      "unverified": [
+        "alarmIn",
+        "alarmOut"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Dahua Technology",
+      "family": "Dahua",
+      "model": "DH-PFA139",
+      "category": "junction_box",
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/cpq/prm-os-srv-res/smart/datasheetzipfiles/PFA139_datasheet_20250303.pdf",
+      "specs": {
+        "productPage": "https://www.dahuasecurity.com/au/products/accessories/camera-accessories/camera-mounts/junction-boxes/pfa139",
+        "compatibleModels": [
+          "DH-IPC-HDW3667EM-S-IL-ANZ"
+        ],
+        "material": "Aluminum alloy",
+        "dimensionsMm": "Φ109.9 × 27.0",
+        "colour": "White",
+        "netWeightKg": 0.17,
+        "loadBearingKg": 1.0,
+        "operatingTempC": [
+          -40,
+          60
+        ],
+        "screwThread": "G1/2",
+        "anticorrosion": "Basic Protection"
+      },
+      "unverified": [
+        "ingress (no IP rating printed)",
+        "full compatibility list (datasheet defers to 'Camera Accessories Selection' document, not read)"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Tiandy Technologies Co., Ltd.",
+      "family": "Tiandy",
+      "model": "TC-C34XS 2ETA-28",
+      "category": "camera",
+      "sourceUrl": "https://en.tiandy.com/spark/68641430.html",
+      "specs": {
+        "series": "SK IPC (SMB Network Camera)",
+        "formFactor": "turret",
+        "resolutionMp": 4,
+        "horizontalPixels": 2560,
+        "verticalPixels": 1440,
+        "lensMm": 2.8,
+        "hfovDeg": 100.3,
+        "codecs": [
+          "S+265",
+          "H.265",
+          "H.264B",
+          "H.264M",
+          "H.264H"
+        ],
+        "bitrateKbps": [
+          32,
+          6000
+        ],
+        "bitrateText": "32k~6Mbps",
+        "wdrType": "digital",
+        "wdrText": "TWDR",
+        "irRangeM": 30,
+        "whiteLightRangeM": 15,
+        "microphone": true,
+        "analytics": [
+          "human_vehicle"
+        ],
+        "poeMaxW": 6.5,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC ±25%",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95%RH",
+        "onvifProfiles": [
+          "S",
+          "T",
+          "G"
+        ],
+        "ecosystem": [
+          "Easy7 VMS",
+          "EasyLive Plus"
+        ],
+        "storage": "microSD up to 512 GB",
+        "dimensionsMm": "117 × 117 × 96",
+        "grossWeightKg": 0.44
+      },
+      "unverified": [
+        "speaker",
+        "activeDeterrence",
+        "vandal",
+        "colourNight",
+        "wdrDb (only 'TWDR' printed)"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Tiandy Technologies Co., Ltd.",
+      "family": "Tiandy",
+      "model": "TC-C38XS 3LRA-28",
+      "category": "camera",
+      "sourceUrl": "https://en.tiandy.com/pro-2023790/68145045.html",
+      "specs": {
+        "series": "LK IPC (Professional Network Camera)",
+        "productTitle": "8MP Fixed Color Maker Turret Camera",
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensMm": 2.8,
+        "hfovDeg": 100.5,
+        "codecs": [
+          "S+265",
+          "H.265",
+          "H.264B",
+          "H.264M",
+          "H.264H",
+          "MJPEG"
+        ],
+        "bitrateKbps": [
+          32,
+          16000
+        ],
+        "bitrateText": "32k~16Mbps",
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 15,
+        "colourNight": true,
+        "microphone": true,
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion"
+        ],
+        "poeMaxW": 8.5,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC ±25%",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -35,
+          65
+        ],
+        "operatingHumidity": "≤95%RH",
+        "onvifProfiles": [
+          "S",
+          "T",
+          "G",
+          "M"
+        ],
+        "ecosystem": [
+          "Easy7 VMS",
+          "EasyLive Plus"
+        ],
+        "storage": "microSD up to 512 GB",
+        "dimensionsMm": "117 × 117 × 96",
+        "grossWeightKg": 0.638,
+        "mainStreamText": "8MP 3840×2160@20fps"
+      },
+      "unverified": [
+        "speaker",
+        "activeDeterrence",
+        "vandal"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Tiandy Technologies Co., Ltd.",
+      "family": "Tiandy",
+      "model": "TC-R3105 Spec:I/B/P/V3.0",
+      "category": "nvr",
+      "sourceUrl": "https://en.tiandy.com/spark-2023794/63692958.html",
+      "specs": {
+        "series": "SK NVR",
+        "channels": 5,
+        "channelsNote": "5 IP channels; 4 built-in PoE ports (Tiandy '5ch PSE NVR')",
+        "poePorts": 4,
+        "poePerPortW": 30,
+        "poeBudgetW": 45,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 60,
+        "outgoingMbps": 40,
+        "recordingResolutionMaxMp": 8,
+        "decoding": {
+          "8": 1,
+          "6": 2,
+          "5": 2,
+          "4": 3,
+          "3": 4,
+          "1080p": 5,
+          "720p": 5,
+          "4CIF": 5
+        },
+        "decodingText": "Preview Decoding Capability: 8MP(30fps)×1, 6MP(30fps)×2, 5MP(30fps)×2, 4MP(30fps)×3, 3MP(30fps)×4, 1080P(30fps)×5, 720P(30fps)×5, 4CIF(30fps)×5; Playback Decoding Capability: 8MP(30fps)×1, 6MP(30fps)×2, 5MP(30fps)×2, 4MP(30fps)×3, 3MP(30fps)×4, 1080P(30fps)×4, 720P(30fps)×4, 4CIF(30fps)×4",
+        "hddBays": 1,
+        "maxHddTb": 10,
+        "maxTotalTb": 10,
+        "codecs": [
+          "S+265",
+          "H.265",
+          "S+264",
+          "H.264"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S",
+          "T"
+        ],
+        "audioIn": 1,
+        "audioOut": 1,
+        "alarmOut": 1,
+        "alarmText": "Alarm I/O: 1-ch, relay output, 1A, 24VDC",
+        "hdmiOutput": "1 × HDMI, up to 3840×2160 (30Hz)",
+        "vgaOutput": "1 × VGA, up to 1920×1080",
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "loitering",
+          "face_detection",
+          "human_vehicle",
+          "audio_exception",
+          "abandoned/missing object",
+          "crowd detection"
+        ],
+        "ecosystem": [
+          "EasyLive Plus"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "powerSupply": "DC48V (adapter DC48V 1.35A)",
+        "operatingTempC": [
+          -10,
+          55
+        ]
+      },
+      "unverified": [
+        "alarmIn"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Tiandy Technologies Co., Ltd.",
+      "family": "Tiandy",
+      "model": "TC-R3110 Spec:I/B/P8/V3.0",
+      "category": "nvr",
+      "sourceUrl": "https://en.tiandy.com/spark-2023794/63692961.html",
+      "specs": {
+        "series": "SK NVR",
+        "channels": 10,
+        "channelsNote": "10 IP channels; 8 built-in PoE ports (Tiandy '10ch PSE NVR')",
+        "poePorts": 8,
+        "poePerPortW": 30,
+        "poeBudgetW": 70,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "recordingResolutionMaxMp": 6,
+        "decoding": {
+          "6": 1,
+          "5": 1,
+          "4": 2,
+          "3": 2,
+          "1080p": 4,
+          "720p": 8,
+          "4CIF": 10
+        },
+        "decodingText": "Preview Decoding Capability: 6MP(30fps)×1, 5MP(30fps)×1, 4MP(30fps)×2, 3MP(30fps)×2, 1080P(30fps)×4, 720P(30fps)×8, 4CIF(30fps)×10; Playback Decoding Capability: 6MP(30fps)×1, 5MP(30fps)×1, 4MP(30fps)×2, 3MP(30fps)×2, 1080P(30fps)×4, 720P(30fps)×4",
+        "hddBays": 1,
+        "maxHddTb": 10,
+        "maxTotalTb": 10,
+        "codecs": [
+          "S+265",
+          "H.265",
+          "S+264",
+          "H.264"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S",
+          "T"
+        ],
+        "audioIn": 1,
+        "audioOut": 1,
+        "alarmOut": 1,
+        "alarmText": "Alarm I/O: 1-ch, relay output, 1A, 24VDC",
+        "hdmiOutput": "1 × HDMI, up to 1920×1080",
+        "vgaOutput": "1 × VGA, up to 1920×1080",
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "loitering",
+          "face_detection",
+          "human_vehicle",
+          "audio_exception",
+          "abandoned/missing object",
+          "crowd detection"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "powerSupply": "DC48V 1.875A",
+        "operatingTempC": [
+          -10,
+          55
+        ]
+      },
+      "unverified": [
+        "alarmIn",
+        "ecosystem"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Zhejiang Uniview Technologies Co., Ltd.",
+      "family": "Uniview",
+      "model": "IPC3614SB-ADF28KM-I1",
+      "category": "camera",
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3614SB-ADF28KM-I1/",
+      "specs": {
+        "series": "Prime I",
+        "formFactor": "turret",
+        "resolutionMp": 4,
+        "horizontalPixels": 2688,
+        "verticalPixels": 1520,
+        "lensMm": 2.8,
+        "hfovDeg": 111.8,
+        "otherLensVariant": {
+          "IPC3614SB-ADF40KM-I1": {
+            "lensMm": 4.0,
+            "hfovDeg": 90.0
+          }
+        },
+        "codecs": [
+          "Ultra 265",
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "bitrateKbps": [
+          128,
+          16000
+        ],
+        "bitrateText": "128 Kbps to 16 Mbps",
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "microphone": true,
+        "speaker": false,
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "human_vehicle",
+          "people_counting",
+          "audio_exception",
+          "crowd density"
+        ],
+        "poeMaxW": 4.7,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC ±25%",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95% RH non-condensing",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T",
+          "M"
+        ],
+        "ecosystem": [
+          "EZStation"
+        ],
+        "storage": "microSD up to 512 GB",
+        "dimensionsMm": "Ø110.5 × 97.3",
+        "weightKg": 0.44,
+        "material": "Metal"
+      },
+      "unverified": [
+        "whiteLightRangeM (IR only)",
+        "activeDeterrence",
+        "vandal",
+        "colourNight"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Zhejiang Uniview Technologies Co., Ltd.",
+      "family": "Uniview",
+      "model": "IPC3618SB-ADF28KM-I0",
+      "category": "camera",
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3618SB-ADF28KM-I0/",
+      "specs": {
+        "series": "Prime I (LightHunter)",
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensMm": 2.8,
+        "hfovDeg": 112.4,
+        "otherLensVariant": {
+          "IPC3618SB-ADF40KM-I0": {
+            "lensMm": 4.0,
+            "hfovDeg": 86.5
+          }
+        },
+        "mainStreamText": "8 MP (3840 × 2160), max. 20 fps",
+        "codecs": [
+          "Ultra 265",
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "bitrateKbps": [
+          128,
+          16000
+        ],
+        "bitrateText": "128 Kbps to 16 Mbps",
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "microphone": true,
+        "speaker": false,
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "human_vehicle",
+          "people_counting",
+          "audio_exception",
+          "crowd density"
+        ],
+        "poeMaxW": 6.0,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC ±25%",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95% RH non-condensing",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T",
+          "M"
+        ],
+        "ecosystem": [
+          "EZStation"
+        ],
+        "storage": "microSD up to 512 GB",
+        "dimensionsMm": "Ø111 × 95",
+        "weightKg": 0.41,
+        "material": "Metal"
+      },
+      "unverified": [
+        "whiteLightRangeM (IR only)",
+        "activeDeterrence",
+        "vandal",
+        "colourNight"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Zhejiang Uniview Technologies Co., Ltd.",
+      "family": "Uniview",
+      "model": "NVR301-04B-P4-IQ",
+      "category": "nvr",
+      "sourceUrl": "https://www.uniview.com/Products/Network_Video_Recorders/Easy_Series/1HDD/NVR301-04B-P4-IQ/",
+      "specs": {
+        "channels": 4,
+        "poePorts": 4,
+        "poeBudgetW": 50,
+        "decoding": {
+          "12": 2,
+          "4K": 2,
+          "4": 4
+        },
+        "decodingText": "Smart Off：2 x 12MP@30, 2 x 4K@30, 4 x 4MP@30; Smart On：2 x 4K@30, 4 x 4MP@30",
+        "powerSupply": "DC 48 V/1.35 A",
+        "series": "Easy (IQ)",
+        "poePerPortW": 30,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "recordingResolutionMaxMp": 12,
+        "hddBays": 1,
+        "maxHddTb": 24,
+        "maxTotalTb": 24,
+        "hddNote": "Up to 24 TB for each HDD (max capacity varies with environment temperature and disk size; ambient should not exceed 40°C)",
+        "codecs": [
+          "Ultra 265",
+          "H.265",
+          "H.264"
+        ],
+        "audioIn": 1,
+        "audioOut": 1,
+        "alarmIn": 0,
+        "alarmOut": 0,
+        "alarmText": "Alarm In: N/A; Alarm Out: N/A",
+        "hdmiOutput": "1 × HDMI, up to 4K (3840 × 2160)/30 Hz",
+        "vgaOutput": "1 × VGA, up to 1920 × 1080/60 Hz",
+        "analytics": [
+          "face_detection",
+          "lpr (by IPC)",
+          "SIP (Smart Intrusion Prevention)",
+          "UMD (Ultra Motion Detection)",
+          "smart_search",
+          "people_counting",
+          "heat map"
+        ],
+        "network": "1 × RJ45 10/100 Mbps",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "ndaaCompliant": true,
+        "datasheet": "UNV NVR301-B-P-IQ Series Network Video Recorder.pdf"
+      },
+      "unverified": [
+        "onvif/onvifProfiles (not printed on this page)"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Zhejiang Uniview Technologies Co., Ltd.",
+      "family": "Uniview",
+      "model": "NVR301-08B-P8-IQ",
+      "category": "nvr",
+      "sourceUrl": "https://www.uniview.com/Products/Network_Video_Recorders/Easy_Series/1HDD/NVR301-04B-P4-IQ/",
+      "specs": {
+        "channels": 8,
+        "poePorts": 8,
+        "poeBudgetW": 75,
+        "decoding": {
+          "12": 2,
+          "4K": 2,
+          "4": 4,
+          "1080p": 8
+        },
+        "decodingText": "Smart Off：2 x 12MP@30, 2 x 4K@30, 4 x 4MP@30, 8 x 1080P@30; Smart On：2 x 4K@30, 4 x 4MP@30, 8 x 1080P@30",
+        "powerSupply": "DC 52 V/1.8 A",
+        "series": "Easy (IQ)",
+        "poePerPortW": 30,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "recordingResolutionMaxMp": 12,
+        "hddBays": 1,
+        "maxHddTb": 24,
+        "maxTotalTb": 24,
+        "hddNote": "Up to 24 TB for each HDD (max capacity varies with environment temperature and disk size; ambient should not exceed 40°C)",
+        "codecs": [
+          "Ultra 265",
+          "H.265",
+          "H.264"
+        ],
+        "audioIn": 1,
+        "audioOut": 1,
+        "alarmIn": 0,
+        "alarmOut": 0,
+        "alarmText": "Alarm In: N/A; Alarm Out: N/A",
+        "hdmiOutput": "1 × HDMI, up to 4K (3840 × 2160)/30 Hz",
+        "vgaOutput": "1 × VGA, up to 1920 × 1080/60 Hz",
+        "analytics": [
+          "face_detection",
+          "lpr (by IPC)",
+          "SIP (Smart Intrusion Prevention)",
+          "UMD (Ultra Motion Detection)",
+          "smart_search",
+          "people_counting",
+          "heat map"
+        ],
+        "network": "1 × RJ45 10/100 Mbps",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "ndaaCompliant": true,
+        "datasheet": "UNV NVR301-B-P-IQ Series Network Video Recorder.pdf"
+      },
+      "unverified": [
+        "onvif/onvifProfiles (not printed on this page)"
+      ],
+      "verifiedAt": "2026-10-02"
+    },
+    {
+      "manufacturer": "Zhejiang Uniview Technologies Co., Ltd.",
+      "family": "Uniview",
+      "model": "TR-JB03-G-IN",
+      "category": "junction_box",
+      "sourceUrl": "https://www.uniview.com/Products/Accessories/Cameras/Junction_Boxes/TR-JB03-G-IN/",
+      "specs": {
+        "description": "Mini Dome Junction Box (Support Wiring From Behind)",
+        "applicationPrinted": "Junction box for IPC32X Series fixed dome",
+        "compatibleModels": [
+          "IPC3614SB-ADF28KM-I1",
+          "IPC3618SB-ADF28KM-I0"
+        ],
+        "material": "Aluminum alloy",
+        "dimensionsMm": "Φ108.6 × 38.5",
+        "weightKg": 0.2
+      },
+      "unverified": [
+        "ingress"
+      ],
+      "verifiedAt": "2026-10-02"
+    }
+  ],
+  "compatibility": [
+    {
+      "kind": "camera_junction_box",
+      "from": "TD-9544E4B-A(D/PE/AW2)",
+      "to": "TD-YXH0301",
+      "qty": 1,
+      "sourceUrl": "https://en.tvt.net.cn/products/1945.html",
+      "note": "TD-YXH0301 (junction box) listed under the Accessories tab of the camera product page"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "TD-9544E4B-A(D/PE/AW2)",
+      "to": "TD-YZJ0203",
+      "qty": 1,
+      "sourceUrl": "https://en.tvt.net.cn/products/1945.html",
+      "note": "TD-YZJ0203 listed under Accessories; its own page (https://en.tvt.net.cn/products/1010.html) describes it as 'Wall mounting bracket for dome cameras'. No product record added."
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "TD-9584S4-D(D/PE/AW2)",
+      "to": "TD-YXH0301",
+      "qty": 1,
+      "sourceUrl": "https://en.tvt.net.cn/products/1986.html",
+      "note": "TD-YXH0301 (junction box) listed under the Accessories tab of the camera product page"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "TD-9584S4-D(D/PE/AW2)",
+      "to": "TD-YZJ0203",
+      "qty": 1,
+      "sourceUrl": "https://en.tvt.net.cn/products/1986.html",
+      "note": "TD-YZJ0203 listed under Accessories; its own page (https://en.tvt.net.cn/products/1010.html) describes it as 'Wall mounting bracket for dome cameras'. No product record added."
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DH-IPC-HDW3667EM-S-IL-ANZ",
+      "to": "DH-PFA139",
+      "qty": 1,
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20260821/DH-IPC-HDW3667EM-S-IL-ANZ.pdf",
+      "note": "PFA139 Junction Box listed under 'Accessories (Optional)' on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DH-IPC-HDW3667EM-S-IL-ANZ",
+      "to": "DH-PFB2204W",
+      "qty": 1,
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20260821/DH-IPC-HDW3667EM-S-IL-ANZ.pdf",
+      "note": "PFB2204W Wall Mount listed under 'Accessories (Optional)'. No product record added."
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DH-IPC-HDW3667EM-S-IL-ANZ",
+      "to": "DH-PFA152-E",
+      "qty": 1,
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20260821/DH-IPC-HDW3667EM-S-IL-ANZ.pdf",
+      "note": "PFA152-E Pole Mount listed under 'Accessories (Optional)'. No product record added."
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DH-IPC-HFW3667E-AS-IL-ANZ",
+      "to": "DH-PFA130-E",
+      "qty": 1,
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20250416/DH-IPC-HFW3667E-AS-IL-ANZ.pdf",
+      "note": "DH-PFA130-E Water-proof Junction Box listed under 'Accessories (Optional)'. No product record added."
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DH-IPC-HFW3667E-AS-IL-ANZ",
+      "to": "DH-PFA134",
+      "qty": 1,
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20250416/DH-IPC-HFW3667E-AS-IL-ANZ.pdf",
+      "note": "DH-PFA134 Junction Box listed under 'Accessories (Optional)'. No product record added."
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DH-IPC-HFW3667E-AS-IL-ANZ",
+      "to": "DH-PFA152-E",
+      "qty": 1,
+      "sourceUrl": "https://materialfile.dahuasecurity.com/uploads/soft/20250416/DH-IPC-HFW3667E-AS-IL-ANZ.pdf",
+      "note": "DH-PFA152-E Pole Mount Bracket listed under 'Accessories (Optional)'. No product record added."
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "IPC3614SB-ADF28KM-I1",
+      "to": "TR-JB03-G-IN",
+      "qty": 1,
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3614SB-ADF28KM-I1/",
+      "note": "TR-JB03-G-IN listed under the Accessories tab of the camera product page (note: the junction box's own page says 'Junction box for IPC32X Series fixed dome')"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "IPC3614SB-ADF28KM-I1",
+      "to": "TR-JB07/WM03-G-IN-V2",
+      "qty": 1,
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3614SB-ADF28KM-I1/",
+      "note": "Listed under Accessories as 'Wall Mounting Assembling Bracket For Dome&Mini Dome&Plastic Turret Camera'. No product record added."
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "IPC3614SB-ADF28KM-I1",
+      "to": "TR-WM03-D-IN-V2",
+      "qty": 1,
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3614SB-ADF28KM-I1/",
+      "note": "Listed under Accessories as 'Wall Mounting Bracket For Dome&Mini Dome&Plastic Turret Camera'. No product record added."
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "IPC3618SB-ADF28KM-I0",
+      "to": "TR-JB03-G-IN",
+      "qty": 1,
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3618SB-ADF28KM-I0/",
+      "note": "TR-JB03-G-IN listed under the Accessories tab of the camera product page (note: the junction box's own page says 'Junction box for IPC32X Series fixed dome')"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "IPC3618SB-ADF28KM-I0",
+      "to": "TR-JB07/WM03-G-IN-V2",
+      "qty": 1,
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3618SB-ADF28KM-I0/",
+      "note": "Listed under Accessories as 'Wall Mounting Assembling Bracket For Dome&Mini Dome&Plastic Turret Camera'. No product record added."
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "IPC3618SB-ADF28KM-I0",
+      "to": "TR-WM03-D-IN-V2",
+      "qty": 1,
+      "sourceUrl": "https://www.uniview.com/Products/Network_Cameras/Prime_Series/PRIMEI_Series/IPC3618SB-ADF28KM-I0/",
+      "note": "Listed under Accessories as 'Wall Mounting Bracket For Dome&Mini Dome&Plastic Turret Camera'. No product record added."
+    }
+  ],
+  "notes": [
+    "All values copied from manufacturer pages/datasheets fetched 2026-10-02 (curl). No distributor sources used. No prices.",
+    "bitrateKbps: where the source prints Mbps the max was converted at 1 Mbps = 1000 Kbps; exact printed wording is in bitrateText. Dahua prints kbps directly (16384 kbps).",
+    "TVT: models taken from en.tvt.net.cn (global site; no NZ/AU TVT site found). Product-page datasheet links are signed/expiring download URLs, so sourceUrl is the product page; datasheet filename recorded in specs.datasheet. TVT model suffix '(D/PE/AW2)' as printed in the product header; lens (2.8/3.6 mm) chosen at order. IR/white light ranges printed as '20~30 m'; irRangeM/whiteLightRangeM hold the upper figure.",
+    "TVT TD-3104H1-4P-B2-B / TD-3108H1-8P-B2-B share one product page and datasheet (TD-3104H1-4P-B2-B 3108H1-8P-B2-B-Datasheet-20260401.pdf). HDD interface printed 'SATA3.0 × 1, max 10T'. PoE per-port wattage not printed.",
+    "Dahua: AU regional site used (ANZ-suffixed models). NVR4104HS-P-AI/ANZ and NVR4108HS-8P-AI/ANZ datasheets each contain two decoding statements: a summary bullet ('Max. decoding capability: 16 × 1080p@30 fps or 4 × 8 MP@30 fps') and the Technical Specification line; 'decoding' map is taken from the Technical Specification 'AI disabled' line, both texts kept. NVR4108HS-8P-AI/ANZ prints 256 Mbps incoming (AI disabled) / 180 Mbps (AI enabled) — unusually high for a compact NVR but that is the printed figure.",
+    "Dahua cameras are 'Smart Dual Light' (IR + warm light, 30 m each) — not flagged colourNight since Dahua does not market them as full-colour (WizColor/TiOC are separate lines). Eyeball form factor mapped to 'turret'.",
+    "Tiandy: no 6MP wired turret/bullet with a published spec could be found on en.tiandy.com. The only 6MP wired models (TC-C36XN 2ENA-28-VJO / TC-C36QN 2ENA-x-VJO) appear only under 'Jordan Project' with no specifications (datasheet download is password-encrypted), so they were NOT included. Substituted a 4MP SK-series turret (TC-C34XS 2ETA-28) and an 8MP LK-series 'Color Maker' turret (TC-C38XS 3LRA-28).",
+    "Tiandy NVR compatibility caution: TC-R3110 Spec:I/B/P8/V3.0 (10ch/8PoE) lists max resolution 6MP and will NOT record the 8MP TC-C38XS 3LRA-28; TC-R3105 Spec:I/B/P/V3.0 (5ch/4PoE) lists 8MP. Tiandy has no true 4ch or 8ch SK model: the SK line is 5ch (4 PoE) and 10ch (8 PoE). An AK-series true 4ch TC-R3104 Spec:I/B/P4/C/Eu/L/S/V2.0 exists (https://en.tiandy.com/ak-nvr/63693200.html, max 6MP, 60/40 Mbps, 28W PoE budget, 6TB HDD) but was not added as a product.",
+    "Tiandy camera pages list no accessories, so no junction box/bracket compatibility was recorded for Tiandy.",
+    "Tiandy TC-C34XS prints 'Max. Resolution 4MP,2560×1440@30fps' — pixel count recorded as printed.",
+    "Uniview: global site (uniview.com) used; the 'Oceania' selector only links to an ANZ topic page. NVR301-04B-P4-IQ and NVR301-08B-P8-IQ share one product page/datasheet; ONVIF is not mentioned on that page (sibling NVR301-08E-P8-IQ page states Downlink ONVIF Profile S, not applied here). 'Alarm In/Out: N/A' recorded as 0.",
+    "Uniview TR-JB03-G-IN: listed as an accessory on both Prime I turret pages, but its own page describes the application as 'IPC32X Series fixed dome' — confirm fit before quoting.",
+    "Compatibility entries pointing to brackets/junction boxes without their own product record (TD-YZJ0203, DH-PFB2204W, DH-PFA152-E, DH-PFA130-E, DH-PFA134, TR-JB07/WM03-G-IN-V2, TR-WM03-D-IN-V2) are documented accessory listings only; their specs were not captured.",
+    "No camera_nvr compatibility entries added: none of the manufacturers publishes an explicit camera-to-NVR compatibility list on the pages read."
+  ]
+}

@@ -473,7 +473,7 @@ from hPanel, which returns the whole machine to that point.
 
 ---
 
-## 14. CCTV Business Brain (v0.1)
+## 14. CCTV Business Brain (v0.2)
 
 The Business Brain works out a CCTV system for a lead — cameras, recorder, storage, network,
 materials, labour and price — with fixed rules, not AI. It **prepares** reply drafts and quotes for
@@ -487,27 +487,58 @@ Chris; it never sends, books or promises anything.
   and only an approved email can be sent. Changing anything after approval takes the approval away.
   Saving a draft never marks the lead as Contacted. **Put in Titan Drafts** copies a draft into the
   Titan Drafts folder if Chris prefers to send from Titan; the CRM notices when it goes out.
-- **Settings → Business Brain**: rules, products and prices, suppliers, installation packages.
+- **Settings → Business Brain**: rules; products, supplier listings and compatibility; suppliers and
+  brand routing; installation packages and standard materials.
 - **Settings → Staff → Approver**: who may approve and send. The first admin (and every admin that
   existed when this update was deployed) is an approver; only an approver can change this column.
 
-**What Chris must fill in before quotes are complete.** Nothing is pre-loaded as products or prices,
-and no old Hermes/Mission Control pricing was imported.
+**What the update puts in (nothing priced, nothing approved on Chris's behalf)**
 
-1. **Products** — add each camera, recorder, drive and switch from its datasheet (the form shows the
-   fields each type needs). Mark it *Get Secure approved* once checked.
-2. **Supplier prices** — record the cost against IT Plus (or Play Digital / Dicker Data once
-   verified), then approve it. A later change of more than 5% is held for review instead of quietly
-   changing quotes.
-3. **Installation packages** — e.g. "1–4 cameras, single storey", with hours and the price.
-4. **Rules** — set the standard materials allowance value and the internal labour cost, and approve
-   or change the rules still marked *provisional* (markup, storage allowance, tiers…). The assessment
-   lists every provisional rule it relied on.
+- **Suppliers**: IT Plus (default), Clear Digital, SWL / Security Wholesale, Atlas Gentech, IOT
+  Technologies, Vesta Electrical. Play Digital and Dicker Data (from v0.1) are marked deprecated
+  unless they already hold prices.
+- **Brand routing** (Suppliers & routing tab): VIGI/HiLook/TVT/AAP → IT Plus; Hikvision → IT Plus,
+  Atlas for commercial; Tiandy → IOT; Dahua/Ajax → Clear Digital then IOT; Uniview → IT Plus, Clear
+  Digital, IOT; Axis/Hanwha/Inner Range → Atlas; Akuvox → IT Plus then IOT; Gallagher/Aiphone →
+  Clear Digital; Provision-ISR → SWL. Editable. A quote uses the preferred supplier's approved price,
+  then the next route, then the default supplier.
+- **Reference catalogue**: real products with specifications read from the manufacturer's own pages
+  and datasheets (source link and date on every product): TP-Link VIGI, HiLook, Hikvision, TVT,
+  Dahua, Tiandy, Uniview and Ajax for residential; Axis and Hanwha as the commercial catalogue;
+  WD Purple / Purple Pro and Seagate SkyHawk / SkyHawk AI drives from 2 to 12 TB; documented junction
+  boxes, brackets and kits. Anything the source does not publish is left blank and listed on the
+  product as "not published by the source". It is added once: a product Chris deletes or edits is
+  never re-added or overwritten. Tiers are set by family (VIGI good; HiLook, Dahua, Tiandy better;
+  Hikvision best; Ajax premium) and marked provisional for Chris to confirm per product; TVT and
+  Uniview have no tier yet. Research files: `data/catalogue-research/`.
+- **Installation packages**: residential 1–2, 3–4, 5–6 and 7–8 cameras, single and double storey,
+  at the $95/h residential rate, with **no hours and no price** until Chris enters them.
+- **Standard materials package**: Cat6, connectors, clips and fixings, weatherproofing, misc. The
+  customer sees "Cabling and standard installation materials"; approvers see contents and cost.
+
+**What Chris must fill in before quotes are complete**
+
+1. **Supplier prices** — on each product (Products & prices) or by importing a supplier price list
+   (Suppliers → Import prices, CSV). Imported prices arrive unapproved; approve them. A later change
+   of more than 5% (Rules → priceChangeReviewPct) is held for review instead of changing quotes.
+2. **Expected bitrate per camera** — the figure Get Secure configures cameras at. Until it is set,
+   bandwidth and storage are planned on the manufacturer's maximum bitrate, which is conservative
+   (e.g. it can push a 4-camera Hikvision system onto an 8-channel recorder). The packet says so.
+3. **Installation packages** — hours, and a package price if it is not simply hours × rate.
+4. **Standard materials** — internal cost and charged value; double-storey conduit allowance.
+5. **Rules / tiers** — approve or change what is provisional; confirm each product's tier.
 
 Until these are in, assessments still run but show "Not fully priced" and say exactly what is missing.
 
+**Prices and quotes**: every supplier price shows Current (≤14 days), Aging (≤30), Stale or Unknown.
+A quote cannot be approved while a priced item is Stale or undated ("Refresh supplier price before
+final quote approval"). A prepared quote keeps the product, supplier, SKU, cost and price date of
+every line; later imports or price changes never alter an existing quote.
+
 **Supplier logins** typed under Suppliers are stored encrypted with `ENCRYPTION_KEY`, are never shown again
-and are not available to any agent. **Hermes is not connected**; the code refuses any customer-facing
+and are not available to any agent: only a future price-sync job or an approver can read them. Price
+sources supported by the model: manual entry, CSV import and price on application now; authenticated
+web catalogue, public catalogue + trade login and supplier API connectors are not written yet. **Hermes is not connected**; the code refuses any customer-facing
 action (sending, confirming, discounting, accepting) that is not done by an approver.
 
 **Rollback note:** this update makes a quote's customer optional (Brain quotes can exist before the

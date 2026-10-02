@@ -64,6 +64,13 @@
       "when": 1790937767580,
       "tag": "0008_lazy_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790969336089,
+      "tag": "0009_small_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

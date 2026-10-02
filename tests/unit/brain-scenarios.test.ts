@@ -143,7 +143,7 @@ describe("Test 6: commercial warehouse", () => {
   it("does not apply the residential good/better/best ladder", () => {
     expect(p.recommendedTier).toBeNull();
     expect(p.tierOptions).toEqual([]);
-    expect(p.cameras.every((c) => c.product?.market !== "residential")).toBe(true);
+    expect(p.cameras.every((c) => c.product?.commercialAllowed)).toBe(true);
   });
   it("uses the $110/hour reference and plans for expansion", () => {
     expect(p.labour.internalRate).toBe(110);
@@ -234,20 +234,21 @@ describe("Test 10: mixed-brand camera and recorder", () => {
   it("checks ONVIF and notes that proprietary analytics still need verifying", () => {
     const cam = camera({ id: "b", model: "B", manufacturer: "Other Brand", onvifProfiles: ["S"] });
     const e = validateNvr(nvr({ id: "n", model: "N", channels: 4, onvifProfiles: ["S", "T"] }), { ...base, cameras: [cam] });
-    const check = e.checks.find((c) => c.name === "interoperability")!;
+    const check = e.checks.find((c) => c.name === "compatibility")!;
     expect(check.pass).toBe(true);
+    expect(check.unverified).toBe(true);
     expect(check.detail).toMatch(/proprietary analytics still to be verified/);
   });
   it("rejects a pairing with no shared ONVIF profile", () => {
     const cam = camera({ id: "b", model: "B", manufacturer: "Other Brand", onvifProfiles: [] });
     const e = validateNvr(nvr({ id: "n", model: "N", channels: 4 }), { ...base, cameras: [cam] });
-    expect(e.checks.find((c) => c.name === "interoperability")!.pass).toBe(false);
+    expect(e.checks.find((c) => c.name === "compatibility")!.pass).toBe(false);
     expect(onvifCompatible(cam, nvr({ id: "n", model: "N", channels: 4 }))).toEqual([]);
   });
   it("flags analytics across brands for verification in the packet", () => {
     const cat = catalogue();
-    // Only a Fixture B camera in the good tier, alongside Fixture A recorders.
-    cat.products = cat.products.map((p) => (p.id === "ca4" ? { ...p, manufacturer: "Fixture B" } : p));
+    // Only a Fixture B camera in the good tier, and only Fixture A recorders.
+    cat.products = cat.products.filter((p) => !(p.category === "nvr" && p.manufacturer === "Fixture B")).map((p) => (p.id === "ca4" ? { ...p, manufacturer: "Fixture B" } : p));
     const p = run(house({ analytics: ["human_vehicle"] }), cat);
     expect(p.interoperability.join(" ")).toMatch(/not every proprietary analytic/);
     expect(approvalKeys(p)).toContain("interoperability");

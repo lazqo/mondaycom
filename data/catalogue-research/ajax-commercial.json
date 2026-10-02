@@ -1,0 +1,1925 @@
+{
+  "products": [
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "TurretCam (5 Mp/2.8 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/turretcam-5-mp-2-8-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "5 MP CMOS, 1/2.7\"",
+        "lensMm": 2.8,
+        "aperture": "f/1.6",
+        "hfovDeg": 110,
+        "hfovRangeDeg": [
+          100,
+          110
+        ],
+        "frameRate": "up to 20 fps (linear), 15 fps (HDR)",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 8.5,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "103 × 98 × 98 mm",
+        "weightG": 475,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 110°; tech-spec table prints horizontal FOV 100–110°.",
+          "Ajax prints only 'Average power consumption 8.5 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "TurretCam (5 Mp/4 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/turretcam-5-mp-4-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "5 MP CMOS, 1/2.7\"",
+        "lensMm": 4,
+        "aperture": "f/1.6",
+        "hfovDeg": 85,
+        "hfovRangeDeg": [
+          75,
+          85
+        ],
+        "frameRate": "up to 20 fps (linear), 15 fps (HDR)",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 8.5,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "103 × 98 × 98 mm",
+        "weightG": 475,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 85°; tech-spec table prints horizontal FOV 75–85°.",
+          "Ajax prints only 'Average power consumption 8.5 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "TurretCam (8 Mp/2.8 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/turretcam-8-mp-2-8-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "imageSensor": "8 MP CMOS, 1/2.8\"",
+        "lensMm": 2.8,
+        "aperture": "f/1.6",
+        "hfovDeg": 110,
+        "hfovRangeDeg": [
+          100,
+          110
+        ],
+        "frameRate": "up to 20 fps (linear), 15 fps (HDR)",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 8.5,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "103 × 98 × 98 mm",
+        "weightG": 475,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 110°; tech-spec table prints horizontal FOV 100–110°.",
+          "Ajax prints only 'Average power consumption 8.5 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "TurretCam (8 Mp/4 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/turretcam-8-mp-4-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "imageSensor": "8 MP CMOS, 1/2.8\"",
+        "lensMm": 4,
+        "aperture": "f/1.6",
+        "hfovDeg": 85,
+        "hfovRangeDeg": [
+          75,
+          85
+        ],
+        "frameRate": "up to 20 fps (linear), 15 fps (HDR)",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 8.5,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "103 × 98 × 98 mm",
+        "weightG": 475,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 85°; tech-spec table prints horizontal FOV 75–85°.",
+          "Ajax prints only 'Average power consumption 8.5 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "BulletCam (5 Mp/2.8 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/bulletcam-5-mp-2-8-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "5 MP CMOS, 1/2.7\"",
+        "lensMm": 2.8,
+        "aperture": "f/1.6",
+        "hfovDeg": 110,
+        "hfovRangeDeg": [
+          100,
+          110
+        ],
+        "frameRate": "up to 25 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 60,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "198 × 76 × 76 mm",
+        "weightG": 550,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 110°; tech-spec table prints horizontal FOV 100–110°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F.",
+          "Spec page prints 'IR LED: up to 60 m' under Maximum illumination distance but 'Smart IR illumination: up to 50 m' — irRangeM uses the 60 m figure."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "BulletCam (5 Mp/4 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/bulletcam-5-mp-4-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "5 MP CMOS, 1/2.7\"",
+        "lensMm": 4,
+        "aperture": "f/1.6",
+        "hfovDeg": 85,
+        "hfovRangeDeg": [
+          75,
+          85
+        ],
+        "frameRate": "up to 25 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 60,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "198 × 76 × 76 mm",
+        "weightG": 550,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 85°; tech-spec table prints horizontal FOV 75–85°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F.",
+          "Spec page prints 'IR LED: up to 60 m' under Maximum illumination distance but 'Smart IR illumination: up to 50 m' — irRangeM uses the 60 m figure."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "BulletCam (8 Mp/2.8 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/bulletcam-8-mp-2-8-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "imageSensor": "8 MP CMOS, 1/2.8\"",
+        "lensMm": 2.8,
+        "aperture": "f/1.6",
+        "hfovDeg": 110,
+        "hfovRangeDeg": [
+          100,
+          110
+        ],
+        "frameRate": "up to 20 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "198 × 76 × 76 mm",
+        "weightG": 550,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 110°; tech-spec table prints horizontal FOV 100–110°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "BulletCam (8 Mp/4 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/bulletcam-8-mp-4-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "imageSensor": "8 MP CMOS, 1/2.8\"",
+        "lensMm": 4,
+        "aperture": "f/1.6",
+        "hfovDeg": 85,
+        "hfovRangeDeg": [
+          75,
+          85
+        ],
+        "frameRate": "up to 20 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "smartIrRangeM": 50,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "198 × 76 × 76 mm",
+        "weightG": 550,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 85°; tech-spec table prints horizontal FOV 75–85°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "DomeCam Mini (5 Mp/2.8 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/domecam-mini-5-mp-2-8-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "5 MP CMOS, 1/2.7\"",
+        "lensMm": 2.8,
+        "aperture": "f/1.6",
+        "hfovDeg": 110,
+        "hfovRangeDeg": [
+          100,
+          110
+        ],
+        "frameRate": "up to 25 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 15,
+        "smartIrRangeM": 15,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "113 × 60 mm",
+        "weightG": 360,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 110°; tech-spec table prints horizontal FOV 100–110°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "DomeCam Mini (5 Mp/4 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/domecam-mini-5-mp-4-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "5 MP CMOS, 1/2.7\"",
+        "lensMm": 4,
+        "aperture": "f/1.6",
+        "hfovDeg": 85,
+        "hfovRangeDeg": [
+          75,
+          85
+        ],
+        "frameRate": "up to 25 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 15,
+        "smartIrRangeM": 15,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "113 × 60 mm",
+        "weightG": 360,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 85°; tech-spec table prints horizontal FOV 75–85°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "DomeCam Mini (8 Mp/2.8 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/domecam-mini-8-mp-2-8-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "imageSensor": "8 MP CMOS, 1/2.8\"",
+        "lensMm": 2.8,
+        "aperture": "f/1.6",
+        "hfovDeg": 110,
+        "hfovRangeDeg": [
+          100,
+          110
+        ],
+        "frameRate": "up to 20 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 15,
+        "smartIrRangeM": 15,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "113 × 60 mm",
+        "weightG": 360,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 110°; tech-spec table prints horizontal FOV 100–110°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "DomeCam Mini (8 Mp/4 mm)",
+      "category": "camera",
+      "sourceUrl": "https://ajax.systems/products/specs/domecam-mini-8-mp-4-mm/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "imageSensor": "8 MP CMOS, 1/2.8\"",
+        "lensMm": 4,
+        "aperture": "f/1.6",
+        "hfovDeg": 85,
+        "hfovRangeDeg": [
+          75,
+          85
+        ],
+        "frameRate": "up to 20 fps",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "wdrDb": 120,
+        "irRangeM": 15,
+        "smartIrRangeM": 15,
+        "microphone": true,
+        "audioCodecs": [
+          "G711-ULAW",
+          "G711-ALAW",
+          "G726",
+          "G722"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "pet_detection",
+          "motion_detection"
+        ],
+        "analyticsText": "Motion detection (software frame analysis); AI object detection: People, Pets, Vehicles",
+        "poeStandard": "802.3af",
+        "poeStandardText": "802.3at/af, 36–57 V, Class 3",
+        "poeClass": 3,
+        "avgPowerW": 12,
+        "dcInput": "12 VDC, 1 A",
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK08",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "up to 90%",
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "network": "1 × RJ-45 10/100 Mbps",
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "storage": "microSD up to 256 GB (Class V30 or faster, not included); records to Ajax NVR",
+        "dimensions": "113 × 60 mm",
+        "weightG": 360,
+        "colours": [
+          "Black",
+          "White"
+        ],
+        "warrantyMonths": 24,
+        "notes": [
+          "Headline viewing angle 85°; tech-spec table prints horizontal FOV 75–85°.",
+          "Ajax prints only 'Average power consumption 12 W' — no maximum figure, so poeMaxW is left unverified.",
+          "Metric values taken from the non-US (metric) rendering of the Ajax spec page; the US rendering shows the same values in feet/°F."
+        ]
+      },
+      "unverified": [
+        "poeMaxW",
+        "bitrateKbps",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "NVR (8-ch)",
+      "category": "nvr",
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 8,
+        "poePorts": 0,
+        "incomingMbps": 100,
+        "ethernet": "1 × Ethernet, up to 100 Mbps",
+        "bluetooth": "BLE (for Ethernet setup)",
+        "recordingResolutionMaxMp": 8,
+        "recordingResolutionText": "up to 4K resolution (25/30 FPS)",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "hddText": "1 × drive up to 16 TB (SATA, 2.5″ or 3.5″), HDD/SSD not included, drive power ≤7 W",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection (NVR software or camera algorithms)"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "operatingTempC": [
+          0,
+          40
+        ],
+        "operatingHumidity": "up to 75%",
+        "ingress": [
+          "IP20"
+        ],
+        "indoorOnly": true,
+        "tamper": true,
+        "dimensions": "193 × 193 × 47 mm",
+        "weightG": 615,
+        "maxPowerW": 24,
+        "powerInput": "110–240 VAC, 50/60 Hz, 0.6 A",
+        "supportedCameras": "Ajax cameras; IP cameras that conform to ONVIF Profiles; RTSP",
+        "compatibleFamilies": [
+          "Ajax"
+        ],
+        "notes": [
+          "Ajax spec page lists no PoE ports and no PoE budget — only a single Ethernet interface (up to 100 Mbps). poePorts recorded as 0; cameras need a separate PoE switch/injector or 12 V supply.",
+          "No HDMI/VGA output is listed; viewing is via Ajax apps (in-app video wall)."
+        ]
+      },
+      "unverified": [
+        "outgoingMbps",
+        "decoding",
+        "alarmIn",
+        "alarmOut",
+        "audioIn",
+        "audioOut",
+        "hdmiOutput",
+        "vgaOutput"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "NVR DC (8-ch)",
+      "category": "nvr",
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch-dc/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 8,
+        "poePorts": 0,
+        "incomingMbps": 100,
+        "ethernet": "1 × Ethernet, up to 100 Mbps",
+        "bluetooth": "BLE (for Ethernet setup)",
+        "recordingResolutionMaxMp": 8,
+        "recordingResolutionText": "up to 4K resolution (25/30 FPS)",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "hddText": "1 × drive up to 16 TB (SATA, 2.5″ or 3.5″), HDD/SSD not included, drive power ≤7 W",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection (NVR software or camera algorithms)"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "operatingTempC": [
+          0,
+          40
+        ],
+        "operatingHumidity": "up to 75%",
+        "ingress": [
+          "IP20"
+        ],
+        "indoorOnly": true,
+        "tamper": true,
+        "dimensions": "193 × 193 × 47 mm",
+        "weightG": 583,
+        "maxPowerW": 24,
+        "powerInput": "8–16 VDC up to 4 A (12.3–16 VDC with PSU-board jumper)",
+        "supportedCameras": "ONVIF (Profile S/T), RTSP",
+        "notes": [
+          "Ajax spec page lists no PoE ports and no PoE budget — only a single Ethernet interface (up to 100 Mbps). poePorts recorded as 0; cameras need a separate PoE switch/injector or 12 V supply.",
+          "No HDMI/VGA output is listed; viewing is via Ajax apps (in-app video wall)."
+        ]
+      },
+      "unverified": [
+        "outgoingMbps",
+        "decoding",
+        "alarmIn",
+        "alarmOut",
+        "audioIn",
+        "audioOut",
+        "hdmiOutput",
+        "vgaOutput",
+        "compatibleFamilies"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "NVR (16-ch)",
+      "category": "nvr",
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 16,
+        "poePorts": 0,
+        "incomingMbps": 100,
+        "ethernet": "1 × Ethernet, up to 100 Mbps",
+        "bluetooth": "BLE (for Ethernet setup)",
+        "recordingResolutionMaxMp": 8,
+        "recordingResolutionText": "up to 4K resolution (25/30 FPS)",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "hddText": "1 × drive up to 16 TB (SATA, 2.5″ or 3.5″), HDD/SSD not included, drive power ≤7 W",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection (NVR software or camera algorithms)"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "operatingTempC": [
+          0,
+          40
+        ],
+        "operatingHumidity": "up to 75%",
+        "ingress": [
+          "IP20"
+        ],
+        "indoorOnly": true,
+        "tamper": true,
+        "dimensions": "193 × 193 × 47 mm",
+        "weightG": 615,
+        "maxPowerW": 24,
+        "powerInput": "110–240 VAC, 50/60 Hz, 0.6 A",
+        "supportedCameras": "Ajax cameras; IP cameras that conform to ONVIF Profiles; RTSP",
+        "compatibleFamilies": [
+          "Ajax"
+        ],
+        "notes": [
+          "Ajax spec page lists no PoE ports and no PoE budget — only a single Ethernet interface (up to 100 Mbps). poePorts recorded as 0; cameras need a separate PoE switch/injector or 12 V supply.",
+          "No HDMI/VGA output is listed; viewing is via Ajax apps (in-app video wall)."
+        ]
+      },
+      "unverified": [
+        "outgoingMbps",
+        "decoding",
+        "alarmIn",
+        "alarmOut",
+        "audioIn",
+        "audioOut",
+        "hdmiOutput",
+        "vgaOutput"
+      ]
+    },
+    {
+      "manufacturer": "Ajax Systems",
+      "family": "Ajax",
+      "model": "NVR DC (16-ch)",
+      "category": "nvr",
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch-dc/",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 16,
+        "poePorts": 0,
+        "incomingMbps": 100,
+        "ethernet": "1 × Ethernet, up to 100 Mbps",
+        "bluetooth": "BLE (for Ethernet setup)",
+        "recordingResolutionMaxMp": 8,
+        "recordingResolutionText": "up to 4K resolution (25/30 FPS)",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "hddText": "1 × drive up to 16 TB (SATA, 2.5″ or 3.5″), HDD/SSD not included, drive power ≤7 W",
+        "codecs": [
+          "H.265",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection (NVR software or camera algorithms)"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "G",
+          "S"
+        ],
+        "ecosystem": [
+          "Ajax app",
+          "Ajax PRO Desktop"
+        ],
+        "operatingTempC": [
+          0,
+          40
+        ],
+        "operatingHumidity": "up to 75%",
+        "ingress": [
+          "IP20"
+        ],
+        "indoorOnly": true,
+        "tamper": true,
+        "dimensions": "193 × 193 × 47 mm",
+        "weightG": 583,
+        "maxPowerW": 24,
+        "powerInput": "8–16 VDC up to 4 A (12.3–16 VDC with PSU-board jumper)",
+        "supportedCameras": "ONVIF (Profile S/T), RTSP",
+        "notes": [
+          "Ajax spec page lists no PoE ports and no PoE budget — only a single Ethernet interface (up to 100 Mbps). poePorts recorded as 0; cameras need a separate PoE switch/injector or 12 V supply.",
+          "No HDMI/VGA output is listed; viewing is via Ajax apps (in-app video wall)."
+        ]
+      },
+      "unverified": [
+        "outgoingMbps",
+        "decoding",
+        "alarmIn",
+        "alarmOut",
+        "audioIn",
+        "audioOut",
+        "hdmiOutput",
+        "vgaOutput",
+        "compatibleFamilies"
+      ]
+    },
+    {
+      "manufacturer": "Axis Communications",
+      "family": "Axis",
+      "model": "AXIS M3216-LVE",
+      "category": "camera",
+      "sourceUrl": "https://www.axis.com/dam/public/8e/46/85/datasheet-axis-m3216-lve-dome-camera-en-US-506715.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 4,
+        "horizontalPixels": 2688,
+        "verticalPixels": 1512,
+        "resolutionText": "16:9: 2688x1512 to 160x90; 4:3: 2304x1728 to 160x120",
+        "imageSensor": "1/2.7\" progressive scan RGB CMOS",
+        "lensMm": 2.9,
+        "aperture": "F2.0",
+        "hfovDeg": 102,
+        "vfovDeg": 73,
+        "frameRate": "up to 30/25 fps (60/50 Hz) in all resolutions",
+        "codecs": [
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "smartCodec": "Axis Zipstream (H.264/H.265)",
+        "wdrDb": 120,
+        "wdrType": "Forensic WDR, up to 120 dB depending on scene",
+        "irRangeM": 30,
+        "irText": "OptimizedIR 850 nm, range of reach 30 m or more depending on the scene",
+        "audioInput": "External 3.5 mm mic/line in (no built-in mic stated)",
+        "alarmIo": "1 supervised input, 1 output",
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "loitering",
+          "people_counting",
+          "occupancy_in_area",
+          "tampering",
+          "motion_detection",
+          "audio_detection"
+        ],
+        "analyticsText": "AXIS Object Analytics (humans, vehicles: cars/buses/trucks/bikes; line crossing, object in area, crossline counting, occupancy in area, time in area), AXIS Scene Metadata, AXIS Image Health Analytics, AXIS Video Motion Detection, active tampering alarm, audio detection, AXIS Live Privacy Shield",
+        "poeStandard": "802.3af",
+        "poeStandardText": "IEEE 802.3af/802.3at Type 1 Class 3",
+        "poeClass": 3,
+        "poeMaxW": 10.8,
+        "typicalPowerW": 4.8,
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK10",
+        "nema": "4X",
+        "operatingTempC": [
+          -40,
+          50
+        ],
+        "operatingHumidity": "10–100% RH (condensing)",
+        "onvifProfiles": [
+          "G",
+          "M",
+          "S",
+          "T"
+        ],
+        "ecosystem": [
+          "AXIS Camera Station Edge",
+          "AXIS Camera Station Pro",
+          "AXIS Camera Station 5"
+        ],
+        "storage": "microSD/microSDHC/microSDXC with encryption (max capacity not printed); NAS recording",
+        "soc": "ARTPEC-8 with DLPU",
+        "network": "RJ45 10BASE-T/100BASE-TX PoE",
+        "dimensions": "H 102 mm × Ø149 mm (without weathershield)",
+        "weightG": 791,
+        "warrantyYears": 5,
+        "notes": [
+          "Commercial product — store residentialAllowed=false."
+        ]
+      },
+      "unverified": [
+        "bitrateKbps",
+        "microphone",
+        "speaker"
+      ]
+    },
+    {
+      "manufacturer": "Axis Communications",
+      "family": "Axis",
+      "model": "AXIS P3285-LVE 10 mm",
+      "category": "camera",
+      "sourceUrl": "https://www.axis.com/dam/public/f6/80/92/datasheet-axis-p3285-lve-dome-camera-en-US-555346.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 2,
+        "horizontalPixels": 1920,
+        "verticalPixels": 1080,
+        "imageSensor": "1/2.8\" progressive scan RGB CMOS",
+        "lensMm": [
+          3.4,
+          9.8
+        ],
+        "lensText": "Varifocal 3.4–9.8 mm, F1.4–2.7, remote zoom and focus, P-Iris",
+        "hfovDeg": 100,
+        "hfovRangeDeg": [
+          32,
+          100
+        ],
+        "frameRate": "up to 50/60 fps (50/60 Hz) in all resolutions",
+        "codecs": [
+          "AV1",
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "smartCodec": "Axis Zipstream (AV1/H.264/H.265)",
+        "wdrDb": 120,
+        "wdrType": "Forensic WDR, up to 120 dB depending on scene",
+        "irRangeM": 40,
+        "irText": "OptimizedIR 850 nm, 10 mm lens: range of reach 40 m or more depending on the scene",
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "loitering",
+          "people_counting",
+          "occupancy_in_area",
+          "tailgating_detection",
+          "PPE monitoring (beta)",
+          "motion_detection",
+          "tampering",
+          "audio_classification"
+        ],
+        "analyticsText": "AXIS Object Analytics (humans, vehicles: cars/buses/trucks/bikes/other; line crossing, object in area, time in area, crossline counting, occupancy in area, tailgating detection, PPE monitoring BETA, motion in area, motion line crossing); AXIS Audio Analytics (coughing fit, glass break, human presence, scream, shout, speech); AXIS Image Health Analytics; AXIS Scene Metadata; AXIS Live Privacy Shield; AXIS Video Motion Detection. Supported add-ons: AXIS Perimeter Defender, AXIS License Plate Verifier",
+        "acousticSensor": true,
+        "alarmIo": "1 configurable supervised input/digital output",
+        "poeStandard": "802.3af",
+        "poeStandardText": "IEEE 802.3af/802.3at Type 1 Class 3",
+        "poeClass": 3,
+        "poeMaxW": 10,
+        "typicalPowerW": 3.4,
+        "ingress": [
+          "IP66",
+          "IP67"
+        ],
+        "vandal": "IK10",
+        "nema": "4X",
+        "operatingTempC": [
+          -40,
+          50
+        ],
+        "operatingHumidity": "10–100% RH (condensing)",
+        "onvifProfiles": [
+          "G",
+          "M",
+          "S",
+          "T"
+        ],
+        "ecosystem": [
+          "AXIS Camera Station Edge",
+          "AXIS Camera Station Pro"
+        ],
+        "storage": "microSD/microSDHC/microSDXC with AES-XTS encryption (max capacity not printed); NAS recording",
+        "soc": "ARTPEC-9 with DLPU",
+        "network": "RJ45 10BASE-T/100BASE-TX PoE",
+        "weightG": 850,
+        "warrantyYears": 5,
+        "notes": [
+          "Commercial product — store residentialAllowed=false.",
+          "Replaces discontinued AXIS P3265-LVE (axis.com support page: 'We have replaced this product with AXIS P3275-LVE, AXIS P3285-LVE').",
+          "Also sold as AXIS P3285-LVE 29 mm (10.8–28.2 mm, HFOV 29.1°–11°, IR 45 m, 860 g) — not catalogued separately.",
+          "Datasheet lists an 'Acoustic sensor' (used by AXIS Audio Analytics) but does not describe it as a microphone for audio streaming, so microphone is left unverified."
+        ]
+      },
+      "unverified": [
+        "bitrateKbps",
+        "microphone",
+        "speaker",
+        "dimensions"
+      ]
+    },
+    {
+      "manufacturer": "Hanwha Vision",
+      "family": "Hanwha",
+      "model": "XNV-8080R",
+      "category": "camera",
+      "sourceUrl": "https://hvsgmpprdstorage.blob.core.windows.net/pim/XNV-8080R/DataSheet_XNV-8080R_20260806_EN_165234.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "dome",
+        "resolutionMp": 5,
+        "horizontalPixels": 2560,
+        "verticalPixels": 1920,
+        "imageSensor": "1/1.8\" CMOS",
+        "lensMm": [
+          3.9,
+          9.4
+        ],
+        "lensText": "3.9–9.4 mm (2.4x) motorized varifocal, F1.3 (wide)–F2.4 (tele), DC auto iris / P-iris",
+        "hfovDeg": 92.1,
+        "hfovRangeDeg": [
+          38.7,
+          92.1
+        ],
+        "frameRate": "30/25 fps (60/50 Hz) H.265/H.264",
+        "codecs": [
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "smartCodec": "WiseStream II",
+        "wdrDb": 120,
+        "irRangeM": 50,
+        "audioInput": "Selectable mic in/line in (external)",
+        "audioOutput": "Line out",
+        "alarmIo": "1 in / 1 out",
+        "analytics": [
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "loitering",
+          "face_detection",
+          "audio_exception",
+          "motion_detection",
+          "tampering",
+          "defocus_detection",
+          "fog_detection",
+          "sound_classification",
+          "digital_auto_tracking",
+          "appear_disappear"
+        ],
+        "analyticsText": "Defocus detection, Motion detection, Tampering, Fog detection, Face detection, Audio detection, Sound classification, Virtual area (Loitering, Intrusion, Enter/Exit, Appear/Disappear), Virtual line (Crossing, Direction), Digital auto tracking",
+        "poeStandard": "802.3af",
+        "poeStandardText": "PoE (IEEE802.3af, Class3)",
+        "poeClass": 3,
+        "poeMaxW": 12.95,
+        "dcInput": "12 VDC (max 11.5 W); also 24 VAC (max 14 W)",
+        "ingress": [
+          "IP66",
+          "IP67"
+        ],
+        "vandal": "IK10",
+        "nema": "4X",
+        "operatingTempC": [
+          -40,
+          55
+        ],
+        "operatingHumidity": "0~90% RH (non-condensing)",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T"
+        ],
+        "storage": "MicroSD/SDHC/SDXC, 2 slots, max 256 GB each (512 GB total)",
+        "network": "RJ-45 10/100BASE-T",
+        "dimensions": "Ø160 × H118.5 mm",
+        "weightG": 1010,
+        "material": "Aluminium",
+        "notes": [
+          "Commercial product — store residentialAllowed=false.",
+          "Analytics are rule-based (no AI person/vehicle classification listed for this model), so human_vehicle is not included.",
+          "Datasheet 'Compatible Devices': SBP-300HM6, SBP-300CM, SBV-160WC, SBV-158G (back box), SBP-300PM, SBP-300KM, SBP-300WM1, SBP-300LM, SBP-390WM2, SBP-300WM, SHD-3000F1, SBP-300B, SHD-1600FPW, SBP-160TM, SPB-VAN3, SBP-300NB. The hanwhavision.com product page marks SBV-158G, SBP-300PM and SPB-VAN3 as discontinued. Accessories not catalogued here."
+        ]
+      },
+      "unverified": [
+        "bitrateKbps",
+        "microphone",
+        "speaker",
+        "ecosystem"
+      ]
+    },
+    {
+      "manufacturer": "Hanwha Vision",
+      "family": "Hanwha",
+      "model": "QNO-C8083R",
+      "category": "camera",
+      "sourceUrl": "https://hvsgmpprdstorage.blob.core.windows.net/pim/QNO-C8083R/DataSheet_QNO-C8083R_20260806_EN_193122.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 5,
+        "horizontalPixels": 2592,
+        "verticalPixels": 1944,
+        "imageSensor": "1/2.8\" CMOS",
+        "lensMm": [
+          3.2,
+          10.2
+        ],
+        "lensText": "3.2–10.2 mm (3.2x) motorized varifocal, F1.6 (wide)–F3.1 (tele), DC auto iris",
+        "hfovDeg": 95,
+        "hfovRangeDeg": [
+          29,
+          95
+        ],
+        "frameRate": "30/25 fps (60/50 Hz) H.265/H.264",
+        "codecs": [
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "smartCodec": "WiseStream III",
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "audioInput": "Selectable mic in/line in (external)",
+        "audioOutput": "Line out",
+        "alarmIo": "1 in / 1 out",
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "loitering",
+          "people_counting",
+          "motion_detection",
+          "tampering",
+          "defocus_detection",
+          "appear_disappear",
+          "queue_management",
+          "heatmap",
+          "vehicle_counting"
+        ],
+        "analyticsText": "AI engine (NPU): Object detection (Person; Vehicle – car, truck, bus, bicycle, motorcycle), Virtual line (Crossing/Direction), Virtual area (Loitering/Intrusion/Enter/Exit), Motion detection; Normal: Defocus detection, Tampering, Virtual area (Appear/Disappear); BI: People counting, Queue management, Heatmap, Vehicle counting",
+        "poeStandard": "802.3af",
+        "poeStandardText": "PoE (IEEE802.3af, Class3)",
+        "poeClass": 3,
+        "poeMaxW": 12,
+        "typicalPowerW": 5.3,
+        "ingress": [
+          "IP66"
+        ],
+        "vandal": "IK10",
+        "nema": "4X",
+        "operatingTempC": [
+          -30,
+          55
+        ],
+        "operatingHumidity": "0~100% RH (condensing)",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T",
+          "M"
+        ],
+        "storage": "MicroSD/SDHC/SDXC 1 slot, max 256 GB (max 1 TB for OnCloud edge recording with Hanwha-branded cards)",
+        "network": "RJ-45 10/100BASE-T",
+        "dimensions": "Ø93.4 × 245.8 mm",
+        "weightG": 930,
+        "material": "Aluminium",
+        "compatibleGangBox": "Single, Double, 4\" Octagon",
+        "notes": [
+          "Commercial product — store residentialAllowed=false.",
+          "5 MP model (the 4K/8 MP sibling is QNO-C9083R — not catalogued).",
+          "No DC input listed — PoE only."
+        ]
+      },
+      "unverified": [
+        "bitrateKbps",
+        "microphone",
+        "speaker",
+        "ecosystem",
+        "dcInput"
+      ]
+    },
+    {
+      "manufacturer": "Hanwha Vision",
+      "family": "Hanwha",
+      "model": "QRN-830S",
+      "category": "nvr",
+      "sourceUrl": "https://hvsgmpprdstorage.blob.core.windows.net/pim/QRN-830S/DataSheet_QRN-830S_20250906_EN_060921.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 8,
+        "poePorts": 8,
+        "poeBudgetW": 65,
+        "poeStandard": "802.3at",
+        "poeStandardText": "PoE+ RJ-45 8EA (LAN, 10/100)",
+        "incomingMbps": 80,
+        "outgoingMbps": 80,
+        "playbackMbps": 32,
+        "recordingResolutionMaxMp": 8,
+        "decodingText": "[Local Monitor] 8M(60fps), 1080p(240fps), 720P(480fps), D1(960fps)",
+        "hddBays": 1,
+        "maxHddTb": 6,
+        "maxTotalTb": 6,
+        "codecs": [
+          "H.265",
+          "H.264",
+          "MJPEG"
+        ],
+        "analytics": [
+          "camera events: sensor, motion detection, video analytics, defocus, audio",
+          "smart_search"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S"
+        ],
+        "audioText": "8CH network audio in/out, 2-way",
+        "ecosystem": [
+          "WAVE",
+          "SSM",
+          "Wisenet Viewer",
+          "Wisenet mobile",
+          "Web viewer"
+        ],
+        "hdmiOutput": "HDMI 1EA (interface table); decoding table lists HDMI1 3840x2160 (30Hz) and HDMI2 1920x1080 (60Hz)",
+        "uplink": "RJ-45 2ea (LAN/WAN 1 Gbps)",
+        "usb": "2 × USB 2.0 (front)",
+        "redundancy": "Failover N+1, ARB",
+        "powerInput": "54 VDC / 1.55 A (DC adaptor)",
+        "maxPowerW": 84,
+        "operatingTempC": [
+          0,
+          40
+        ],
+        "operatingHumidity": "20%~85% RH",
+        "dimensions": "300.0 × 47.6 × 238.9 mm",
+        "weightKg": 1.32,
+        "notes": [
+          "Commercial product — store residentialAllowed=false.",
+          "poeStandard: datasheet says 'PoE+' (= IEEE 802.3at); per-port wattage not printed.",
+          "Datasheet inconsistency: Key Features says '8 PoE (LAN,10/100), 1 PoE (WAN,1Gbps)', interface table says 'PoE+ RJ-45 8EA (LAN,10/100), RJ-45 2ea (LAN/WAN 1Gbps)'.",
+          "Max HDD 6 TB per datasheet (SATA 1ea)."
+        ]
+      },
+      "unverified": [
+        "poePerPortW",
+        "alarmIn",
+        "alarmOut",
+        "vgaOutput",
+        "decoding",
+        "compatibleFamilies"
+      ]
+    }
+  ],
+  "compatibility": [
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (5 Mp/2.8 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (5 Mp/2.8 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (5 Mp/4 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (5 Mp/4 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (8 Mp/2.8 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (8 Mp/2.8 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (8 Mp/4 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "TurretCam (8 Mp/4 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (5 Mp/2.8 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (5 Mp/2.8 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (5 Mp/4 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (5 Mp/4 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (8 Mp/2.8 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (8 Mp/2.8 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (8 Mp/4 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "BulletCam (8 Mp/4 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (5 Mp/2.8 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (5 Mp/2.8 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (5 Mp/4 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (5 Mp/4 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (8 Mp/2.8 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (8 Mp/2.8 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (8 Mp/4 mm)",
+      "to": "NVR (8-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-8-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DomeCam Mini (8 Mp/4 mm)",
+      "to": "NVR (16-ch)",
+      "qty": 1,
+      "sourceUrl": "https://ajax.systems/products/specs/nvr-16-ch/",
+      "note": "NVR spec lists 'IP cameras: Ajax cameras'; camera spec lists Ajax NVR as storage"
+    }
+  ],
+  "notes": [
+    "Ajax: all 12 camera SKUs (TurretCam/BulletCam/DomeCam Mini × 5/8 MP × 2.8/4 mm) and 4 NVR SKUs read from ajax.systems/products/specs/<slug>/ on 2026-10-02. Metric units taken from the page's non-US rendering (embedded in the page data).",
+    "Ajax cameras print only average power consumption, not maximum — poeMaxW left unverified for all Ajax cameras.",
+    "Ajax NVR: no PoE ports, no HDMI listed; single 100 Mbps Ethernet; 1 SATA bay up to 16 TB.",
+    "Axis and Hanwha products are commercial — store residentialAllowed=false.",
+    "AXIS P3265-LVE is discontinued (axis.com redirects to support page naming P3275-LVE / P3285-LVE as replacements); P3285-LVE 10 mm used instead.",
+    "Hanwha XNV-8080R: product page lists it as current; accessory list from datasheet recorded in product notes only (no accessory products created).",
+    "No prices recorded."
+  ]
+}

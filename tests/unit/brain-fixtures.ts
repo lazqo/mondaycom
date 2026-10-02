@@ -2,7 +2,7 @@
  * A made-up catalogue for engine tests. These are not real products: names, specifications and
  * prices are invented test values chosen to exercise the rules, and must never be used for quoting.
  */
-import type { CameraProduct, Catalogue, EnquiryInput, HddProduct, InstallationPackage, NvrProduct, OtherProduct, Policies, SwitchProduct } from "@/lib/brain/types";
+import type { CameraProduct, Catalogue, EnquiryInput, HddProduct, InstallationPackage, MaterialsPackage, NvrProduct, OtherProduct, Policies, SwitchProduct } from "@/lib/brain/types";
 import { DEFAULT_POLICIES } from "@/lib/brain/policy";
 
 const price = (costExGst: number) => ({ supplier: "Test Supplier", supplierSku: null, costExGst, lastChecked: "2026-10-01", confidence: 1, approved: true });
@@ -11,7 +11,8 @@ export function camera(over: Partial<CameraProduct> & Pick<CameraProduct, "id" |
   return {
     category: "camera",
     manufacturer: "Fixture A",
-    market: "residential",
+    residentialAllowed: true,
+    commercialAllowed: false,
     tier: "good",
     status: "getsecure_approved",
     price: price(100),
@@ -34,7 +35,8 @@ export function nvr(over: Partial<NvrProduct> & Pick<NvrProduct, "id" | "model" 
   return {
     category: "nvr",
     manufacturer: "Fixture A",
-    market: "residential",
+    residentialAllowed: true,
+    commercialAllowed: false,
     tier: "good",
     status: "getsecure_approved",
     price: price(200),
@@ -52,12 +54,12 @@ export function nvr(over: Partial<NvrProduct> & Pick<NvrProduct, "id" | "model" 
 }
 
 export function hdd(tb: number, cost: number): HddProduct {
-  return { id: `hdd${tb}`, category: "hdd", manufacturer: "Fixture Disk", model: `FD-${tb}TB`, market: "both", tier: null, status: "getsecure_approved", price: price(cost), capacityTb: tb, surveillanceRated: true };
+  return { id: `hdd${tb}`, category: "hdd", manufacturer: "Fixture Disk", model: `FD-${tb}TB`, residentialAllowed: true, commercialAllowed: true, tier: null, status: "getsecure_approved", price: price(cost), capacityTb: tb, surveillanceRated: true };
 }
 
-const other = (id: string, category: OtherProduct["category"], cost: number): OtherProduct => ({ id, category, manufacturer: "Fixture Parts", model: id, market: "both", tier: null, status: "getsecure_approved", price: price(cost) });
+const other = (id: string, category: OtherProduct["category"], cost: number): OtherProduct => ({ id, category, manufacturer: "Fixture Parts", model: id, residentialAllowed: true, commercialAllowed: true, tier: null, status: "getsecure_approved", price: price(cost) });
 
-export const SWITCH: SwitchProduct = { id: "sw8", category: "poe_switch", manufacturer: "Fixture Net", model: "FN-8P", market: "both", tier: null, status: "getsecure_approved", price: price(150), poePorts: 8, poePerPortW: 30, poeBudgetW: 120 };
+export const SWITCH: SwitchProduct = { id: "sw8", category: "poe_switch", manufacturer: "Fixture Net", model: "FN-8P", residentialAllowed: true, commercialAllowed: true, tier: null, status: "getsecure_approved", price: price(150), poePorts: 8, poePerPortW: 30, poeBudgetW: 120 };
 
 export function packages(): InstallationPackage[] {
   const base = { propertyType: "residential" as const, includedMaterials: [], assumptions: [], exclusions: [], version: 1, status: "getsecure_approved" as const };
@@ -75,14 +77,14 @@ export function catalogue(): Catalogue {
       camera({ id: "ca4", model: "FA-CAM-4" }),
       camera({ id: "cb6", model: "FB-CAM-6", manufacturer: "Fixture B", tier: "better", resolutionMp: 6, horizontalPixels: 3072, expectedBitrateMbps: 6, poeWatts: 6, price: price(160) }),
       camera({ id: "cc8", model: "FC-CAM-8", manufacturer: "Fixture C", tier: "best", resolutionMp: 8, horizontalPixels: 3840, expectedBitrateMbps: 8, poeWatts: 7, price: price(250) }),
-      camera({ id: "cx8", model: "FX-COM-8", manufacturer: "Fixture X", market: "commercial", tier: null, resolutionMp: 8, horizontalPixels: 3840, expectedBitrateMbps: 8, poeWatts: 8, price: price(420) }),
+      camera({ id: "cx8", model: "FX-COM-8", manufacturer: "Fixture X", residentialAllowed: false, commercialAllowed: true, tier: null, resolutionMp: 8, horizontalPixels: 3840, expectedBitrateMbps: 8, poeWatts: 8, price: price(420) }),
       nvr({ id: "na4", model: "FA-NVR-4", channels: 4 }),
       nvr({ id: "na8", model: "FA-NVR-8", channels: 8, hddBays: 2, maxTotalTb: 20, price: price(350) }),
       nvr({ id: "nb4", model: "FB-NVR-4", manufacturer: "Fixture B", tier: "better", channels: 4, price: price(260) }),
       nvr({ id: "nb8", model: "FB-NVR-8", manufacturer: "Fixture B", tier: "better", channels: 8, hddBays: 2, maxTotalTb: 20, price: price(420) }),
       nvr({ id: "nc4", model: "FC-NVR-4", manufacturer: "Fixture C", tier: "best", channels: 4, price: price(380) }),
       nvr({ id: "nc8", model: "FC-NVR-8", manufacturer: "Fixture C", tier: "best", channels: 8, hddBays: 2, maxTotalTb: 20, price: price(560) }),
-      nvr({ id: "nx16", model: "FX-NVR-16", manufacturer: "Fixture X", market: "commercial", tier: null, channels: 16, hddBays: 4, maxTotalTb: 40, price: price(1400) }),
+      nvr({ id: "nx16", model: "FX-NVR-16", manufacturer: "Fixture X", residentialAllowed: false, commercialAllowed: true, tier: null, channels: 16, hddBays: 4, maxTotalTb: 40, price: price(1400) }),
       hdd(2, 90),
       hdd(4, 140),
       hdd(6, 200),
@@ -94,14 +96,28 @@ export function catalogue(): Catalogue {
       other("lte", "router_4g", 260),
     ],
     packages: packages(),
+    materialsPackages: [MATERIALS],
   };
 }
 
-/** Defaults, with the two values Get Secure has not set yet filled in for testing. */
+/** The standard residential materials package, with test values Get Secure has not set yet. */
+export const MATERIALS: MaterialsPackage = {
+  id: "mat",
+  name: "Standard residential CCTV materials",
+  propertyType: "residential",
+  customerDescription: "Cabling and standard installation materials",
+  items: [{ description: "Normal Cat6 allowance" }, { description: "Connectors" }, { description: "Normal clips and fixings" }],
+  costExGst: 60,
+  sellExGst: 150,
+  isDefault: true,
+  version: 1,
+  status: "getsecure_approved",
+};
+
+/** Defaults, with a default tier (not yet set by Get Secure) filled in for testing. */
 export function testPolicies(over: Partial<Policies> = {}): Policies {
   return {
     ...DEFAULT_POLICIES,
-    standardMaterials: { ...DEFAULT_POLICIES.standardMaterials, value: { ...DEFAULT_POLICIES.standardMaterials.value, sellExGst: 150, costExGst: 60 }, status: "getsecure_approved" },
     defaultResidentialTier: { ...DEFAULT_POLICIES.defaultResidentialTier, value: "good", status: "getsecure_approved" },
     ...over,
   };

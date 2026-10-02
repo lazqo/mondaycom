@@ -609,8 +609,10 @@ export const suppliers = pgTable("suppliers", {
   name: text("name").notNull().unique(),
   website: text("website"),
   accountStatus: text("account_status"),
-  /** manual | csv | portal | api */
+  /** How trade prices arrive: manual | csv | authenticated_web | public_plus_trade | api | poa. */
   priceSourceType: text("price_source_type").notNull().default("manual"),
+  /** The supplier used when no brand route says otherwise. */
+  isDefault: boolean("is_default").notNull().default(false),
   integrationMethod: text("integration_method"),
   lastPriceSyncAt: timestamp("last_price_sync_at", { withTimezone: true }),
   priority: integer("priority").notNull().default(100),
@@ -628,16 +630,50 @@ export const supplierCredentials = pgTable("supplier_credentials", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Get Secure's supplier preference per brand: which supplier to buy a brand from, in order. Editable
+ * preference data, not a fixed rule; a brand with no route falls back to the default supplier.
+ */
+export const supplierBrandRoutes = pgTable(
+  "supplier_brand_routes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Brand/family as on the product record, e.g. "Hikvision", "TP-Link VIGI". */
+    brand: text("brand").notNull(),
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "cascade" }),
+    /** 1 = preferred. */
+    rank: integer("rank").notNull().default(1),
+    /** residential | commercial | both */
+    market: text("market").notNull().default("both"),
+    ...provenance(),
+  },
+  (t) => [uniqueIndex("supplier_brand_routes_idx").on(t.brand, t.supplierId, t.market)],
+);
+
 export const products = pgTable(
   "products",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     manufacturer: text("manufacturer").notNull(),
+    /** Brand/family used for routing and tiers, e.g. "TP-Link VIGI", "HiLook", "WD Purple". */
+    family: text("family"),
     model: text("model").notNull(),
     category: text("category").notNull(),
-    /** residential | commercial | both */
+    formFactor: text("form_factor"),
+    /** residential | commercial | both. Kept in step with the two flags below. */
     market: text("market").notNull().default("both"),
+    residentialAllowed: boolean("residential_allowed").notNull().default(true),
+    commercialAllowed: boolean("commercial_allowed").notNull().default(true),
+    /** Get Secure residential tier: a commercial/value position, not a megapixel rule. */
     tier: text("tier"),
+    tierStatus: knowledgeStatusEnum("tier_status").notNull().default("requires_review"),
+    /** Apps / platforms the product works in, e.g. ["Hik-Connect"], ["VIGI app"], ["Ajax app"]. */
+    ecosystem: jsonb("ecosystem").$type<string[]>().notNull().default([]),
+    /** Specification fields looked for in the source but not published there. */
+    unverifiedFields: jsonb("unverified_fields").$type<string[]>().notNull().default([]),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
     /** Category-specific specification (resolution, bitrate, PoE, channels, capacity…). */
     specs: jsonb("specs").$type<Record<string, unknown>>().notNull().default({}),
     warranty: text("warranty"),
@@ -669,11 +705,56 @@ export const supplierProducts = pgTable(
     sourceUrl: text("source_url"),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     priceConfidence: numeric("price_confidence", { precision: 3, scale: 2 }),
+    /** Price on application: the supplier quotes on request, so there is no list cost to use. */
+    priceOnApplication: boolean("price_on_application").notNull().default(false),
+    /** manual | csv | authenticated_web | public_plus_trade | api — how the current cost arrived. */
+    priceSource: text("price_source"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("supplier_products_idx").on(t.productId, t.supplierId)],
 );
+
+/**
+ * Documented relationships between products: which recorder, junction box or bracket goes with a
+ * camera, which drives a recorder takes, what a kit contains.
+ */
+export const productCompatibility = pgTable(
+  "product_compatibility",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** camera_nvr | camera_junction_box | camera_wall_bracket | camera_pole_bracket | nvr_hdd | kit_component */
+    kind: text("kind").notNull(),
+    fromProductId: uuid("from_product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    toProductId: uuid("to_product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    quantity: integer("quantity").notNull().default(1),
+    ...provenance(),
+  },
+  (t) => [uniqueIndex("product_compatibility_idx").on(t.kind, t.fromProductId, t.toProductId), index("product_compatibility_to_idx").on(t.toProductId)],
+);
+
+/**
+ * Standard materials: what a residential install uses beyond the hardware (Cat6, connectors,
+ * fixings, weatherproofing, consumables). Customers see one line; approvers see the contents and cost.
+ */
+export const materialsPackages = pgTable("materials_packages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  propertyType: text("property_type").notNull().default("residential"),
+  customerDescription: text("customer_description").notNull().default("Cabling and standard installation materials"),
+  items: jsonb("items").$type<{ description: string; quantity?: string | null; costExGst?: number | null }[]>().notNull().default([]),
+  /** Internal cost of the whole package, ex GST. Null until Get Secure sets it. */
+  costExGst: numeric("cost_ex_gst", { precision: 12, scale: 2 }),
+  /** What the customer is charged, ex GST. Null until Get Secure sets it. */
+  sellExGst: numeric("sell_ex_gst", { precision: 12, scale: 2 }),
+  isDefault: boolean("is_default").notNull().default(false),
+  version: integer("version").notNull().default(1),
+  ...provenance(),
+});
 
 export const productPriceHistory = pgTable(
   "product_price_history",
@@ -702,8 +783,16 @@ export const installationPackages = pgTable("installation_packages", {
   minCameras: integer("min_cameras").notNull(),
   maxCameras: integer("max_cameras").notNull(),
   storeys: integer("storeys"),
-  estimatedHours: numeric("estimated_hours", { precision: 6, scale: 2 }).notNull(),
-  allowanceExGst: numeric("allowance_ex_gst", { precision: 12, scale: 2 }).notNull(),
+  /** Null until Get Secure enters it. */
+  estimatedHours: numeric("estimated_hours", { precision: 6, scale: 2 }),
+  /** Internal labour rate, NZD/hour ex GST. Null uses the policy rate. */
+  labourRate: numeric("labour_rate", { precision: 8, scale: 2 }),
+  /** Package price charged for installation, ex GST. Null until Get Secure sets it. */
+  allowanceExGst: numeric("allowance_ex_gst", { precision: 12, scale: 2 }),
+  materialsPackageId: uuid("materials_package_id").references(() => materialsPackages.id, { onDelete: "set null" }),
+  conduitIncluded: boolean("conduit_included").notNull().default(false),
+  /** Conduit allowance charged, ex GST, when conduit applies. Null until set. */
+  conduitAllowanceExGst: numeric("conduit_allowance_ex_gst", { precision: 12, scale: 2 }),
   includedMaterials: jsonb("included_materials").$type<string[]>().notNull().default([]),
   assumptions: jsonb("assumptions").$type<string[]>().notNull().default([]),
   exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
@@ -862,6 +951,15 @@ export const cctvAssessmentsRelations = relations(cctvAssessments, ({ one }) => 
   lead: one(leads, { fields: [cctvAssessments.leadId], references: [leads.id] }),
   createdBy: one(users, { fields: [cctvAssessments.createdById], references: [users.id] }),
 }));
+export const supplierBrandRoutesRelations = relations(supplierBrandRoutes, ({ one }) => ({
+  supplier: one(suppliers, { fields: [supplierBrandRoutes.supplierId], references: [suppliers.id] }),
+}));
+
+export const productCompatibilityRelations = relations(productCompatibility, ({ one }) => ({
+  from: one(products, { fields: [productCompatibility.fromProductId], references: [products.id], relationName: "compat_from" }),
+  to: one(products, { fields: [productCompatibility.toProductId], references: [products.id], relationName: "compat_to" }),
+}));
+
 export const draftsRelations = relations(drafts, ({ one }) => ({
   lead: one(leads, { fields: [drafts.leadId], references: [leads.id] }),
   contact: one(contacts, { fields: [drafts.contactId], references: [contacts.id] }),
@@ -928,3 +1026,6 @@ export type Draft = typeof drafts.$inferSelect;
 export type CctvAssessment = typeof cctvAssessments.$inferSelect;
 export type ProductRow = typeof products.$inferSelect;
 export type Supplier = typeof suppliers.$inferSelect;
+export type SupplierBrandRoute = typeof supplierBrandRoutes.$inferSelect;
+export type ProductCompatibilityRow = typeof productCompatibility.$inferSelect;
+export type MaterialsPackage = typeof materialsPackages.$inferSelect;

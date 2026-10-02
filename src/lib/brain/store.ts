@@ -13,8 +13,11 @@ import {
   emails,
   installationPackages,
   leads,
+  materialsPackages,
+  productCompatibility,
   productPriceHistory,
   products,
+  supplierBrandRoutes,
   supplierProducts,
   suppliers,
   users,
@@ -26,7 +29,21 @@ import { createPreparedQuote } from "@/lib/quotes/workflow";
 import { composeEmail, composeQuote } from "./compose";
 import { assessCctv, ENGINE_VERSION } from "./engine";
 import { DEFAULT_POLICIES, POLICY_KEYS, mergePolicies } from "./policy";
-import type { Catalogue, DecisionPacket, EnquiryInput, InstallationPackage, KnowledgeStatus, Policies, PolicyValue, Product, ProductPrice } from "./types";
+import type {
+  BrandRoute,
+  Catalogue,
+  CompatibilityKind,
+  DecisionPacket,
+  EnquiryInput,
+  InstallationPackage,
+  KnowledgeStatus,
+  MaterialsPackage,
+  Policies,
+  PolicyValue,
+  Product,
+  ProductOffer,
+} from "./types";
+import { applyReferenceCatalogue } from "./reference/apply";
 import { TRUSTED_STATUSES } from "./types";
 
 const actorId = (a: Actor) => (a.kind === "human" ? a.userId : null);
@@ -100,40 +117,62 @@ export async function savePolicy(key: keyof Policies, value: unknown, status: Kn
 // ---------- catalogue ----------
 
 export async function loadCatalogue(): Promise<Catalogue> {
-  const [rows, offers, pkgs] = await Promise.all([
+  await applyReferenceCatalogue();
+  const [rows, offers, pkgs, mats, links, routes] = await Promise.all([
     db.select().from(products),
     db
-      .select({ o: supplierProducts, supplier: suppliers.name, priority: suppliers.priority })
+      .select({ o: supplierProducts, supplier: suppliers.name, priority: suppliers.priority, isDefault: suppliers.isDefault, supplierStatus: suppliers.status })
       .from(supplierProducts)
       .innerJoin(suppliers, eq(supplierProducts.supplierId, suppliers.id)),
     db.select().from(installationPackages),
+    db.select().from(materialsPackages),
+    db.select().from(productCompatibility),
+    db.select({ r: supplierBrandRoutes, supplier: suppliers.name }).from(supplierBrandRoutes).innerJoin(suppliers, eq(supplierBrandRoutes.supplierId, suppliers.id)),
   ]);
-  const byProduct = new Map<string, typeof offers>();
-  for (const o of offers) byProduct.set(o.o.productId, [...(byProduct.get(o.o.productId) ?? []), o]);
+  const byProduct = new Map<string, ProductOffer[]>();
+  for (const o of offers) {
+    if (o.supplierStatus === "deprecated") continue;
+    const offer: ProductOffer = {
+      supplierId: o.o.supplierId,
+      supplier: o.supplier,
+      supplierIsDefault: o.isDefault,
+      supplierPriority: o.priority,
+      supplierSku: o.o.supplierSku,
+      costExGst: num(o.o.costExGst),
+      approved: o.o.priceApproved,
+      pendingCostExGst: num(o.o.pendingCostExGst),
+      priceOnApplication: o.o.priceOnApplication,
+      stock: o.o.stock,
+      lastChecked: o.o.lastCheckedAt,
+      confidence: num(o.o.priceConfidence),
+    };
+    byProduct.set(o.o.productId, [...(byProduct.get(o.o.productId) ?? []), offer]);
+  }
 
-  const list: Product[] = rows.map((r) => {
-    const candidates = (byProduct.get(r.id) ?? []).filter((x) => x.o.costExGst != null);
-    candidates.sort(
-      (a, b) => Number(b.o.priceApproved) - Number(a.o.priceApproved) || a.priority - b.priority || Number(a.o.costExGst) - Number(b.o.costExGst),
-    );
-    const best = candidates[0];
-    const price: ProductPrice | null = best
-      ? { supplier: best.supplier, supplierSku: best.o.supplierSku, costExGst: Number(best.o.costExGst), lastChecked: best.o.lastCheckedAt, confidence: num(best.o.priceConfidence), approved: best.o.priceApproved }
-      : null;
-    return {
-      ...(r.specs as Record<string, unknown>),
-      id: r.id,
-      manufacturer: r.manufacturer,
-      model: r.model,
-      category: r.category,
-      market: r.market,
-      tier: r.tier,
-      status: r.status,
-      warranty: r.warranty,
-      alternatives: r.alternatives,
-      price,
-    } as Product;
-  });
+  const list: Product[] = rows.map(
+    (r) =>
+      ({
+        ...(r.specs as Record<string, unknown>),
+        id: r.id,
+        manufacturer: r.manufacturer,
+        family: r.family ?? r.manufacturer,
+        model: r.model,
+        category: r.category,
+        formFactor: r.formFactor,
+        residentialAllowed: r.residentialAllowed,
+        commercialAllowed: r.commercialAllowed,
+        tier: r.tier,
+        tierStatus: r.tierStatus,
+        status: r.status,
+        ecosystem: r.ecosystem,
+        sourceUrl: r.sourceUrl,
+        lastVerifiedAt: r.lastVerifiedAt,
+        warranty: r.warranty,
+        alternatives: r.alternatives,
+        offers: byProduct.get(r.id) ?? [],
+        price: null,
+      }) as unknown as Product,
+  );
   const packages: InstallationPackage[] = pkgs.map((p) => ({
     id: p.id,
     name: p.name,
@@ -141,15 +180,37 @@ export async function loadCatalogue(): Promise<Catalogue> {
     minCameras: p.minCameras,
     maxCameras: p.maxCameras,
     storeys: p.storeys,
-    estimatedHours: Number(p.estimatedHours),
-    allowanceExGst: Number(p.allowanceExGst),
+    estimatedHours: num(p.estimatedHours),
+    labourRate: num(p.labourRate),
+    allowanceExGst: num(p.allowanceExGst),
+    materialsPackageId: p.materialsPackageId,
+    conduitIncluded: p.conduitIncluded,
+    conduitAllowanceExGst: num(p.conduitAllowanceExGst),
     includedMaterials: p.includedMaterials,
     assumptions: p.assumptions,
     exclusions: p.exclusions,
     version: p.version,
     status: p.status,
   }));
-  return { products: list, packages };
+  const materials: MaterialsPackage[] = mats.map((m) => ({
+    id: m.id,
+    name: m.name,
+    propertyType: m.propertyType as MaterialsPackage["propertyType"],
+    customerDescription: m.customerDescription,
+    items: m.items,
+    costExGst: num(m.costExGst),
+    sellExGst: num(m.sellExGst),
+    isDefault: m.isDefault,
+    version: m.version,
+    status: m.status,
+  }));
+  return {
+    products: list,
+    packages,
+    materialsPackages: materials,
+    compatibility: links.map((l) => ({ kind: l.kind as CompatibilityKind, fromId: l.fromProductId, toId: l.toProductId, quantity: l.quantity, status: l.status })),
+    routes: routes.map(({ r, supplier }) => ({ brand: r.brand, supplierId: r.supplierId, supplier, rank: r.rank, market: r.market as BrandRoute["market"], status: r.status })),
+  };
 }
 
 /**
@@ -158,15 +219,41 @@ export async function loadCatalogue(): Promise<Catalogue> {
  * silently changing quote pricing.
  */
 export async function recordSupplierPrice(
-  input: { productId: string; supplierId: string; costExGst?: number | null; costIncGst?: number | null; supplierSku?: string | null; sourceUrl?: string | null; stock?: string | null; source: string },
+  input: {
+    productId: string;
+    supplierId: string;
+    costExGst?: number | null;
+    costIncGst?: number | null;
+    supplierSku?: string | null;
+    sourceUrl?: string | null;
+    stock?: string | null;
+    source: string;
+    /** manual | csv | authenticated_web | public_plus_trade | api */
+    priceSource?: string;
+    /** The supplier quotes this on application: record the listing without a cost. */
+    priceOnApplication?: boolean;
+  },
   actor: Actor,
+  opts: { bulk?: boolean } = {},
 ): Promise<{ offerId: string; held: boolean; changedPct: number | null }> {
   if (actor.kind === "agent") throw new GuardrailError("Agents cannot enter supplier prices.");
   const policies = await loadPolicies();
   const gst = policies.gstRate.value;
+  if (input.priceOnApplication) {
+    const [offer] = await db
+      .insert(supplierProducts)
+      .values({ productId: input.productId, supplierId: input.supplierId, priceOnApplication: true, supplierSku: input.supplierSku ?? null, sourceUrl: input.sourceUrl ?? null, stock: input.stock ?? null, lastCheckedAt: new Date(), priceSource: input.priceSource ?? "manual" })
+      .onConflictDoUpdate({
+        target: [supplierProducts.productId, supplierProducts.supplierId],
+        set: { priceOnApplication: true, supplierSku: input.supplierSku ?? null, stock: input.stock ?? null, lastCheckedAt: new Date(), priceSource: input.priceSource ?? "manual", updatedAt: new Date() },
+      })
+      .returning({ id: supplierProducts.id });
+    return { offerId: offer.id, held: false, changedPct: null };
+  }
   const ex = input.costExGst ?? (input.costIncGst != null ? Math.round((input.costIncGst / (1 + gst)) * 100) / 100 : null);
   if (ex == null || !(ex > 0)) throw new Error("Enter a cost (ex GST or inc GST).");
-  const approver = actor.kind === "human" && actor.canApprove;
+  // A bulk import or sync is never its own review, even when an approver starts it.
+  const approver = actor.kind === "human" && actor.canApprove && !opts.bulk;
 
   return db.transaction(async (tx) => {
     let offer = await tx.query.supplierProducts.findFirst({ where: and(eq(supplierProducts.productId, input.productId), eq(supplierProducts.supplierId, input.supplierId)) });
@@ -184,11 +271,18 @@ export async function recordSupplierPrice(
       sourceUrl: input.sourceUrl ?? offer.sourceUrl,
       stock: input.stock ?? offer.stock,
       costIncGst: input.costIncGst != null ? input.costIncGst.toFixed(2) : offer.costIncGst,
-      lastCheckedAt: new Date(),
+      priceOnApplication: false,
       updatedAt: new Date(),
+      // A held change leaves the quoted cost, and the date it was confirmed, as they were.
       ...(hold
         ? { pendingCostExGst: ex.toFixed(2) }
-        : { costExGst: ex.toFixed(2), pendingCostExGst: null, priceApproved: approver ? true : old == null ? false : offer.priceApproved }),
+        : {
+            costExGst: ex.toFixed(2),
+            pendingCostExGst: null,
+            lastCheckedAt: new Date(),
+            priceSource: input.priceSource ?? "manual",
+            priceApproved: approver ? true : old == null ? false : offer.priceApproved,
+          }),
     };
     await tx.update(supplierProducts).set(patch).where(eq(supplierProducts.id, offer.id));
     await tx.insert(productPriceHistory).values({
@@ -212,7 +306,7 @@ export async function approveSupplierPrice(offerId: string, actor: Actor): Promi
   if (!offer) throw new Error("Price not found");
   await db
     .update(supplierProducts)
-    .set({ ...(offer.pendingCostExGst != null ? { costExGst: offer.pendingCostExGst, pendingCostExGst: null } : {}), priceApproved: true, updatedAt: new Date() })
+    .set({ ...(offer.pendingCostExGst != null ? { costExGst: offer.pendingCostExGst, pendingCostExGst: null, lastCheckedAt: new Date() } : {}), priceApproved: true, updatedAt: new Date() })
     .where(eq(supplierProducts.id, offerId));
   const latest = await db.query.productPriceHistory.findFirst({ where: eq(productPriceHistory.supplierProductId, offerId), orderBy: [desc(productPriceHistory.recordedAt)] });
   if (latest) await db.update(productPriceHistory).set({ reviewStatus: "approved", reviewedById: actor.userId, reviewedAt: new Date() }).where(eq(productPriceHistory.id, latest.id));
@@ -342,6 +436,12 @@ export async function prepareFromAssessment(assessmentId: string, what: { email?
           complete: c.complete,
           unpriced: c.unpriced,
           lines: c.lines,
+          refreshRequired: c.refreshRequired ?? [],
+          kit: c.kit ?? null,
+          labourBasis: packet.labour.basis ?? null,
+          engineVersion: packet.engineVersion,
+          // The product, supplier, cost and price date each line used, frozen with the quote.
+          snapshotAt: new Date().toISOString(),
         },
         confidence: packet.confidence as unknown as Record<string, unknown>,
       },

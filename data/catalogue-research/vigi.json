@@ -1,0 +1,1079 @@
+{
+  "products": [
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI C340",
+      "category": "camera",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/vigi-c340/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202407/20240715/VIGI%20C340(2.8%204%206mm)%202.20%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 4,
+        "horizontalPixels": 2560,
+        "verticalPixels": 1440,
+        "imageSensor": "1/3\" Progressive Scan CMOS",
+        "lensOptions": [
+          2.8,
+          4,
+          6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 102.5,
+          "4": 76.3,
+          "6": 50.6
+        },
+        "wdrType": "digital",
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "white light flashing",
+          "audible warning"
+        ],
+        "dcInput": "12 VDC",
+        "poeStandard": "802.3af",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95%",
+        "poeMaxW": 8,
+        "dcMaxW": 7,
+        "analytics": [
+          "human_vehicle",
+          "intrusion",
+          "line_crossing",
+          "region_entrance",
+          "region_exit",
+          "object_abandoned",
+          "object_removal",
+          "audio_exception",
+          "video_tampering",
+          "motion_detection"
+        ],
+        "onvifProfiles": [
+          "S"
+        ],
+        "ecosystem": [
+          "VIGI App"
+        ],
+        "material": "plastic"
+      },
+      "unverified": [
+        "bitrateKbps",
+        "storage",
+        "vandal",
+        "loitering"
+      ],
+      "hardwareVersion": "V2.20",
+      "orderableVariants": [
+        "VIGI C340(2.8mm)",
+        "VIGI C340(4mm)",
+        "VIGI C340(6mm)"
+      ],
+      "notes": [
+        "4MP Outdoor Full-Colour Bullet. Current hardware V2.20 (AU page default).",
+        "Main-stream max bitrate conflicts: AU product page says 4 Mbps, V2.20 datasheet says 3 Mbps - omitted.",
+        "microSD max conflicts: AU main page + datasheet say 512 GB, AU lens-variant pages say 256 GB - omitted.",
+        "ONVIF: datasheet and lens pages say Profile S; AU main page says S/T/G - only S recorded.",
+        "Loitering detection listed in datasheet only, not on product page - omitted.",
+        "PoE printed as '802.3af/at, class 0, Max. 8 W'; 12 V DC max 7 W."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI C445",
+      "category": "camera",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/vigi-c445/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202410/20241018/VIGI%20C445%20%201.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 4,
+        "horizontalPixels": 2688,
+        "verticalPixels": 1520,
+        "imageSensor": "1/2.7\" Progressive Scan CMOS",
+        "lensOptions": [
+          2.8,
+          4
+        ],
+        "hfovByLensDeg": {
+          "2.8": 100,
+          "4": 80.4
+        },
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "bitrateKbps": [
+          256,
+          6000
+        ],
+        "bitrateText": "Main Stream: 256 Kbps to 6 Mbps",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "white light flashing",
+          "audible warning"
+        ],
+        "dcInput": "12 VDC",
+        "poeStandard": "802.3af",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95%",
+        "poeMaxW": 12,
+        "dcMaxW": 11,
+        "analytics": [
+          "human_vehicle",
+          "intrusion",
+          "line_crossing",
+          "region_entrance",
+          "region_exit",
+          "object_abandoned",
+          "object_removal",
+          "loitering",
+          "scene_change",
+          "video_tampering",
+          "motion_detection",
+          "smart_search"
+        ],
+        "onvifProfiles": [
+          "S"
+        ],
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager",
+          "VIGI VMS"
+        ],
+        "storage": "microSD up to 512 GB",
+        "material": "metal"
+      },
+      "unverified": [
+        "vandal",
+        "audio_exception"
+      ],
+      "hardwareVersion": "V1",
+      "orderableVariants": [
+        "VIGI C445(2.8mm)",
+        "VIGI C445(4mm)"
+      ],
+      "notes": [
+        "4MP Full-Colour Turret, IP67, metal housing. AU download page has no datasheet; datasheet taken from the global (en) VIGI download page.",
+        "120 dB WDR; TP-Link notes only DWDR is available when People & Vehicle Analytics is enabled.",
+        "smart_search = 'People & Vehicle Analytics' post-event search (requires VIGI software).",
+        "Abnormal Sound Detection is in the datasheet but not on the AU product page - omitted."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI C455",
+      "category": "camera",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/vigi-c455/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202410/20241018/VIGI%20C455%20%201.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "1/2.7\" Progressive Scan CMOS",
+        "lensOptions": [
+          2.8,
+          4
+        ],
+        "hfovByLensDeg": {
+          "2.8": 111.4,
+          "4": 88
+        },
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "bitrateKbps": [
+          256,
+          6000
+        ],
+        "bitrateText": "Main Stream: 256 Kbps to 6 Mbps",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "white light flashing",
+          "audible warning"
+        ],
+        "dcInput": "12 VDC",
+        "poeStandard": "802.3af",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95%",
+        "poeMaxW": 12,
+        "dcMaxW": 11,
+        "analytics": [
+          "human_vehicle",
+          "intrusion",
+          "line_crossing",
+          "region_entrance",
+          "region_exit",
+          "object_abandoned",
+          "object_removal",
+          "loitering",
+          "scene_change",
+          "video_tampering",
+          "motion_detection",
+          "smart_search"
+        ],
+        "onvifProfiles": [
+          "S"
+        ],
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager",
+          "VIGI VMS"
+        ],
+        "storage": "microSD up to 512 GB",
+        "material": "metal"
+      },
+      "unverified": [
+        "vandal",
+        "audio_exception"
+      ],
+      "hardwareVersion": "V1",
+      "orderableVariants": [
+        "VIGI C455(2.8mm)",
+        "VIGI C455(4mm)"
+      ],
+      "notes": [
+        "Marketed as 5MP Full-Colour Turret; max resolution 2880x1620. IP67, metal housing.",
+        "120 dB WDR (DWDR only when People & Vehicle Analytics is enabled).",
+        "Abnormal Sound Detection is in the datasheet but not on the AU product page - omitted."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI C350",
+      "category": "camera",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/vigi-c350/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2026/202603/20260326/VIGI%20C350(2.8mm&4mm&6mm)(UN)%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "1/2.7\" Progressive Scan CMOS (V1)",
+        "lensOptions": [
+          2.8,
+          4,
+          6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 109,
+          "4": 90,
+          "6": 56
+        },
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "bitrateKbps": [
+          256,
+          6000
+        ],
+        "bitrateText": "Main Stream: 256 Kbps to 6 Mbps",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "white light flashing",
+          "audible warning"
+        ],
+        "dcInput": "12 VDC",
+        "poeStandard": "802.3af",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95%",
+        "poeMaxW": 10.5,
+        "dcMaxW": 9,
+        "analytics": [
+          "human_vehicle",
+          "intrusion",
+          "line_crossing",
+          "region_entrance",
+          "region_exit",
+          "object_abandoned",
+          "object_removal",
+          "loitering",
+          "audio_exception",
+          "scene_change",
+          "video_tampering",
+          "motion_detection",
+          "smart_search"
+        ],
+        "onvifProfiles": [
+          "S"
+        ],
+        "ecosystem": [
+          "VIGI App"
+        ],
+        "storage": "microSD up to 512 GB",
+        "material": "plastic"
+      },
+      "unverified": [
+        "vandal"
+      ],
+      "hardwareVersion": "V1",
+      "orderableVariants": [
+        "VIGI C350(2.8mm)",
+        "VIGI C350(4mm)",
+        "VIGI C350(6mm)"
+      ],
+      "notes": [
+        "5MP Full-Colour Bullet, IP67. Specs are for hardware V1 (the version on the AU site).",
+        "Datasheet also covers V1.20 (1/2.65\" sensor, 2.8 mm HFOV 108.3 deg, 4 mm HFOV 88.4 deg, no 6 mm lens) - if V1.20 stock is supplied, use those FOVs.",
+        "ONVIF: AU page says Profile S, datasheet says G/S/T - only S recorded.",
+        "H.265 uses tile encoding above 2688 horizontal; TP-Link warns third-party NVRs without tile-encoding support cannot use H.265 - use a VIGI NVR."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI NVR1104H-4P",
+      "category": "nvr",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1104h-4p/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2025/202512/20251209/NVR1104H-4P(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 4,
+        "poePorts": 4,
+        "poePerPortW": 30,
+        "poeBudgetW": 53,
+        "poeStandard": "802.3at",
+        "incomingMbps": 80,
+        "outgoingMbps": 60,
+        "recordingResolutionMaxMp": 8,
+        "decoding": {
+          "8": 2,
+          "5": 3,
+          "4": 4
+        },
+        "decodingText": "25fps: 2-ch @ 8MP, 4-ch @ 4MP; 30fps: 4-ch @ 4MP, 3-ch @ 5MP",
+        "hddBays": 1,
+        "maxHddTb": 10,
+        "maxTotalTb": 10,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection",
+          "video_tampering",
+          "scene_change",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "loitering",
+          "object_abandoned_removal",
+          "human_vehicle",
+          "audio_exception",
+          "smart_frame"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S"
+        ],
+        "alarmIn": 0,
+        "alarmOut": 0,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager"
+        ],
+        "hdmiOutput": "1x HDMI, up to 3840x2160/30Hz",
+        "vgaOutput": "1x VGA, up to 1920x1080/60Hz",
+        "lanPort": "1x RJ-45 10/100 Mbps",
+        "usb": "2x USB 2.0",
+        "powerSupply": "53.5V DC external adapter",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "builtInSpeaker": true,
+        "dimensionsMm": "200.3 x 200.3 x 43"
+      },
+      "unverified": [
+        "compatibleFamilies"
+      ],
+      "notes": [
+        "4-ch PoE+ NVR, 53 W total / 30 W per port, 1 SATA bay up to 10 TB, HDD not included. Side-access HDD bay, built-in speaker.",
+        "Playback note: simultaneous playback may be fewer than 4 channels if total resolution exceeds 16MP.",
+        "decoding map merges the 25fps and 30fps lines - see decodingText."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI NVR1004H-4P",
+      "category": "nvr",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1004h-4p/v1%20(no%20hdd)/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202412/20241217/NVR1004H-4P(UN)1.0%20%20NVR1004H-4P-2TB(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 4,
+        "poePorts": 4,
+        "poePerPortW": 30,
+        "poeBudgetW": 53,
+        "poeStandard": "802.3at",
+        "incomingMbps": 80,
+        "outgoingMbps": 60,
+        "recordingResolutionMaxMp": 8,
+        "decoding": {
+          "8": 2,
+          "5": 3,
+          "4": 4
+        },
+        "decodingText": "25fps: 2-ch @ 8MP, 4-ch @ 4MP; 30fps: 4-ch @ 4MP, 3-ch @ 5MP",
+        "hddBays": 1,
+        "maxHddTb": 10,
+        "maxTotalTb": 10,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection",
+          "video_tampering",
+          "scene_change",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "loitering",
+          "object_abandoned_removal",
+          "human_vehicle",
+          "audio_exception",
+          "smart_frame"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S"
+        ],
+        "alarmIn": 0,
+        "alarmOut": 0,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager"
+        ],
+        "hdmiOutput": "1x HDMI, up to 3840x2160/30Hz",
+        "vgaOutput": "1x VGA, up to 1920x1080/60Hz",
+        "lanPort": "1x RJ-45 10/100 Mbps",
+        "usb": "1 front + 1 rear USB 2.0",
+        "powerSupply": "53.5V DC external adapter",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "builtInSpeaker": false,
+        "dimensionsMm": "246.2 x 148.2 x 45"
+      },
+      "unverified": [
+        "compatibleFamilies"
+      ],
+      "orderableVariants": [
+        "VIGI NVR1004H-4P (no HDD)",
+        "VIGI NVR1004H-4P-2TB (1x 2TB HDD preinstalled)"
+      ],
+      "notes": [
+        "Included mainly as the NVR in kit VIGI NK4P-T4425-2T. Specs from the datasheet and the AU 'V1 (no HDD)' page.",
+        "The AU default NVR1004H-4P page (2TB variant) shows NVR1104H-4P-like dimensions (200.3x200.3x43) and a built-in speaker, which contradicts the NVR1004H-4P datasheet (246.2x148.2x45, speaker N/A) - datasheet values used.",
+        "ONVIF: datasheet says Profile S; AU no-HDD page footnote says S/T/G - only S recorded."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI NVR1008H-8MP",
+      "category": "nvr",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1008h-8mp/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202412/20241220/NVR1008H-8MP(UN)1.20%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 8,
+        "poePorts": 8,
+        "poePerPortW": 30,
+        "poeBudgetW": 113,
+        "poeStandard": "802.3at",
+        "incomingMbps": 80,
+        "outgoingMbps": 60,
+        "recordingResolutionMaxMp": 8,
+        "decoding": {
+          "8": 2,
+          "5": 2,
+          "4": 4,
+          "3": 4,
+          "2": 8
+        },
+        "decodingText": "25fps: 2-ch @ 8MP, 4-ch @ 4MP, 8-ch @ 2MP; 30fps: 4-ch @ 3MP, 2-ch @ 5MP",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection",
+          "video_tampering",
+          "scene_change",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "loitering",
+          "object_abandoned_removal",
+          "human_vehicle",
+          "audio_exception",
+          "smart_frame"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S"
+        ],
+        "alarmIn": 0,
+        "alarmOut": 0,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager"
+        ],
+        "hdmiOutput": "1x HDMI, up to 3840x2160/30Hz",
+        "vgaOutput": "1x VGA, up to 1920x1080/60Hz",
+        "lanPort": "1x RJ-45 10/100 Mbps",
+        "usb": "2x USB 2.0",
+        "powerSupply": "53.5V DC external adapter",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "builtInSpeaker": false,
+        "dimensionsMm": "294 x 180 x 44"
+      },
+      "unverified": [
+        "compatibleFamilies"
+      ],
+      "hardwareVersion": "V1.20",
+      "notes": [
+        "8-ch PoE+ NVR, 113 W total / 30 W per port, 1 SATA bay up to 16 TB, HDD not included. Power adapter 53.5V DC/2.43A.",
+        "ONVIF: AU page says Profile S/T, datasheet says Profile S (footnote 'currently supports ONVIF Profile S') - only S recorded.",
+        "Datasheet audio line misprinted as '1-ch RCA Input; 1-ch RCA Input'; AU page says 1-ch RCA input + 1-ch RCA output.",
+        "decoding map merges the 25fps and 30fps lines - see decodingText."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI NVR1008H-8P",
+      "category": "nvr",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1008h-8p/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2025/202512/20251209/NVR1008H-8P(UN)1.20%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "channels": 8,
+        "poePorts": 8,
+        "poePerPortW": 30,
+        "poeBudgetW": 53,
+        "poeStandard": "802.3at",
+        "incomingMbps": 80,
+        "outgoingMbps": 60,
+        "recordingResolutionMaxMp": 8,
+        "decoding": {
+          "8": 2,
+          "5": 2,
+          "4": 4,
+          "3": 4,
+          "2": 8
+        },
+        "decodingText": "25fps: 2-ch @ 8MP, 4-ch @ 4MP, 8-ch @ 2MP; 30fps: 4-ch @ 3MP, 2-ch @ 5MP",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "analytics": [
+          "motion_detection",
+          "video_tampering",
+          "scene_change",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "loitering",
+          "object_abandoned_removal",
+          "human_vehicle",
+          "audio_exception",
+          "smart_frame"
+        ],
+        "onvif": true,
+        "onvifProfiles": [
+          "S",
+          "T"
+        ],
+        "alarmIn": 0,
+        "alarmOut": 0,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager"
+        ],
+        "hdmiOutput": "1x HDMI, up to 3840x2160/30Hz",
+        "vgaOutput": "1x VGA, up to 1920x1080/60Hz",
+        "lanPort": "1x RJ-45 10/100 Mbps",
+        "usb": "2x USB 2.0",
+        "powerSupply": "53.5V DC external adapter",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "builtInSpeaker": false,
+        "dimensionsMm": "294 x 180 x 44"
+      },
+      "unverified": [
+        "compatibleFamilies"
+      ],
+      "hardwareVersion": "V1.20",
+      "notes": [
+        "8-ch PoE+ NVR but only 53 W total PoE budget (30 W per port) - fewer high-draw cameras than the -8MP (113 W). Power adapter 53.5V DC/1.31A.",
+        "1 SATA bay up to 16 TB, HDD not included."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VJB-240",
+      "category": "junction_box",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-accessory/vjb-240/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2026/202609/20260904/VJB-240(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "InSight S655I",
+          "InSight S485PI",
+          "InSight S485",
+          "InSight S445ZI",
+          "InSight S445S",
+          "InSight S455",
+          "InSight S285",
+          "InSight S245ZI",
+          "VIGI C485",
+          "VIGI C455",
+          "VIGI C450",
+          "VIGI C445",
+          "VIGI C440",
+          "VIGI C440I",
+          "VIGI C440-W",
+          "VIGI C430",
+          "VIGI C430I",
+          "VIGI C420I",
+          "VIGI C250",
+          "VIGI C240I",
+          "VIGI C240",
+          "VIGI C230I",
+          "VIGI C230I Mini",
+          "VIGI C230",
+          "VIGI C220I"
+        ],
+        "compatibleTypes": "dome/turret/fisheye",
+        "mounting": "wall",
+        "material": "Aluminium alloy, SGCC",
+        "dimensionsMm": "181 x 134 x 59",
+        "weightG": 533,
+        "colours": [
+          "VIGI White",
+          "VIGI Black"
+        ],
+        "compatibilityListUrl": "https://www.vigi.com/au/vigi-accessories/product-list/"
+      },
+      "unverified": [
+        "ingress"
+      ],
+      "notes": [
+        "Wall-mount junction box for dome/turret/fisheye cameras. No IP rating printed. compatibleModels copied from TP-Link AU 'Device Compatible with VIGI Accessories' list (listed and higher hardware versions are compatible)."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VJB-300",
+      "category": "junction_box",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-accessory/vjb-300/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2026/202607/20260716/VJB-300(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "InSight S655I",
+          "InSight S485PI",
+          "InSight S485",
+          "InSight S445ZI",
+          "InSight S445S",
+          "InSight S455",
+          "InSight S385",
+          "InSight S355",
+          "InSight S345S",
+          "InSight S285",
+          "VIGI C540S",
+          "VIGI C540-W",
+          "VIGI C540-4G (EU)",
+          "VIGI C540",
+          "VIGI C540V",
+          "VIGI C485",
+          "VIGI C455",
+          "VIGI C450",
+          "VIGI C445",
+          "VIGI C440",
+          "VIGI C440I",
+          "VIGI C440-W",
+          "VIGI C430",
+          "VIGI C430I",
+          "VIGI C420I",
+          "VIGI C385",
+          "VIGI C350",
+          "VIGI C355",
+          "VIGI C345",
+          "VIGI C340S",
+          "VIGI C340I",
+          "VIGI C340-W",
+          "VIGI C340",
+          "VIGI C330I",
+          "VIGI C320I",
+          "VIGI C330",
+          "VIGI C250",
+          "VIGI C240I",
+          "VIGI C240",
+          "VIGI C230I",
+          "VIGI C230I Mini",
+          "VIGI C230",
+          "VIGI C220I"
+        ],
+        "compatibleTypes": "bullet/PT/turret/dome",
+        "mounting": "indoor or outdoor wall/ceiling",
+        "material": "Aluminium alloy",
+        "dimensionsMm": "body dia. 125 x 45.85; overall 125 x 130.4 x 45.85 (incl. wire outlet)",
+        "weightG": 370,
+        "colours": [
+          "VIGI White",
+          "VIGI Black"
+        ],
+        "waterproof": "'Waterproof design' with waterproof accessories (no IP rating printed)",
+        "compatibilityListUrl": "https://www.vigi.com/au/vigi-accessories/product-list/"
+      },
+      "unverified": [
+        "ingress"
+      ],
+      "notes": [
+        "Datasheet says 'Compatible with All VIGI Cameras' but the product page says it is not compatible with all VIGI cameras - use the compatibility list."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VMB-350",
+      "category": "pole_bracket",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-accessory/vmb-350/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2025/202502/20250210/VMB-350(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "InSight S385PI (EU)",
+          "InSight S385",
+          "InSight S355",
+          "InSight S345ZI",
+          "InSight S345S",
+          "InSight S345-4G",
+          "VIGI C540S",
+          "VIGI C540-W",
+          "VIGI C540-4G (EU)",
+          "VIGI C540",
+          "VIGI C540V",
+          "VIGI C385",
+          "VIGI C350",
+          "VIGI C355",
+          "VIGI C345",
+          "VIGI C340S",
+          "VIGI C340I",
+          "InSight S385DPS",
+          "InSight LPR345Z",
+          "VIGI C340-W",
+          "VIGI C340",
+          "VIGI C330I",
+          "VIGI C320I",
+          "VIGI C330"
+        ],
+        "compatibleTypes": "bullet/PT",
+        "poleDiameterMm": [
+          70,
+          130
+        ],
+        "material": "SGCC galvanised and stainless steel",
+        "dimensionsMm": "105 x 100 x 39",
+        "weightG": 392.25,
+        "colours": [
+          "VIGI White"
+        ],
+        "compatibilityListUrl": "https://www.vigi.com/au/vigi-accessories/product-list/"
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI NK4P-T4425-2T",
+      "category": "kit",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk4p-t4425-2t/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202407/20240702/VIGI%20NK4P-T4425-2T(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "components": [
+          {
+            "model": "VIGI C445",
+            "lensMm": 2.8,
+            "qty": 4
+          },
+          {
+            "model": "VIGI NVR1004H-4P",
+            "qty": 1
+          }
+        ],
+        "hddPreinstalled": "1 x 2TB HDD preinstalled in NVR (HDD make/model not stated)",
+        "channels": 4,
+        "poeBudgetW": 53
+      },
+      "unverified": [
+        "hddModel"
+      ],
+      "notes": [
+        "Kit page links the camera to VIGI C445 (2.8mm) and the NVR to VIGI NVR1004H-4P; datasheet shows 4x 4MP Full-Colour Turret cameras and 2TB HDD preinstalled."
+      ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI NK8MP-T6425-2T",
+      "category": "kit",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk8mp-t6425-2t/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202408/20240826/VIGI%20NK8MP-T6425-2T(UN)1.0%20Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "components": [
+          {
+            "model": "VIGI C445",
+            "lensMm": 2.8,
+            "qty": 6
+          },
+          {
+            "model": "VIGI NVR1008H-8MP",
+            "qty": 1
+          }
+        ],
+        "hddPreinstalled": "1 x 2TB HDD preinstalled in NVR (HDD make/model not stated)",
+        "channels": 8,
+        "poeBudgetW": 113
+      },
+      "unverified": [
+        "hddModel"
+      ],
+      "notes": [
+        "Kit page links the camera to VIGI C445 (2.8mm) and the NVR to VIGI NVR1008H-8MP; datasheet shows 6x 4MP Full-Colour Turret cameras (8-ch NVR, 2 spare channels) and 2TB HDD preinstalled."
+      ]
+    }
+  ],
+  "compatibility": [
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI C445",
+      "to": "VJB-240",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI C445",
+      "to": "VJB-300",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI C455",
+      "to": "VJB-240",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI C455",
+      "to": "VJB-300",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI C340",
+      "to": "VJB-300",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "VIGI C340",
+      "to": "VMB-350",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI C350",
+      "to": "VJB-300",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "VIGI C350",
+      "to": "VMB-350",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list"
+    },
+    {
+      "kind": "kit_component",
+      "from": "VIGI NK4P-T4425-2T",
+      "to": "VIGI C445",
+      "qty": 4,
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk4p-t4425-2t/",
+      "note": "kit contents (camera is the 2.8mm lens variant)"
+    },
+    {
+      "kind": "kit_component",
+      "from": "VIGI NK4P-T4425-2T",
+      "to": "VIGI NVR1004H-4P",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk4p-t4425-2t/",
+      "note": "kit contents; NVR ships with 1x 2TB HDD preinstalled"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "VIGI C445",
+      "to": "VIGI NVR1004H-4P",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk4p-t4425-2t/",
+      "note": "bundled together by TP-Link in kit VIGI NK4P-T4425-2T"
+    },
+    {
+      "kind": "kit_component",
+      "from": "VIGI NK8MP-T6425-2T",
+      "to": "VIGI C445",
+      "qty": 6,
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk8mp-t6425-2t/",
+      "note": "kit contents (camera is the 2.8mm lens variant)"
+    },
+    {
+      "kind": "kit_component",
+      "from": "VIGI NK8MP-T6425-2T",
+      "to": "VIGI NVR1008H-8MP",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk8mp-t6425-2t/",
+      "note": "kit contents; NVR ships with 1x 2TB HDD preinstalled"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "VIGI C445",
+      "to": "VIGI NVR1008H-8MP",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk8mp-t6425-2t/",
+      "note": "bundled together by TP-Link in kit VIGI NK8MP-T6425-2T"
+    }
+  ],
+  "notes": [
+    "TP-Link VIGI product pages have moved to www.vigi.com. The NZ regional listing (https://www.vigi.com/nz/business-networking/vigi-network-camera/) returns no products, so the TP-Link Australia VIGI site (www.vigi.com/au/) was used for all items; datasheets are the TP-Link PDFs linked from the AU download pages (C445 datasheet from the global /en/ download page).",
+    "Camera products are one entry per model with lensOptions/hfovByLensDeg; orderable lens codes are in orderableVariants (e.g. 'VIGI C340(4mm)').",
+    "Only fields that agree between the AU product page and the datasheet are recorded; conflicts are listed per product in notes/unverified.",
+    "VIGI C440 and VIGI C450 turrets were NOT included as outdoor cameras: neither the AU page nor the datasheet prints an IP rating (Protection: N/A). The IP67 outdoor turrets are VIGI C445 (4MP) and VIGI C455 (5MP). C440 V2 also shows conflicting HFOV and max power between page and datasheet.",
+    "poeStandard on cameras: printed as '802.3af/at, class 0'.",
+    "activeDeterrence = alarm linkage 'Audible Warning' (built-in speaker) and 'White Light Flashing' (built-in white LEDs); no separate siren or red/blue strobe.",
+    "No vandal (IK) rating is printed for any of these cameras.",
+    "VJB-305 junction box exists but TP-Link's compatibility list does not include any of the cameras in this file (InSight series only), so it was left out.",
+    "Kits ship with a 2TB HDD preinstalled; TP-Link does not state the HDD make/model, so no HDD product was added.",
+    "Both NVR1104H-4P and NVR1004H-4P are current 4-ch PoE+ models on the AU site; NVR1104H-4P is the newer one (side-access HDD bay, built-in speaker). Both NVR1008H-8MP (113 W PoE) and NVR1008H-8P (53 W PoE) are current (hardware V1.20)."
+  ]
+}

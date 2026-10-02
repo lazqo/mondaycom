@@ -1,0 +1,368 @@
+{
+  "products": [
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple",
+      "model": "WD22PURZ",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-hdd/data-sheet-wd-purple-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 2,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "rpm": "5400 RPM",
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 HD cameras",
+        "recommendedBays": "up to 8 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple",
+      "model": "WD23PURZ",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-hdd/data-sheet-wd-purple-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 2,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 64,
+        "rpm": "5400 RPM",
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 HD cameras",
+        "recommendedBays": "up to 8 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple",
+      "model": "WD43PURZ",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-hdd/data-sheet-wd-purple-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 4,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "rpm": "5400 RPM",
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 HD cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple",
+      "model": "WD44PURZ",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-hdd/data-sheet-wd-purple-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 4,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 128,
+        "rpm": "5400 RPM",
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 HD cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple",
+      "model": "WD64PURZ",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-hdd/data-sheet-wd-purple-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 6,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "rpm": "5400 RPM",
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 HD cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple",
+      "model": "WD85PURZ",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-hdd/data-sheet-wd-purple-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 8,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "rpm": "5640 RPM",
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 HD cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple Pro",
+      "model": "WD102PURP",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-pro-hdd/product-brief-wd-purple-pro-sata-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 10,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 512,
+        "rpm": "7200 RPM",
+        "workloadTbYr": 550,
+        "warrantyYears": 5,
+        "maxCameras": "up to 64 HD cameras",
+        "aiStreams": 32,
+        "recommendedBays": "no limit",
+        "mtbfHours": 2000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Western Digital",
+      "family": "WD Purple Pro",
+      "model": "WD122PURP",
+      "category": "hdd",
+      "sourceUrl": "https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-purple-pro-hdd/product-brief-wd-purple-pro-sata-hdd.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 12,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "formFactor": "3.5-inch",
+        "recordingTech": "CMR",
+        "cacheMb": 512,
+        "rpm": "7200 RPM",
+        "workloadTbYr": 550,
+        "warrantyYears": 5,
+        "maxCameras": "up to 64 HD cameras",
+        "aiStreams": 32,
+        "recommendedBays": "no limit",
+        "mtbfHours": 2000000
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk",
+      "model": "ST2000VX017",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai-hm/skyhawk-3-5-hdd-DS1902-17-2107US-July-2021-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 2,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 cameras",
+        "recommendedBays": "up to 8 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk",
+      "model": "ST4000VX016",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai-hm/skyhawk-3-5-hdd-DS1902-17-2107US-July-2021-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 4,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk",
+      "model": "ST6000VX009",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai-hm/skyhawk-3-5-hdd-DS1902-17-2107US-July-2021-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 6,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk",
+      "model": "ST8000VX010",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai-hm/skyhawk-3-5-hdd-DS1902-17-2107US-July-2021-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 8,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "workloadTbYr": 180,
+        "warrantyYears": 3,
+        "maxCameras": "up to 64 cameras",
+        "recommendedBays": "up to 16 bays",
+        "mtbfHours": 1000000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk AI",
+      "model": "ST10000VE001",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai/skyhawk-ai-DS1960-16C-2509US-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 10,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "workloadTbYr": 550,
+        "warrantyYears": 5,
+        "maxCameras": "up to 64 HD cameras",
+        "aiStreams": 32,
+        "recommendedBays": "unlimited",
+        "mtbfHours": 2000000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk AI",
+      "model": "ST12000VE001",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai/skyhawk-ai-DS1960-16C-2509US-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 12,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 256,
+        "workloadTbYr": 550,
+        "warrantyYears": 5,
+        "maxCameras": "up to 64 HD cameras",
+        "aiStreams": 32,
+        "recommendedBays": "unlimited",
+        "mtbfHours": 2500000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    },
+    {
+      "manufacturer": "Seagate",
+      "family": "Seagate SkyHawk AI",
+      "model": "ST12000VE003",
+      "category": "hdd",
+      "sourceUrl": "https://www.seagate.com/content/dam/seagate/en/content-fragments/products/datasheets/skyhawk-ai/skyhawk-ai-DS1960-16C-2509US-en_US.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "capacityTb": 12,
+        "surveillanceRated": true,
+        "interface": "SATA 6Gb/s",
+        "recordingTech": "CMR",
+        "cacheMb": 512,
+        "workloadTbYr": 550,
+        "warrantyYears": 5,
+        "maxCameras": "up to 64 HD cameras",
+        "aiStreams": 32,
+        "recommendedBays": "unlimited",
+        "mtbfHours": 2500000
+      },
+      "unverified": [
+        "rpm"
+      ]
+    }
+  ],
+  "compatibility": [],
+  "notes": [
+    "WD Purple (2-8TB): source is the current WD Purple Surveillance Hard Drive data sheet dated November 2025 (data-sheet-wd-purple-hdd.pdf, linked as the Data Sheet on https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd). It supersedes the older product brief PB_WD_Purple_HDD (2024-01), which listed only WD23PURZ/WD43PURZ/WD64PURZ/WD85PURZ.",
+    "WD Purple has two current models at 2TB and 4TB, both listed on the November 2025 data sheet and both for sale on the westerndigital.com US product page: 2TB WD22PURZ (256MB cache) and WD23PURZ (64MB cache); 4TB WD43PURZ (256MB) and WD44PURZ (128MB). Specs are the same apart from cache, transfer rate and weight. The en-au WD store only lists WD11PURZ and WD23PURZ.",
+    "The data sheet also lists older WD Purple models WD42PURZ (4TB), WD63PURZ (6TB) and WD84PURZ (8TB, 128MB). They are not in the current US store list, so they are not included as products.",
+    "WD Purple RPM does not appear on the data sheet. It comes from the per-SKU spec table on https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd: 5400 RPM for 2/4/6TB and 5640 RPM for WD85PURZ. That page's spec table wrongly gives WD23PURZ a 256MB cache; the data sheet, the same page's variant selector and the en-au store all say 64MB, so 64MB is used.",
+    "WD Purple maxCameras: the data sheet says 'Up to 64 HD' (single stream at 3.2Mbps, 1080p, H.265, 25fps). Bays: 1-2TB support up to 8 bays; 3TB and above support up to 16 bays.",
+    "WD Purple stops at 8TB, so 10TB and 12TB are WD Purple Pro only: WD102PURP and WD122PURP, from the WD Purple Pro data sheet dated July 2025 (product-brief-wd-purple-pro-sata-hdd.pdf, linked from https://www.westerndigital.com/products/internal-drives/wd-purple-pro-sata-hdd). These are newer replacements for the older WD101PURP/WD121PURP. The Purple Pro page lists 8TB WD8002PURP, 10TB WD102PURP and 12TB WD122PURP, then 14TB and up. On the data sheet the interface is printed as 'SATA' with a 6 Gb/s buffer-to-host rate.",
+    "Seagate SkyHawk (2-8TB): source is SkyHawk data sheet DS1902.17-2107US (July 2021). It is the data sheet currently linked from https://www.seagate.com/products/video-analytics/skyhawk-hard-drive/, and the model numbers match what that page (and the AU page) lists today: ST2000VX017, ST4000VX016, ST6000VX009, ST8000VX010. Seagate does not publish spindle speed for SkyHawk, so RPM is unverified.",
+    "Seagate SkyHawk stops at 8TB, so 10TB and 12TB are SkyHawk AI only: data sheet DS1960.16C-2509US (Sept 2025), linked from https://www.seagate.com/products/video-analytics/skyhawk-ai-hard-drive/. The data sheet lists two 12TB models: ST12000VE001 (256MB, up to 255MB/s) and ST12000VE003 (512MB, 285MB/s). Both are included. Seagate does not publish RPM for SkyHawk AI.",
+    "Seagate also sells an 8TB SkyHawk AI model (ST8000VE001; 256MB, 550TB/yr, 5-year warranty). It is not included because the plain SkyHawk ST8000VX010 covers 8TB.",
+    "SkyHawk AI warranty footnote: the 5-year limited warranty applies to product shipped after July 3, 2021. Both Seagate data sheets say a 3-year Rescue Data Recovery Services plan may be offered in selected regions only.",
+    "No prices recorded. No nvr_hdd compatibility entries added: neither manufacturer data sheet lists specific NVR models."
+  ]
+}

@@ -71,6 +71,13 @@ export function QuoteApprovalPanel({
         </dl>
         {typeof c.markupLogic === "string" ? <p className="text-xs text-gray-600">{c.markupLogic}</p> : null}
         {Array.isArray(c.unpriced) && c.unpriced.length ? <p className="text-xs text-red-600">Not priced: {(c.unpriced as string[]).join("; ")}</p> : null}
+        {Array.isArray(c.refreshRequired) && c.refreshRequired.length ? (
+          <p className="rounded bg-red-50 px-2 py-1 text-xs text-red-800" data-testid="quote-refresh">
+            Refresh supplier price before final quote approval:{" "}
+            {(c.refreshRequired as { model: string; supplier: string | null; freshness: string }[]).map((r) => `${r.model}${r.supplier ? ` (${r.supplier}, ${r.freshness})` : ""}`).join("; ")}.
+          </p>
+        ) : null}
+        {typeof c.snapshotAt === "string" ? <p className="text-xs text-gray-500">Prices frozen with this quote on {new Date(c.snapshotAt).toLocaleDateString("en-NZ")}; later supplier changes do not alter it.</p> : null}
         {conf.overall ? (
           <p className="text-xs text-gray-600">
             Confidence: technical {String(conf.technical)}, pricing {String(conf.pricing)}, site {String(conf.site)}, overall <strong>{String(conf.overall)}</strong>

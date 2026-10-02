@@ -289,8 +289,8 @@ export function PacketView({
             </p>
             <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
               {e.checks.map((ch) => (
-                <li key={ch.name} className={ch.pass ? "" : "text-red-600"}>
-                  {ch.pass ? "✓" : "✗"} {ch.name}: {ch.detail}
+                <li key={ch.name} className={!ch.pass ? "text-red-600" : ch.unverified ? "text-amber-700" : ""}>
+                  {!ch.pass ? "✗" : ch.unverified ? "?" : "✓"} {ch.name}: {ch.detail}
                 </li>
               ))}
             </ul>
@@ -369,12 +369,24 @@ export function PacketView({
             ))}
           </tbody>
         </table>
+        {p.installation.accessories?.length ? (
+          <div data-testid="packet-accessories">
+            <p className="text-xs font-semibold text-gray-700">Documented accessories (not charged unless Chris adds them)</p>
+            <List items={p.installation.accessories.map((x) => `${x.camera}: ${label(x.kind.replace("camera_", ""))} ${x.product}`)} />
+          </div>
+        ) : null}
         <p className="text-xs text-gray-600">
           Labour:{" "}
           {p.labour.package
-            ? `${p.labour.package.name} (${p.labour.estimatedHours} h, allowance ${money(p.labour.allowanceExGst)} ex GST)`
+            ? `${p.labour.package.name} (${
+                p.labour.basis === "package_price"
+                  ? `${p.labour.estimatedHours ?? "?"} h, package price ${money(p.labour.allowanceExGst)} ex GST`
+                  : p.labour.basis === "hours_x_rate"
+                    ? `${p.labour.estimatedHours} h × rate = ${money(p.labour.allowanceExGst)} ex GST`
+                    : "hours and price not set"
+              })`
             : "no package"}{" "}
-          · internal reference ${p.labour.internalRate}/h
+          · internal rate ${p.labour.internalRate}/h
           {p.labour.internalReferenceExGst != null
             ? ` = ${money(p.labour.internalReferenceExGst)}`
             : ""}
@@ -388,6 +400,7 @@ export function PacketView({
             <thead className="text-xs text-gray-500">
               <tr>
                 <th className="py-1">Line</th>
+                <th className="py-1">Supplier · price date</th>
                 <th className="py-1 text-right">Qty</th>
                 <th className="py-1 text-right">Unit cost</th>
                 <th className="py-1 text-right">Unit sell</th>
@@ -402,7 +415,19 @@ export function PacketView({
                     !l.priced && "text-red-600",
                   )}
                 >
-                  <td className="py-1">{l.customerDescription}</td>
+                  <td className="py-1">
+                    {l.customerDescription}
+                    {l.detail?.length ? <p className="text-xs text-gray-500">{l.detail.join("; ")}</p> : null}
+                  </td>
+                  <td className="py-1 text-xs text-gray-600">
+                    {l.supplier ?? (l.productId ? "no price" : "")}
+                    {l.supplierSku ? ` ${l.supplierSku}` : ""}
+                    {l.freshness ? (
+                      <Badge className={cn("ml-1", l.freshness === "current" ? "bg-green-100 text-green-800" : l.freshness === "aging" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800")}>
+                        {l.freshness}
+                      </Badge>
+                    ) : null}
+                  </td>
                   <td className="py-1 text-right">{l.quantity}</td>
                   <td className="py-1 text-right">{money(l.unitCostExGst)}</td>
                   <td className="py-1 text-right">{money(l.unitSellExGst)}</td>
@@ -434,6 +459,16 @@ export function PacketView({
         </dl>
         <p className="text-xs text-gray-600">{c.markupLogic}</p>
         <List items={c.unpriced.map((u) => `Unpriced: ${u}`)} />
+        {c.refreshRequired?.length ? (
+          <p className="rounded bg-red-50 px-2 py-1 text-xs text-red-800" data-testid="packet-refresh">
+            Refresh supplier price before final quote approval: {c.refreshRequired.map((r) => `${r.model}${r.supplier ? ` (${r.supplier}, ${r.freshness})` : ""}`).join("; ")}.
+          </p>
+        ) : null}
+        {c.kit ? (
+          <p className="text-xs text-gray-600">
+            Kit used: {c.kit.model} ({c.kit.components.join(", ")}), saving {money(c.kit.savingExGst)} ex GST on buying the parts separately.
+          </p>
+        ) : null}
       </Section>
 
       {p.privacy ? (

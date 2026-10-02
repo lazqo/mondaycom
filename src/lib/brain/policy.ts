@@ -2,7 +2,7 @@
  * Business Brain policies and their provenance.
  *
  * Every number the engine relies on lives here with where it came from. Values Chris set out in the
- * Business Brain v0.1 brief are `getsecure_approved`; published standards are `industry_fact`; a
+ * Business Brain v0.1/v0.2 briefs are `getsecure_approved`; published standards are `industry_fact`; a
  * value that had to exist for the engine to run but has not been set by Get Secure is
  * `getsecure_provisional` or `requires_review`, and any packet that leans on it says so.
  *
@@ -11,6 +11,7 @@
 import type { KnowledgeStatus, Policies, PolicyValue } from "./types";
 
 const BRIEF = "Get Secure CCTV Business Brain v0.1 (Chris)";
+const BRIEF2 = "Get Secure CCTV Business Brain v0.2 (Chris)";
 const BRIEF_DATE = "2026-10-02";
 
 function p<T>(value: T, status: KnowledgeStatus, source: string, notes?: string, sourceUrl?: string): PolicyValue<T> {
@@ -55,27 +56,27 @@ export const DEFAULT_POLICIES: Policies = {
     "Detail level assumed for each camera purpose when the enquiry does not say. Review.",
   ),
   wdrRequiredDb: p(120, "getsecure_provisional", "Engine default", "True WDR rating required for backlit scenes such as entrances facing daylight."),
-  standardMaterials: p(
-    { sellExGst: null, costExGst: null, contents: ["Normal Cat6 allowance", "Standard fixings", "Connectors", "Normal installation consumables"] },
-    "requires_review",
-    BRIEF,
-    "Brief defines the contents; the dollar value has not been set. Until it is, residential quotes are incomplete.",
-  ),
   junctionBoxSurfaces: p(["brick", "concrete"], "getsecure_provisional", BRIEF, "Junction box recommended on these surfaces; Chris confirms each one in v1 and it is not charged until approved."),
   doubleStoreyConduit: p(true, "getsecure_approved", BRIEF, "Double-storey: conduit/material allowance normally considered."),
-  priceStaleDays: p(30, "getsecure_provisional", "Engine default", "A supplier price older than this lowers pricing confidence."),
+  priceAgingDays: p(14, "getsecure_provisional", "Engine default", "A supplier price older than this is Aging: still used, shown as such."),
+  priceStaleDays: p(30, "getsecure_provisional", "Engine default", "A supplier price older than this is Stale: refresh it before the quote is approved."),
   priceChangeReviewPct: p(5, "getsecure_provisional", BRIEF, "A supplier cost moving more than this is held for review instead of changing quote pricing. Threshold not yet set by Get Secure."),
   defaultResidentialTier: p(null, "requires_review", "Not set", "No default tier. The packet shows every tier and asks Chris to choose."),
   tiers: p(
     {
-      good: { targetMp: 4, brands: ["TP-Link VIGI"] },
-      better: { targetMp: 6, brands: ["HiLook", "Dahua"] },
-      best: { targetMp: 8, brands: ["Hikvision"] },
-      premium: { targetMp: null, brands: ["Ajax"] },
+      good: { targetMp: 4, brands: ["TP-Link VIGI"], description: "Lower-cost/value products, commonly around 4-5MP. VIGI evaluated first." },
+      better: { targetMp: 6, brands: ["HiLook", "Tiandy", "Dahua"], description: "Stronger image/features, commonly around 6MP, depending on the actual product and cost." },
+      best: { targetMp: 8, brands: ["Hikvision"], description: "Higher-end residential image/features, commonly 8MP. Hikvision is a primary candidate." },
+      premium: {
+        targetMp: null,
+        brands: ["Ajax"],
+        description: "Ecosystem-specific: Ajax Video where the integrated Ajax ecosystem is the reason for choosing it.",
+        ecosystemOnly: true,
+      },
     },
-    "getsecure_provisional",
-    BRIEF,
-    "Price/value tiers. HiLook catalogue naming, QVT and other brands to be verified before approval.",
+    "getsecure_approved",
+    BRIEF2,
+    "Starting policy. Tiers are commercial/value positions, not megapixel rules; the tier is set per product.",
   ),
   commercialSiteVisitMandatory: p(true, "getsecure_approved", BRIEF),
   audioDefault: p(
@@ -104,10 +105,10 @@ export const POLICY_DESCRIPTIONS: Record<keyof Policies, string> = {
   ppmThresholds: "Pixel density per detail level (px/m)",
   purposeDetail: "Detail level assumed per camera purpose",
   wdrRequiredDb: "WDR needed for backlit scenes (dB)",
-  standardMaterials: "Residential standard materials allowance",
   junctionBoxSurfaces: "Surfaces that call for a junction box",
   doubleStoreyConduit: "Double-storey conduit allowance",
-  priceStaleDays: "Days before a supplier price is stale",
+  priceAgingDays: "Days before a supplier price is Aging",
+  priceStaleDays: "Days before a supplier price is Stale",
   priceChangeReviewPct: "Supplier price change that needs review (%)",
   defaultResidentialTier: "Default residential tier",
   tiers: "Residential tiers and brand families",

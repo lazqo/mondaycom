@@ -5,9 +5,10 @@
  * specification or a price. What it cannot settle from approved data it reports as missing,
  * unresolved, or needing Chris's approval.
  */
-import { candidateCameras, chooseCameras } from "./cameras";
+import { candidateCameras, chooseCameras, planningBitrate } from "./cameras";
 import { costQuote } from "./costing";
-import { installationPlan, labourPlan } from "./installation";
+import { installationPlan, labourPlan, packageFor } from "./installation";
+import { priceCatalogue } from "./pricing";
 import { networkPlan } from "./network";
 import { channelsNeeded, isNvr, selectNvr } from "./nvr";
 import { cameraPlan, missingInformation, requirementsSummary } from "./requirements";
@@ -30,7 +31,7 @@ import type {
 } from "./types";
 import { TIERS, TRUSTED_STATUSES } from "./types";
 
-export const ENGINE_VERSION = "cctv-0.1.0";
+export const ENGINE_VERSION = "cctv-0.2.0";
 
 const LEVELS: Level[] = ["low", "medium", "high"];
 const minLevel = (...ls: Level[]) => LEVELS[Math.min(...ls.map((l) => LEVELS.indexOf(l)))];
@@ -39,16 +40,19 @@ type Build = ReturnType<typeof buildSystem>;
 
 /** Cameras, recorder, storage, network, installation and cost for one tier (or commercial). */
 function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Policies, tier: Tier | null, markupOverride: number | null | undefined) {
+  const links = catalogue.compatibility ?? [];
   const plan = cameraPlan(input, policies);
   const cams = candidateCameras(catalogue.products, input.propertyType, tier);
-  const cameras = chooseCameras(plan.cameras, cams, policies);
+  const brandOrder = tier && input.propertyType !== "commercial" ? policies.tiers.value[tier]?.brands ?? [] : [];
+  const cameras = chooseCameras(plan.cameras, cams, policies, brandOrder);
   const chosen = cameras.map((c) => c.product).filter((p): p is CameraProduct => !!p);
   const allChosen = chosen.length === cameras.length && cameras.length > 0;
 
   const mode = input.recordingMode ?? policies.residentialDefaultRecording.value;
   const retention = input.retentionDays ?? policies.retentionTargetDays.value;
-  const bitrates = chosen.map((c) => c.expectedBitrateMbps);
-  const totalMbps = allChosen && bitrates.every((b) => b != null) ? (bitrates as number[]).reduce((s, b) => s + b, 0) : null;
+  const bitrates = chosen.map((c) => planningBitrate(c));
+  const totalMbps = allChosen && bitrates.every((b) => b.mbps != null) ? bitrates.reduce((s, b) => s + b.mbps!, 0) : null;
+  const bitrateNotes = allChosen && bitrates.some((b) => b.basis === "max_published") ? ["Bandwidth and storage planned on the cameras' maximum published bitrate (no Get Secure expected bitrate set): conservative."] : [];
   const requiredGb = totalMbps != null ? requiredStorageGb(totalMbps, retention, policies).requiredGb : null;
 
   const sizing = channelsNeeded(cameras.length, input.propertyType, input.commercial?.futureCameras, policies);
@@ -64,32 +68,61 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
         alarmIo: false,
         products: catalogue.products,
         policies,
+        links,
         propertyType: input.propertyType,
         tier,
         exactChannels: exact,
       })
     : { selected: null, evaluated: [], storageShortfall: false, notes: ["Cameras not all chosen, so no recorder was evaluated."] };
 
-  const storage = storagePlan({ totalMbps, customerRetentionDays: input.retentionDays, nvr: nvrPick.selected, products: catalogue.products, policies });
+  const storage = storagePlan({ totalMbps, customerRetentionDays: input.retentionDays, nvr: nvrPick.selected, products: catalogue.products, policies, links });
+  storage.notes.push(...bitrateNotes);
   const network = networkPlan(input);
-  const installation = installationPlan({ enquiry: input, cameras, nvr: nvrPick.selected, network, products: catalogue.products, policies });
   const labour = labourPlan({ enquiry: input, cameraCount: cameras.length, packages: catalogue.packages, policies });
+  const installation = installationPlan({
+    enquiry: input,
+    cameras,
+    nvr: nvrPick.selected,
+    network,
+    products: catalogue.products,
+    policies,
+    links,
+    installationPackage: packageFor(input, cameras.length, catalogue.packages),
+    materialsPackages: catalogue.materialsPackages ?? [],
+  });
   const costing = costQuote({
     cameras,
     nvr: nvrPick.selected,
     storage,
     materials: installation.materials,
+    materialsPackage: installation.materialsPackage,
     labour,
     residential: input.propertyType !== "commercial",
     policies,
     markupOverride,
+    products: catalogue.products,
+    links,
   });
   return { plan, cameras, nvrPick, sizing, storage, network, installation, labour, costing, mode };
 }
 
+/** Tiers offered automatically. Ecosystem-only tiers (Ajax) only when that ecosystem is asked for. */
+function ladder(policies: Policies, chosen: Tier | null): Tier[] {
+  return TIERS.filter((t) => !policies.tiers.value[t]?.ecosystemOnly || t === chosen);
+}
+
 function chooseTier(input: EnquiryInput, policies: Policies, builds: Map<Tier, Build>): { tier: Tier | null; reason: string; needsChoice: boolean } {
-  if (input.propertyType === "commercial") return { tier: null, reason: "Commercial: products chosen from requirements, not the residential tier ladder.", needsChoice: false };
+  if (input.propertyType === "commercial") {
+    return {
+      tier: null,
+      reason: input.requestedTier
+        ? `Residential tier "${input.requestedTier}" not applied: commercial products are chosen from the site's requirements, not the residential Good/Better/Best ladder.`
+        : "Commercial: products chosen from requirements, not the residential tier ladder.",
+      needsChoice: false,
+    };
+  }
   const tiers = policies.tiers.value;
+  if (input.requestedTier && TIERS.includes(input.requestedTier)) return { tier: input.requestedTier, reason: `${input.requestedTier[0].toUpperCase()}${input.requestedTier.slice(1)} tier asked for.`, needsChoice: false };
   if (input.requestedBrand) {
     const want = input.requestedBrand.toLowerCase();
     const t = TIERS.find((x) => tiers[x].brands.some((b) => b.toLowerCase().includes(want) || want.includes(b.toLowerCase())));
@@ -97,9 +130,10 @@ function chooseTier(input: EnquiryInput, policies: Policies, builds: Map<Tier, B
   }
   const def = policies.defaultResidentialTier.value;
   if (def) return { tier: def, reason: `Get Secure default tier (${policies.defaultResidentialTier.status}).`, needsChoice: !TRUSTED_STATUSES.includes(policies.defaultResidentialTier.status) };
-  const firstComplete = TIERS.find((t) => builds.get(t)?.costing.complete);
+  const auto = ladder(policies, null);
+  const firstComplete = auto.find((t) => builds.get(t)?.costing.complete);
   if (firstComplete) return { tier: firstComplete, reason: "No default tier set: showing the first fully priced option. Chris to choose.", needsChoice: true };
-  const firstWithCameras = TIERS.find((t) => builds.get(t)?.cameras.some((c) => c.product));
+  const firstWithCameras = auto.find((t) => builds.get(t)?.cameras.some((c) => c.product));
   return { tier: firstWithCameras ?? "good", reason: "No default tier set and no tier fully priced. Chris to choose.", needsChoice: true };
 }
 
@@ -129,12 +163,17 @@ function confidenceFor(b: Build, siteVisit: ReturnType<typeof siteVisitDecision>
     pricing = "low";
     reasons.push(`Pricing: incomplete (${b.costing.unpriced.length} item(s) unpriced).`);
   } else {
-    const stale = policies.priceStaleDays.value;
-    const products = [...b.cameras.map((c) => c.product), b.nvrPick.selected, b.storage.drives?.product].filter(Boolean);
-    const old = products.filter((p) => !p!.price?.lastChecked || (now.getTime() - new Date(p!.price!.lastChecked!).getTime()) / 86400000 > stale);
-    if (old.length) {
+    void now;
+    if (b.costing.refreshRequired.length) {
       pricing = "medium";
-      reasons.push(`Pricing: ${old.length} price(s) older than ${stale} days.`);
+      reasons.push(`Pricing: ${b.costing.refreshRequired.length} supplier price(s) stale or undated.`);
+    } else if (b.costing.lines.some((l) => l.freshness === "aging")) {
+      pricing = minLevel(pricing, "medium");
+      reasons.push("Pricing: some supplier prices are aging.");
+    }
+    if (b.labour.basis === "hours_x_rate") {
+      pricing = minLevel(pricing, "medium");
+      reasons.push("Pricing: labour from package hours x rate (no package price).");
     }
     if (b.costing.markupSource === "suggested" && !TRUSTED_STATUSES.includes(policies.suggestedMarkupPct.status)) {
       pricing = minLevel(pricing, "medium");
@@ -152,9 +191,10 @@ function confidenceFor(b: Build, siteVisit: ReturnType<typeof siteVisitDecision>
   return { technical, pricing, site, overall: minLevel(technical, pricing, site), reasons };
 }
 
-export function assessCctv(input: EnquiryInput, catalogue: Catalogue, policies: Policies, opts: { markupOverride?: number | null; now?: Date } = {}): DecisionPacket {
+export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policies: Policies, opts: { markupOverride?: number | null; now?: Date } = {}): DecisionPacket {
   const now = opts.now ?? new Date();
   const commercial = input.propertyType === "commercial";
+  const catalogue = priceCatalogue(rawCatalogue, input.propertyType, policies, now);
 
   // Build every residential tier so the packet can offer good/better/best.
   const builds = new Map<Tier, Build>();
@@ -168,7 +208,7 @@ export function assessCctv(input: EnquiryInput, catalogue: Catalogue, policies: 
 
   const tierOptions: TierOption[] = commercial
     ? []
-    : TIERS.map((t) => {
+    : ladder(policies, tierChoice.tier).map((t) => {
         const x = builds.get(t)!;
         return {
           tier: t,
@@ -178,16 +218,19 @@ export function assessCctv(input: EnquiryInput, catalogue: Catalogue, policies: 
         };
       });
   const idx = tierChoice.tier ? TIERS.indexOf(tierChoice.tier) : -1;
-  const alternativeTier = idx >= 0 ? (TIERS.slice(idx + 1).find((t) => builds.get(t)?.cameras.some((c) => c.product)) ?? null) : null;
+  const alternativeTier = idx >= 0 ? (TIERS.slice(idx + 1).find((t) => !policies.tiers.value[t]?.ecosystemOnly && builds.get(t)?.cameras.some((c) => c.product)) ?? null) : null;
 
   // Interoperability notes.
   const interoperability: string[] = [];
   const nvr = b.nvrPick.selected;
   const chosen = b.cameras.map((c) => c.product).filter((p): p is CameraProduct => !!p);
-  if (nvr && chosen.some((c) => c.manufacturer.toLowerCase() !== nvr.manufacturer.toLowerCase())) {
-    interoperability.push("Mixed brands: ONVIF covers streaming, imaging settings and motion/tamper events, not every proprietary analytic.");
+  const selectedEval = nvr ? b.nvrPick.evaluated.find((e) => e.product.id === nvr.id) : null;
+  const onvifOnly = selectedEval?.checks.find((c) => c.name === "compatibility" && c.unverified);
+  if (onvifOnly) {
+    interoperability.push(`ONVIF only: ${onvifOnly.detail}. ONVIF covers streaming, imaging settings and motion/tamper events, not every proprietary analytic.`);
     if (input.analytics.length) interoperability.push(`Verify ${input.analytics.join(", ")} work between these brands before quoting.`);
   }
+  const unverifiedChecks = selectedEval?.checks.filter((c) => c.unverified && c.name !== "compatibility") ?? [];
 
   // Privacy (commercial).
   const audioAsked = input.audioRequested;
@@ -229,6 +272,9 @@ export function assessCctv(input: EnquiryInput, catalogue: Catalogue, policies: 
   if (b.storage.status === "below_target") risks.push(`Only about ${b.storage.expectedRetentionDays} days of recording achievable against a ${b.storage.retentionTargetDays}-day target.`);
   if (b.storage.status === "below_minimum") risks.push(`Only about ${b.storage.expectedRetentionDays} days achievable: below the ${policies.retentionMinimumDays.value}-day minimum.`);
   if (b.installation.junctionBoxRecommended) risks.push(b.installation.junctionBoxReason!);
+  for (const c of unverifiedChecks) risks.push(`Recorder ${c.name}: ${c.detail}.`);
+  if (b.installation.doubleStorey) assumptions.push(...(b.labour.package?.assumptions ?? []).filter((a) => !assumptions.includes(a)));
+  if (commercial && input.requestedTier) unresolved.push(tierChoice.reason);
   for (const c of b.cameras) if (!c.product) unresolved.push(`${c.requirement.targetArea}: ${c.reasons[0]}`);
   if (!nvr) unresolved.push(...b.nvrPick.notes);
   unresolved.push(...b.labour.notes.filter((n) => n.startsWith("No installation package")));
@@ -244,12 +290,30 @@ export function assessCctv(input: EnquiryInput, catalogue: Catalogue, policies: 
   if (b.costing.markupSource === "override") approvals.push({ key: "markup_override", description: b.costing.markupLogic });
   const unapproved = [...chosen, nvr, b.storage.drives?.product].filter((p) => p && !TRUSTED_STATUSES.includes(p.status));
   if (unapproved.length) approvals.push({ key: "products", description: `Approve products: ${[...new Set(unapproved.map((p) => `${p!.manufacturer} ${p!.model}`))].join(", ")}.` });
+  if (!commercial) {
+    const tierUnconfirmed = chosen.filter((c) => c.tierStatus && !TRUSTED_STATUSES.includes(c.tierStatus));
+    if (tierUnconfirmed.length) approvals.push({ key: "product_tier", description: `Confirm the tier on ${[...new Set(tierUnconfirmed.map((c) => c.model))].join(", ")} (${tierChoice.tier ?? "tier"} is provisional).` });
+  }
+  if (b.costing.refreshRequired.length) {
+    approvals.push({
+      key: "price_refresh",
+      description: `Refresh supplier price before final quote approval: ${b.costing.refreshRequired.map((r) => `${r.model}${r.supplier ? ` (${r.supplier}, ${r.freshness})` : ""}`).join("; ")}.`,
+    });
+  }
+  const noExpected = [...new Set(chosen.filter((c) => c.expectedBitrateMbps == null).map((c) => c.model))];
+  if (noExpected.length) {
+    approvals.push({
+      key: "expected_bitrate",
+      description: `Set the Get Secure expected bitrate for ${noExpected.join(", ")}: bandwidth and storage are planned on the ${chosen.some((c) => c.maxBitrateMbps != null) ? "maximum published bitrate" : "bitrate, which is not published"}.`,
+    });
+  }
+  if (b.labour.basis === "hours_x_rate") approvals.push({ key: "labour_basis", description: `Labour from ${b.labour.estimatedHours} h x $${b.labour.internalRate}/h: "${b.labour.package!.name}" has no package price.` });
   if (b.storage.status === "below_target" || b.storage.status === "below_minimum") approvals.push({ key: "retention", description: "Accept or change the reduced retention before quoting." });
   if (b.network.customerDecisions.length) approvals.push({ key: "connectivity", description: "4G/5G option and its ongoing data cost to be offered as a separate decision." });
   if (interoperability.length && input.analytics.length) approvals.push({ key: "interoperability", description: "Verify cross-brand analytics." });
   if (privacy?.flags.length) approvals.push({ key: "audio", description: "Audio recording requested: review the purpose; it stays off unless approved." });
   if (commercial) approvals.push({ key: "commercial_site_visit", description: "No final commercial BOM or fixed price before the site visit." });
-  for (const m of b.installation.materials) if (m.approvalRequired && !["junction_box", "router_4g"].includes(m.key)) approvals.push({ key: `material:${m.key}`, description: `${m.description}: ${m.reason}` });
+  for (const m of b.installation.materials) if (m.approvalRequired && !m.key.startsWith("junction_box") && m.key !== "router_4g") approvals.push({ key: `material:${m.key}`, description: `${m.description}: ${m.reason}` });
 
   const provisionalPolicies = (Object.entries(policies) as [string, { status: KnowledgeStatus; value: unknown }][])
     .filter(([, v]) => !TRUSTED_STATUSES.includes(v.status))
@@ -297,6 +361,7 @@ export function assessCctv(input: EnquiryInput, catalogue: Catalogue, policies: 
       conduitRequired: b.installation.conduitRequired,
       complexity: b.installation.complexity,
       materials: b.installation.materials,
+      accessories: b.installation.accessories,
     },
     privacy,
     interoperability,

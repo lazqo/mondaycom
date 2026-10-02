@@ -1,0 +1,959 @@
+{
+  "products": [
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-2CD2386G2-IU",
+      "category": "camera",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/09/DS-2CD2386G2-IU-C_Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensOptions": [
+          2.8,
+          4,
+          6
+        ],
+        "hfovByLensDeg": {
+          "2.8": 111,
+          "4": 87,
+          "6": 51
+        },
+        "aperture": "F1.6",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "bitrateKbps": [
+          32,
+          16000
+        ],
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "colourNight": false,
+        "microphone": true,
+        "speaker": false,
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "face_capture",
+          "scene_change_detection",
+          "video_tampering"
+        ],
+        "poeMaxW": 6.8,
+        "poeStandard": "802.3af",
+        "dcInput": "12 VDC",
+        "dcMaxW": 5.8,
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95% (non-condensing)",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T"
+        ],
+        "ecosystem": [
+          "Hik-Connect",
+          "HikCentral",
+          "iVMS-4200"
+        ],
+        "storage": "microSD/SDHC/SDXC up to 512 GB",
+        "sensor": "1/1.8\" Progressive Scan CMOS",
+        "mainStreamFps": "25 fps @ 3840×2160 (50 Hz)",
+        "material": "metal",
+        "dimensionsMm": "Ø138.3 × 126.3",
+        "weightG": 740,
+        "datasheetRevision": "(C) hardware version datasheet, firmware V5.5.112 printed",
+        "availableModels": [
+          "DS-2CD2386G2-IU (2.8mm)",
+          "DS-2CD2386G2-IU (4mm)",
+          "DS-2CD2386G2-IU (6mm)"
+        ]
+      },
+      "unverified": [
+        "vandal"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-2CD2387G3-LIS2UY/SL",
+      "category": "camera",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/04/DS-2CD2387G3-LIS2UY_SLRB_Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensOptions": [
+          2.8,
+          4
+        ],
+        "hfovByLensDeg": {
+          "2.8": 108.8,
+          "4": 93.3
+        },
+        "aperture": "F1.0",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "bitrateKbps": [
+          32,
+          16000
+        ],
+        "wdrDb": 130,
+        "supplementLight": "Smart Hybrid Light (white light + 850 nm IR)",
+        "supplementLightRangeM": 30,
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "strobe light",
+          "siren"
+        ],
+        "alarmIn": 1,
+        "alarmOut": 1,
+        "audioLineIn": 1,
+        "audioLineOut": 1,
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "face_capture",
+          "scene_change_detection",
+          "video_tampering"
+        ],
+        "poeMaxW": 17,
+        "poeStandard": "802.3at",
+        "dcInput": "12 VDC",
+        "dcMaxW": 15.5,
+        "ingress": [
+          "IP67"
+        ],
+        "antiCorrosion": "NEMA 4X (moderate protection)",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95% (non-condensing)",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T"
+        ],
+        "ecosystem": [
+          "Hik-Connect",
+          "HikCentral",
+          "iVMS-4200"
+        ],
+        "storage": "microSD/SDHC/SDXC up to 512 GB",
+        "sensor": "1/1.8\" Progressive Scan CMOS",
+        "mainStreamFps": "25 fps @ 3840×2160 (50 Hz)",
+        "material": "metal",
+        "dimensionsMm": "Ø138.3 × 115.4",
+        "weightG": 820,
+        "speakerSpec": "2 W max, 110 dB @ 10 cm",
+        "availableModels": [
+          "DS-2CD2387G3-LIS2UY/SL(2.8mm)",
+          "DS-2CD2387G3-LIS2UY/SL(4mm)",
+          "DS-2CD2387G3-LIS2UY/SL(2.8mm)(Black)"
+        ]
+      },
+      "unverified": [
+        "irRangeM",
+        "whiteLightRangeM",
+        "vandal"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-2CD2T87G3-LIS2UY/SL",
+      "category": "camera",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/08/DS-2CD2T87G3-LIS2UY_SL_Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensOptions": [
+          2.8,
+          4
+        ],
+        "hfovByLensDeg": {
+          "2.8": 108.8,
+          "4": 93.3
+        },
+        "aperture": "F1.0",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "bitrateKbps": [
+          32,
+          16000
+        ],
+        "wdrDb": 130,
+        "supplementLight": "Smart Hybrid Light (white light + 850 nm IR)",
+        "supplementLightRangeM": 60,
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "strobe light",
+          "siren"
+        ],
+        "alarmIn": 2,
+        "alarmOut": 2,
+        "audioLineIn": 1,
+        "audioLineOut": 1,
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "face_capture",
+          "scene_change_detection",
+          "video_tampering"
+        ],
+        "poeMaxW": 18,
+        "poeStandard": "802.3at",
+        "dcInput": "12 VDC",
+        "dcMaxW": 17,
+        "ingress": [
+          "IP67"
+        ],
+        "antiCorrosion": "NEMA 4X (moderate protection)",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95% (non-condensing)",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T"
+        ],
+        "ecosystem": [
+          "Hik-Connect",
+          "HikCentral",
+          "iVMS-4200"
+        ],
+        "storage": "microSD/SDHC/SDXC up to 512 GB",
+        "sensor": "1/1.8\" Progressive Scan CMOS",
+        "mainStreamFps": "25 fps @ 3840×2160 (50 Hz)",
+        "material": "metal",
+        "dimensionsMm": "286.7 × 93.3 × 91.2",
+        "weightG": 1250,
+        "speakerSpec": "2 W max, 120 dB @ 10 cm",
+        "availableModels": [
+          "DS-2CD2T87G3-LIS2UY/SL(2.8mm)",
+          "DS-2CD2T87G3-LIS2UY/SL(4mm)",
+          "DS-2CD2T87G3-LIS2UY/SL(2.8mm)(Black)"
+        ]
+      },
+      "unverified": [
+        "irRangeM",
+        "whiteLightRangeM",
+        "vandal"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-2CD2686G2T-IZS",
+      "category": "camera",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/06/DS-2CD2686G2T-IZS-C_Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "formFactor": "bullet",
+        "resolutionMp": 8,
+        "horizontalPixels": 3840,
+        "verticalPixels": 2160,
+        "lensMm": [
+          2.8,
+          12
+        ],
+        "lensType": "motorised varifocal",
+        "hfovDeg": 108,
+        "hfovTeleDeg": 46,
+        "aperture": "F1.4",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "bitrateKbps": [
+          32,
+          16000
+        ],
+        "wdrDb": 120,
+        "irRangeM": 60,
+        "colourNight": false,
+        "microphone": false,
+        "speaker": false,
+        "alarmIn": 1,
+        "alarmOut": 1,
+        "audioLineIn": 1,
+        "audioLineOut": 1,
+        "analytics": [
+          "human_vehicle",
+          "line_crossing",
+          "intrusion",
+          "region_entrance",
+          "region_exit",
+          "face_capture",
+          "scene_change_detection",
+          "video_tampering"
+        ],
+        "poeMaxW": 15,
+        "poeStandard": "802.3at",
+        "dcInput": "12 VDC",
+        "dcMaxW": 13,
+        "ingress": [
+          "IP67"
+        ],
+        "vandal": "IK10",
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95% (non-condensing)",
+        "onvifProfiles": [
+          "S",
+          "G",
+          "T"
+        ],
+        "ecosystem": [
+          "Hik-Connect",
+          "HikCentral",
+          "iVMS-4200"
+        ],
+        "storage": "microSD up to 512 GB",
+        "sensor": "1/1.8\" Progressive Scan CMOS",
+        "mainStreamFps": "25 fps @ 3840×2160 (50 Hz)",
+        "material": "metal",
+        "dimensionsMm": "97.9 × 93 × 308.5",
+        "weightG": 1380,
+        "commercialSuitable": true,
+        "availableModels": [
+          "DS-2CD2686G2T-IZS (2.8 to 12 mm)"
+        ]
+      },
+      "unverified": []
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-7604NI-M1/4P",
+      "category": "nvr",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2023/09/DS-7604NI-M1_4P.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "series": "M Series 8K NVR",
+        "channels": 4,
+        "poePorts": 4,
+        "poeBudgetW": 60,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 40,
+        "outgoingMbps": 80,
+        "recordingResolutionMaxMp": 32,
+        "decoding": {
+          "8": 4,
+          "4": 8,
+          "1080p": 16
+        },
+        "decodingText": "4-ch@8 MP (30 fps)/8-ch@4 MP (30 fps)/16-ch@1080p (30 fps)",
+        "hddBays": 1,
+        "maxHddTb": 16,
+        "maxTotalTb": 16,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "analytics": [
+          "Configurable camera smart functions: VCA detection (motion, line crossing, intrusion, etc.), heat map, ANPR, people counting"
+        ],
+        "alarmIn": 4,
+        "alarmOut": 1,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "Hik-Connect"
+        ],
+        "hdmiOutput": "8K (7680 × 4320)/30Hz, 4K/30Hz, 2K/60Hz, 1080p/60Hz",
+        "vgaOutput": "1920 × 1080/60 Hz",
+        "networkInterface": "1 × RJ-45 10/100/1000 Mbps",
+        "poePortSpeed": "10/100 Mbps",
+        "powerSupply": "48 VDC, 1.875 A",
+        "operatingTempC": [
+          -10,
+          50
+        ],
+        "dimensionsMm": "320 × 240 × 48"
+      },
+      "unverified": [
+        "poePerPortW",
+        "onvif",
+        "onvifProfiles",
+        "compatibleFamilies"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-7608NI-M2/8P",
+      "category": "nvr",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/01/DS-7608NI-M2_8P.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "series": "M Series 8K NVR",
+        "channels": 8,
+        "poePorts": 8,
+        "poeBudgetW": 120,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 128,
+        "outgoingMbps": 256,
+        "recordingResolutionMaxMp": 32,
+        "decoding": {
+          "32": 2,
+          "8": 10,
+          "4": 20,
+          "1080p": 40
+        },
+        "decodingText": "2-ch@32 MP (30 fps) + 2-ch@8 MP (30 fps)/10-ch@8 MP (30 fps)/20-ch@4 MP (30 fps)/40-ch@1080p (30 fps)",
+        "hddBays": 2,
+        "maxHddTb": 16,
+        "maxTotalTb": 32,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "analytics": [
+          "Configurable camera smart functions: VCA detection (motion, line crossing, intrusion, etc.), heat map, ANPR, people counting"
+        ],
+        "alarmIn": 4,
+        "alarmOut": 1,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "Hik-Connect"
+        ],
+        "hdmiOutput": "8K (7680 × 4320)/30Hz, 4K/60Hz, 4K/30Hz, 2K/60Hz, 1080p/60Hz",
+        "vgaOutput": "1920 × 1080/60Hz",
+        "cvbsOutput": true,
+        "networkInterface": "1 × RJ-45 10/100/1000 Mbps",
+        "poePortSpeed": "10/100 Mbps",
+        "powerSupply": "100 to 240 VAC",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "dimensionsMm": "385 × 315 × 52"
+      },
+      "unverified": [
+        "poePerPortW",
+        "onvif",
+        "onvifProfiles",
+        "compatibleFamilies"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-7608NXI-I2/8P/VPro",
+      "category": "nvr",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/09/DS-7608NXI-I2_8P_VPro_Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "series": "AcuSeek NVR",
+        "channels": 8,
+        "poePorts": 8,
+        "poeBudgetW": 120,
+        "poeStandard": "802.3af/at",
+        "incomingMbps": 96,
+        "outgoingMbps": 256,
+        "recordingResolutionMaxMp": 32,
+        "decoding": {
+          "1080p": 32
+        },
+        "decodingText": "Enable AI by NVR: 20-ch@1080p (30 fps); Disable AI by NVR: 32-ch@1080p (30 fps)",
+        "hddBays": 2,
+        "maxHddTb": 20,
+        "maxTotalTb": 40,
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264",
+          "MPEG4"
+        ],
+        "analytics": [
+          "face_recognition (AI by NVR, 8-ch comparison)",
+          "perimeter protection (with camera)",
+          "video structuralization",
+          "AcuSearch",
+          "AcuSeek",
+          "motion detection 2.0",
+          "lpr (ANPR by camera)",
+          "people_counting",
+          "smart_search"
+        ],
+        "alarmIn": 4,
+        "alarmOut": 1,
+        "audioIn": 1,
+        "audioOut": 1,
+        "ecosystem": [
+          "Hik-Connect"
+        ],
+        "hdmiOutput": "4K (3840 × 2160)/30 Hz, 2K/60 Hz, 1080p/60 Hz, 720p/60 Hz",
+        "vgaOutput": "1920 × 1080/60Hz, 1280 × 720/60Hz",
+        "networkInterface": "1 × RJ-45 10/100/1000 Mbps",
+        "poePortSpeed": "10/100 Mbps",
+        "powerConsumptionW": "≤50",
+        "operatingTempC": [
+          -10,
+          55
+        ],
+        "chassis": "1U",
+        "dimensionsMm": "384 × 371 × 52",
+        "thirdPartyCameras": "Compatible to third-party network cameras (printed)",
+        "availableModels": [
+          "DS-7608NXI-I2/8P/VPro(STD)",
+          "DS-7608NXI-I2/8P/VPro(NEU)",
+          "DS-7608NXI-I2/8P/VPro(STD)/AUS/4T"
+        ]
+      },
+      "unverified": [
+        "poePerPortW",
+        "onvif",
+        "onvifProfiles",
+        "compatibleFamilies"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1280ZJ-PT6",
+      "category": "junction_box",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1280ZJ-PT6.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2386G2-IU",
+          "DS-2CD2387G3-LIS2UY/SL"
+        ],
+        "material": "Aluminium alloy",
+        "dimensionsMm": "Ø137 × 42",
+        "weightG": 280,
+        "maxLoadKg": 4.5,
+        "colour": "Hikvision White"
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1273ZJ-140B",
+      "category": "wall_bracket",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/06/DS-1273ZJ-140B.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2386G2-IU",
+          "DS-2CD2387G3-LIS2UY/SL"
+        ],
+        "description": "Wall mounting bracket with junction box",
+        "material": "Aluminium alloy",
+        "dimensionsMm": "140 × 182 × 120",
+        "weightG": 1488,
+        "maxLoadKg": 4.5,
+        "colour": "Hik White"
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1273ZJ-140",
+      "category": "wall_bracket",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2023/09/DS-1273ZJ-140_Datasheet.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2386G2-IU",
+          "DS-2CD2387G3-LIS2UY/SL"
+        ],
+        "material": "Aluminium alloy",
+        "dimensionsMm": "Ø140 × 183.5 × 232",
+        "weightG": 703,
+        "maxLoadKg": 4.5,
+        "colour": "Hikvision White"
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1280ZJ-S",
+      "category": "junction_box",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1280ZJ-S.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2T87G3-LIS2UY/SL",
+          "DS-2CD2686G2T-IZS"
+        ],
+        "material": "Aluminium alloy",
+        "dimensionsMm": "Ø137 × 53.4 × 164.8",
+        "weightG": 527,
+        "maxLoadKg": 4.5,
+        "colour": "Hikvision White"
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1260ZJ",
+      "category": "junction_box",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1260ZJ.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2T87G3-LIS2UY/SL",
+          "DS-2CD2686G2T-IZS"
+        ],
+        "description": "Junction box for bullet camera",
+        "material": "Aluminium alloy",
+        "dimensionsMm": "Ø88.5",
+        "weightG": 251,
+        "maxLoadKg": 4.5,
+        "colour": "Hikvision White"
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1275ZJ-SUS",
+      "category": "pole_bracket",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1275ZJ-SUS.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2386G2-IU",
+          "DS-2CD2387G3-LIS2UY/SL",
+          "DS-2CD2T87G3-LIS2UY/SL",
+          "DS-2CD2686G2T-IZS"
+        ],
+        "material": "Stainless steel",
+        "poleDiameterMm": [
+          67,
+          127
+        ],
+        "dimensionsMm": "127 × 46 × 250",
+        "weightG": 1480,
+        "maxLoadKg": 10
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1275ZJ-S-SUS",
+      "category": "pole_bracket",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1275ZJ-S-SUS.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2T87G3-LIS2UY/SL",
+          "DS-2CD2686G2T-IZS"
+        ],
+        "material": "Stainless steel",
+        "poleDiameterMm": [
+          67,
+          127
+        ],
+        "dimensionsMm": "144 × 131.6 × 44.3",
+        "weightG": 760,
+        "maxLoadKg": 10
+      },
+      "unverified": [
+        "ingress"
+      ]
+    },
+    {
+      "manufacturer": "Hikvision",
+      "family": "Hikvision",
+      "model": "DS-1276ZJ-SUS",
+      "category": "wall_bracket",
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/pdf_files/DS-1276ZJ-SUS.pdf",
+      "verifiedAt": "2026-10-02",
+      "specs": {
+        "compatibleModels": [
+          "DS-2CD2386G2-IU",
+          "DS-2CD2387G3-LIS2UY/SL",
+          "DS-2CD2T87G3-LIS2UY/SL",
+          "DS-2CD2686G2T-IZS"
+        ],
+        "description": "Corner mount",
+        "material": "Stainless steel",
+        "dimensionsMm": "126 × 105 × 250",
+        "weightG": 1990,
+        "maxLoadKg": 10
+      },
+      "unverified": [
+        "ingress"
+      ]
+    }
+  ],
+  "compatibility": [
+    {
+      "kind": "camera_junction_box",
+      "from": "DS-2CD2386G2-IU",
+      "to": "DS-1280ZJ-PT6",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/09/DS-2CD2386G2-IU-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DS-2CD2387G3-LIS2UY/SL",
+      "to": "DS-1280ZJ-PT6",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/04/DS-2CD2387G3-LIS2UY_SLRB_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2386G2-IU",
+      "to": "DS-1273ZJ-140B",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/09/DS-2CD2386G2-IU-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2387G3-LIS2UY/SL",
+      "to": "DS-1273ZJ-140B",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/04/DS-2CD2387G3-LIS2UY_SLRB_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2386G2-IU",
+      "to": "DS-1273ZJ-140",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/09/DS-2CD2386G2-IU-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2387G3-LIS2UY/SL",
+      "to": "DS-1273ZJ-140",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/04/DS-2CD2387G3-LIS2UY_SLRB_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DS-2CD2T87G3-LIS2UY/SL",
+      "to": "DS-1280ZJ-S",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/08/DS-2CD2T87G3-LIS2UY_SL_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DS-2CD2686G2T-IZS",
+      "to": "DS-1280ZJ-S",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/06/DS-2CD2686G2T-IZS-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DS-2CD2T87G3-LIS2UY/SL",
+      "to": "DS-1260ZJ",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/08/DS-2CD2T87G3-LIS2UY_SL_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "DS-2CD2686G2T-IZS",
+      "to": "DS-1260ZJ",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/06/DS-2CD2686G2T-IZS-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DS-2CD2386G2-IU",
+      "to": "DS-1275ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/09/DS-2CD2386G2-IU-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DS-2CD2387G3-LIS2UY/SL",
+      "to": "DS-1275ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/04/DS-2CD2387G3-LIS2UY_SLRB_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DS-2CD2T87G3-LIS2UY/SL",
+      "to": "DS-1275ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/08/DS-2CD2T87G3-LIS2UY_SL_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DS-2CD2686G2T-IZS",
+      "to": "DS-1275ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/06/DS-2CD2686G2T-IZS-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DS-2CD2T87G3-LIS2UY/SL",
+      "to": "DS-1275ZJ-S-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/08/DS-2CD2T87G3-LIS2UY_SL_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_pole_bracket",
+      "from": "DS-2CD2686G2T-IZS",
+      "to": "DS-1275ZJ-S-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/06/DS-2CD2686G2T-IZS-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2386G2-IU",
+      "to": "DS-1276ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2024/09/DS-2CD2386G2-IU-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2387G3-LIS2UY/SL",
+      "to": "DS-1276ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/04/DS-2CD2387G3-LIS2UY_SLRB_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2T87G3-LIS2UY/SL",
+      "to": "DS-1276ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2025/08/DS-2CD2T87G3-LIS2UY_SL_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_wall_bracket",
+      "from": "DS-2CD2686G2T-IZS",
+      "to": "DS-1276ZJ-SUS",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/06/DS-2CD2686G2T-IZS-C_Datasheet.pdf",
+      "note": "listed under Accessory > Optional on the camera datasheet"
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DS-2CD2386G2-IU",
+      "to": "DS-7608NXI-I2/8P/VPro",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/04/AcuSeek-Camera-Compatibility-Checklist.pdf",
+      "note": "AcuSeek support per 'AcuSeek Camera Compatibility Checklist' (series-level entry 2xx6G2(C), camera firmware V5.7.19_241207); document hosted by IT Plus NZ on the NVR product page. Series-pattern match, not an exact-model listing."
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DS-2CD2387G3-LIS2UY/SL",
+      "to": "DS-7608NXI-I2/8P/VPro",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/04/AcuSeek-Camera-Compatibility-Checklist.pdf",
+      "note": "AcuSeek support per 'AcuSeek Camera Compatibility Checklist' (series-level entry 2xx7G3, camera firmware V5.8.10_250605 and above); document hosted by IT Plus NZ on the NVR product page. Series-pattern match, not an exact-model listing."
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DS-2CD2T87G3-LIS2UY/SL",
+      "to": "DS-7608NXI-I2/8P/VPro",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/04/AcuSeek-Camera-Compatibility-Checklist.pdf",
+      "note": "AcuSeek support per 'AcuSeek Camera Compatibility Checklist' (series-level entry 2xx7G3, camera firmware V5.8.10_250605 and above); document hosted by IT Plus NZ on the NVR product page. Series-pattern match, not an exact-model listing."
+    },
+    {
+      "kind": "camera_nvr",
+      "from": "DS-2CD2686G2T-IZS",
+      "to": "DS-7608NXI-I2/8P/VPro",
+      "qty": 1,
+      "sourceUrl": "https://www.itplus.co.nz/wp-content/uploads/2026/04/AcuSeek-Camera-Compatibility-Checklist.pdf",
+      "note": "AcuSeek support per 'AcuSeek Camera Compatibility Checklist' (series-level entry 2XX6G2T(C), camera firmware V5.7.19_241207); document hosted by IT Plus NZ on the NVR product page. Series-pattern match, not an exact-model listing."
+    }
+  ],
+  "notes": [
+    "hikvision.com (/en/, /au-en/) returned only a JavaScript bot-challenge page to both WebFetch and curl on 2026-10-02, so manufacturer pages could not be read. All specs were taken from the official Hikvision datasheet PDFs hosted by IT Plus (NZ Hikvision distributor, itplus.co.nz) on the corresponding NZ product pages, per the FORMAT.md distributor fallback rule.",
+    "IT Plus product pages used: DS-2CD2386G2-IU https://www.itplus.co.nz/products/hikvision-ds-2cd2386g2-iu-2-8mm/ ; DS-2CD2387G3-LIS2UY/SL https://www.itplus.co.nz/products/hikvision-ds-2cd2387g3-lis2uy-sl-2-8mm/ (also -4mm) ; DS-2CD2T87G3-LIS2UY/SL https://www.itplus.co.nz/products/hikvision-ds-2cd2t87g3-lis2uy-sl-2-8mm-2/ (also -4mm) ; DS-2CD2686G2T-IZS https://www.itplus.co.nz/products/hikvision-ds-2cd2686g2t-izs/ ; DS-7604NI-M1/4P https://www.itplus.co.nz/products/hikvision-ds-7604ni-m1-4p/ ; DS-7608NI-M2/8P https://www.itplus.co.nz/products/hikvision-ds-7608ni-m2-8p/ ; DS-7608NXI-I2/8P/VPro https://www.itplus.co.nz/products/hikvision-ds-7608nxi-i2-8p-vpro/ ; mounts under https://www.itplus.co.nz/products/hikvision-<model>/ (DS-1273ZJ-140 datasheet came from the -blk page).",
+    "NZ SKUs at IT Plus append the lens, e.g. DS-2CD2386G2-IU-2.8MM, DS-2CD2387G3-LIS2UY/SL-2.8MM / -4MM, DS-2CD2T87G3-LIS2UY/SL-2.8MM / -4MM. IT Plus only lists the 2.8mm DS-2CD2386G2-IU in NZ; 4mm/6mm are on the datasheet but NZ availability was not confirmed.",
+    "DS-2CD2387G3-LIS2UY/SL and DS-2CD2T87G3-LIS2UY/SL (ColorVu 3.0 / Smart Hybrid Light) are the current 8MP ColorVu successors; the datasheet prints a single 'Supplement Light Range' (turret 30 m, bullet 60 m) covering both white light and IR, so it is stored as supplementLightRangeM rather than separate irRangeM/whiteLightRangeM. 'siren' in activeDeterrence = datasheet wording 'audio alarm'/'audible warning' via the built-in speaker.",
+    "DS-2CD2686G2T-IZS: commercial-suitable motorised varifocal 8MP bullet (IK10). hfovDeg is the wide end (108°); tele end 46°. NOTE: IT Plus lists it under 'Clearance', so it may be nearing end of life. A current alternative DS-2CD3686G2HT-LIZSUY is sold by IT Plus, but its hosted datasheet only lists DS-2CD3686G2HT-LIZS / -LIZSY (no 'U' variant), so it was not added.",
+    "DS-2CD2T86G2-2I (C) (AcuSense 8MP bullet) datasheet was read but the model is listed under 'Clearance' at IT Plus, so it was left out in favour of current models.",
+    "4-channel AcuSense NVR DS-7604NXI-K1/4P (and DS-7608NXI-K2/8P) were not found at any reachable NZ/AU distributor and the manufacturer site was unreachable, so they were NOT included. DS-7604NI-M1/4P (M Series) is the NZ-stocked 4-ch PoE NVR; its datasheet does not use the AcuSense name, only 'configurable camera smart functions'. IT Plus showed it 'Out of stock' on 2026-10-02.",
+    "DS-7608NXI-I2/8P/VPro is the NZ-stocked AcuSense/AcuSeek 8-ch PoE NVR (datasheet lists an AU model DS-7608NXI-I2/8P/VPro(STD)/AUS/4T). With 'AI by NVR' enabled decoding drops to 20-ch@1080p; the decoding map records the AI-disabled maximum (32-ch@1080p). No 4K/8MP-specific decoding figure is printed. maxTotalTb = 2 bays × 20 TB per disk.",
+    "PoE per-port wattage is not printed on any of the three NVR datasheets (only the total budget). ONVIF is not mentioned on the NVR datasheets (DS-7608NXI says 'Compatible to third-party network cameras').",
+    "DS-1273ZJ-140 / DS-1273ZJ-140B accessory datasheets describe them as wall brackets for DS-2CC51xxP(N) dome cameras, but both are listed as optional wall mounts on the DS-2CD2386G2-IU and DS-2CD2387G3-LIS2UY/SL camera datasheets, which is what the compatibility entries are based on. DS-1275ZJ-SUS is called 'Vertical pole mount' on camera datasheets but 'Horizontal Pole Mount' (to be used with a pendant mount) on its own datasheet.",
+    "Turret datasheets also list DS-1271ZJ-140 (pendant mount) and, for DS-2CD2387G3-LIS2UY/SL, DS-2280ZJ-WA140, DS-2200ZJ-WA-140, DS-2200ZJ-WAJ-140, DS-2210ZJ-WA-140; those accessories were not researched as products. DS-1280ZJ-XS and DS-1280ZJ-DM18 are stocked in NZ but are not listed as accessories on any of the chosen camera datasheets, so they were not included.",
+    "Mount datasheets print no IP rating (only 'waterproof rubber is necessary for outdoor application'); ingress is listed as unverified for all mounts."
+  ]
+}

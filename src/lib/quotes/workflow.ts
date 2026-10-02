@@ -78,11 +78,25 @@ export async function updateQuoteContent(id: string, patch: QuoteContent, actor:
 }
 
 /** Chris approves a system-prepared quote exactly as it stands. */
+/** Priced hardware in a prepared quote's snapshot whose supplier price is stale or undated. */
+export function staleSupplierPrices(internalCosting: unknown): string[] {
+  const lines = (internalCosting as { lines?: { priced?: boolean; productId?: string | null; model?: string | null; supplier?: string | null; freshness?: string | null }[] } | null)?.lines ?? [];
+  return lines
+    .filter((l) => l.priced && l.productId && (l.freshness === "stale" || l.freshness === "unknown"))
+    .map((l) => `${l.model ?? "item"}${l.supplier ? ` (${l.supplier}, ${l.freshness})` : ""}`);
+}
+
 export async function approveQuote(id: string, actor: Actor): Promise<void> {
   assertApprover(actor);
   const q = await load(id);
   if (!["ai_prepared", "needs_review"].includes(q.status)) throw new QuoteWorkflowError(`A quote that is ${q.status.replace(/_/g, " ")} cannot be approved.`);
   if (!q.lineItems.length) throw new QuoteWorkflowError("The quote has no lines.");
+  const stale = staleSupplierPrices(q.internalCosting);
+  if (stale.length) {
+    throw new QuoteWorkflowError(
+      `Refresh supplier price before final quote approval: ${stale.join("; ")}. Then re-run the assessment and prepare the quote again, so the new price is in it.`,
+    );
+  }
   await db
     .update(quotes)
     .set({ status: "approved", approvedById: actor.userId, approvedAt: new Date(), approvalHash: quoteFingerprint(q), updatedAt: new Date() })

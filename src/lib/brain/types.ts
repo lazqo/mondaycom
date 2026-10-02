@@ -137,6 +137,8 @@ export type EnquiryInput = {
   leadStatus?: string | null;
   existingCustomer?: boolean;
   customerName?: string | null;
+  /** A residential tier asked for (by the customer or Chris). Ignored, with a note, for commercial. */
+  requestedTier?: Tier | null;
 };
 
 // ---------- catalogue ----------
@@ -152,9 +154,14 @@ export type ProductCategory =
   | "monitor"
   | "cable"
   | "junction_box"
+  | "wall_bracket"
+  | "pole_bracket"
   | "conduit"
   | "accessory"
+  | "kit"
   | "other";
+
+export type PriceFreshness = "current" | "aging" | "stale" | "unknown";
 
 export type ProductPrice = {
   supplier: string;
@@ -164,18 +171,59 @@ export type ProductPrice = {
   confidence: number | null;
   /** Approved for quoting; a price awaiting review is not used. */
   approved: boolean;
+  /** Set by the engine from lastChecked and the freshness policy. */
+  freshness?: PriceFreshness;
+  ageDays?: number | null;
+  /** 1 = the brand's preferred supplier; null when no route covers this brand. */
+  routeRank?: number | null;
+  /** Why this supplier's offer was used. */
+  routeNote?: string | null;
 };
+
+/** One supplier's listing for a product, before the engine picks which one to quote from. */
+export type ProductOffer = {
+  supplierId: string;
+  supplier: string;
+  supplierIsDefault: boolean;
+  supplierPriority: number;
+  supplierSku: string | null;
+  costExGst: number | null;
+  approved: boolean;
+  /** A held cost change waiting for review. Never used for quoting. */
+  pendingCostExGst: number | null;
+  priceOnApplication: boolean;
+  stock: string | null;
+  lastChecked: Date | string | null;
+  confidence: number | null;
+};
+
+/** Get Secure's preferred supplier(s) per brand. */
+export type BrandRoute = { brand: string; supplierId: string; supplier: string; rank: number; market: "residential" | "commercial" | "both"; status: KnowledgeStatus };
+
+export type CompatibilityKind = "camera_nvr" | "camera_junction_box" | "camera_wall_bracket" | "camera_pole_bracket" | "nvr_hdd" | "kit_component";
+export const COMPATIBILITY_KINDS: CompatibilityKind[] = ["camera_nvr", "camera_junction_box", "camera_wall_bracket", "camera_pole_bracket", "nvr_hdd", "kit_component"];
+export type CompatibilityLink = { kind: CompatibilityKind; fromId: string; toId: string; quantity: number; status: KnowledgeStatus };
 
 export type ProductBase = {
   id: string;
   manufacturer: string;
+  /** Brand/family for routing and tiers ("TP-Link VIGI", "HiLook", "WD Purple"…). Defaults to the manufacturer. */
+  family?: string | null;
   model: string;
   category: ProductCategory;
-  market: "residential" | "commercial" | "both";
+  residentialAllowed: boolean;
+  commercialAllowed: boolean;
   tier: Tier | null;
+  tierStatus?: KnowledgeStatus;
   status: KnowledgeStatus;
+  /** The offer the engine quotes from; filled from `offers` per job. */
   price: ProductPrice | null;
+  offers?: ProductOffer[];
   onvifProfiles?: string[];
+  ecosystem?: string[];
+  formFactor?: string | null;
+  sourceUrl?: string | null;
+  lastVerifiedAt?: Date | string | null;
   warranty?: string | null;
   alternatives?: string[];
 };
@@ -191,12 +239,20 @@ export type CameraProduct = ProductBase & {
   colourNight?: boolean;
   wdrDb?: number | null;
   codecs: string[];
-  /** Average bitrate at the settings Get Secure installs with, Mbps. */
+  /** Average bitrate at the settings Get Secure installs with, Mbps. Set by Get Secure, not the datasheet. */
   expectedBitrateMbps: number | null;
+  /** Highest main-stream bitrate the manufacturer publishes, Mbps. */
   maxBitrateMbps?: number | null;
+  /** Maximum power draw, W. */
   poeWatts: number | null;
+  poeStandard?: string | null;
   analytics: string[];
+  /** Built-in microphone. */
   audio?: boolean;
+  speaker?: boolean;
+  whiteLightRangeM?: number | null;
+  activeDeterrence?: string[];
+  ingress?: string[];
 };
 
 export type NvrProduct = ProductBase & {
@@ -213,6 +269,14 @@ export type NvrProduct = ProductBase & {
   features: string[];
   audio?: boolean;
   alarmIo?: boolean;
+  outgoingMbps?: number | null;
+  /** Highest camera resolution the recorder can record, MP. */
+  recordingResolutionMaxMp?: number | null;
+  /** Simultaneous decoding: channels at each resolution (MP, or "1080p" ≈ 2 MP). */
+  decoding?: Record<string, number> | null;
+  decodingText?: string | null;
+  /** Camera families the manufacturer says the recorder supports natively. */
+  compatibleFamilies?: string[];
 };
 
 export type HddProduct = ProductBase & { category: "hdd"; capacityTb: number; surveillanceRated: boolean };
@@ -230,9 +294,15 @@ export type InstallationPackage = {
   minCameras: number;
   maxCameras: number;
   storeys: number | null;
-  estimatedHours: number;
-  /** Installation allowance charged, ex GST. */
-  allowanceExGst: number;
+  /** Null until Get Secure enters it. */
+  estimatedHours: number | null;
+  /** Internal labour rate for this package, NZD/hour; null uses the policy rate. */
+  labourRate?: number | null;
+  /** Package price charged, ex GST. Null until Get Secure sets it. */
+  allowanceExGst: number | null;
+  materialsPackageId?: string | null;
+  conduitIncluded?: boolean;
+  conduitAllowanceExGst?: number | null;
   includedMaterials: string[];
   assumptions: string[];
   exclusions: string[];
@@ -240,7 +310,26 @@ export type InstallationPackage = {
   status: KnowledgeStatus;
 };
 
-export type Catalogue = { products: Product[]; packages: InstallationPackage[] };
+export type MaterialsPackage = {
+  id: string;
+  name: string;
+  propertyType: PropertyType;
+  customerDescription: string;
+  items: { description: string; quantity?: string | null; costExGst?: number | null }[];
+  costExGst: number | null;
+  sellExGst: number | null;
+  isDefault: boolean;
+  version: number;
+  status: KnowledgeStatus;
+};
+
+export type Catalogue = {
+  products: Product[];
+  packages: InstallationPackage[];
+  materialsPackages?: MaterialsPackage[];
+  compatibility?: CompatibilityLink[];
+  routes?: BrandRoute[];
+};
 
 // ---------- policy ----------
 
@@ -264,13 +353,13 @@ export type Policies = {
   ppmThresholds: PolicyValue<Record<DetailLevel, number>>;
   purposeDetail: PolicyValue<Record<CameraPurpose, DetailLevel>>;
   wdrRequiredDb: PolicyValue<number>;
-  standardMaterials: PolicyValue<{ sellExGst: number | null; costExGst: number | null; contents: string[] }>;
   junctionBoxSurfaces: PolicyValue<MountingSurface[]>;
   doubleStoreyConduit: PolicyValue<boolean>;
+  priceAgingDays: PolicyValue<number>;
   priceStaleDays: PolicyValue<number>;
   priceChangeReviewPct: PolicyValue<number>;
   defaultResidentialTier: PolicyValue<Tier | null>;
-  tiers: PolicyValue<Record<Tier, { targetMp: number | null; brands: string[] }>>;
+  tiers: PolicyValue<Record<Tier, { targetMp: number | null; brands: string[]; description?: string; ecosystemOnly?: boolean }>>;
   commercialSiteVisitMandatory: PolicyValue<boolean>;
   audioDefault: PolicyValue<boolean>;
 };
@@ -297,7 +386,8 @@ export type CameraChoice = {
   reasons: string[];
 };
 
-export type Check = { name: string; pass: boolean; detail: string };
+/** `unverified`: passed because nothing contradicts it, but the catalogue lacks the data to prove it. */
+export type Check = { name: string; pass: boolean; detail: string; unverified?: boolean };
 
 export type NvrEvaluation = { product: NvrProduct; pass: boolean; checks: Check[] };
 
@@ -332,12 +422,16 @@ export type MaterialLine = {
   charged: boolean;
   approvalRequired: boolean;
   reason: string;
+  /** For an allowance line (conduit) charged as a set amount rather than a product. */
+  allowanceExGst?: number | null;
 };
 
 export type LabourResult = {
   package: InstallationPackage | null;
   estimatedHours: number | null;
   allowanceExGst: number | null;
+  /** How the labour price was set: the package price, or entered hours x the internal rate. */
+  basis: "package_price" | "hours_x_rate" | null;
   internalRate: number;
   internalReferenceExGst: number | null;
   notes: string[];
@@ -352,6 +446,15 @@ export type CostLine = {
   markupPct: number | null;
   kind: "hardware" | "labour" | "materials" | "other";
   priced: boolean;
+  /** Snapshot of where the cost came from, kept with a prepared quote. */
+  productId?: string | null;
+  model?: string | null;
+  supplier?: string | null;
+  supplierSku?: string | null;
+  lastChecked?: Date | string | null;
+  freshness?: PriceFreshness | null;
+  /** Internal breakdown (materials package contents, kit components). Never shown to the customer. */
+  detail?: string[];
 };
 
 export type Costing = {
@@ -370,6 +473,10 @@ export type Costing = {
   markupLogic: string;
   complete: boolean;
   unpriced: string[];
+  /** Priced lines whose supplier price is stale or has no check date. */
+  refreshRequired: { model: string; supplier: string | null; freshness: PriceFreshness }[];
+  /** A supplier kit used for part of the hardware, if cheaper than its components. */
+  kit: { productId: string; model: string; components: string[]; savingExGst: number } | null;
 };
 
 export type Confidence = {
@@ -427,7 +534,17 @@ export type DecisionPacket = {
   nvr: { selected: NvrProduct | null; channelsNeeded: number | null; expansionChannels: number; evaluated: NvrEvaluation[]; notes: string[] };
   recording: { mode: "continuous" | "motion"; storage: StorageResult };
   network: NetworkResult;
-  installation: { storeys: number | null; doubleStorey: boolean; junctionBoxRecommended: boolean; junctionBoxReason: string | null; conduitRequired: boolean; complexity: Level; materials: MaterialLine[] };
+  installation: {
+    storeys: number | null;
+    doubleStorey: boolean;
+    junctionBoxRecommended: boolean;
+    junctionBoxReason: string | null;
+    conduitRequired: boolean;
+    complexity: Level;
+    materials: MaterialLine[];
+    /** Documented accessories for the chosen cameras (junction boxes, brackets). */
+    accessories?: { camera: string; kind: CompatibilityKind; product: string; productId: string }[];
+  };
   labour: LabourResult;
   costing: Costing;
   privacy: { audioRecording: boolean; checklist: { item: string; answer: string | null }[]; flags: string[] } | null;
