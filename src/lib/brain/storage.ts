@@ -71,27 +71,41 @@ export function largestDrives(nvr: NvrProduct, products: Product[], policies: Po
 }
 
 export function storagePlan(input: {
+  /** Total design bitrate of the cameras (recording profile), Mbps. */
   totalMbps: number | null;
-  customerRetentionDays: number | null;
+  customerRetentionDays?: number | null;
+  retention?: { target: number; minimum: number; source: "customer" | "profile" | "policy" };
   nvr: NvrProduct | null;
   products: Product[];
   policies: Policies;
   links?: CompatibilityLink[];
+  /** Why the total is unknown, when it is. */
+  missingNote?: string;
 }): StorageResult {
   const { policies } = input;
-  const target = input.customerRetentionDays ?? policies.retentionTargetDays.value;
-  const minimum = Math.min(target, policies.retentionMinimumDays.value);
+  const target = input.retention?.target ?? input.customerRetentionDays ?? policies.retentionTargetDays.value;
+  const minimum = Math.min(target, input.retention?.minimum ?? policies.retentionMinimumDays.value);
   const base = {
     retentionTargetDays: target,
-    retentionSource: (input.customerRetentionDays ? "customer" : "policy") as "customer" | "policy",
+    retentionSource: input.retention?.source ?? ((input.customerRetentionDays ? "customer" : "policy") as "customer" | "policy"),
     headroomPct: policies.storageHeadroomPct.value,
   };
   if (input.totalMbps == null) {
-    return { ...base, totalMbps: null, rawGb: null, requiredGb: null, drives: null, installedTb: null, expectedRetentionDays: null, status: "cannot_calculate", notes: ["Camera bitrates unknown: storage cannot be calculated."] };
+    return {
+      ...base,
+      totalMbps: null,
+      rawGb: null,
+      requiredGb: null,
+      drives: null,
+      installedTb: null,
+      expectedRetentionDays: null,
+      status: "cannot_calculate",
+      notes: [input.missingNote ?? "Design bitrates unknown: storage cannot be calculated."],
+    };
   }
   const { rawGb, requiredGb } = requiredStorageGb(input.totalMbps, target, policies);
   const perDay = dailyGb(input.totalMbps, policies);
-  const notes = [`${input.totalMbps.toFixed(1)} Mbps total x ${policies.gbPerMbpsDay.value} GB/day per Mbps x ${target} days = ${Math.round(rawGb)} GB, plus ${policies.storageHeadroomPct.value}% = ${Math.round(requiredGb)} GB.`];
+  const notes = [`${input.totalMbps.toFixed(1)} Mbps design bitrate x ${policies.gbPerMbpsDay.value} GB/day per Mbps x ${target} days = ${Math.round(rawGb)} GB, plus ${policies.storageHeadroomPct.value}% = ${Math.round(requiredGb)} GB.`];
   if (!input.nvr) return { ...base, totalMbps: input.totalMbps, rawGb, requiredGb, drives: null, installedTb: null, expectedRetentionDays: null, status: "cannot_calculate", notes: [...notes, "No recorder selected, so drives cannot be chosen."] };
 
   const pick = chooseDrives(requiredGb, input.nvr, input.products, input.policies, input.links);

@@ -36,8 +36,10 @@ describe("Test 1: normal 4-camera house", () => {
     expect(p.recording.storage.installedTb).toBe(6);
   });
 
-  it("includes the standard materials allowance and the $95/hour reference", () => {
-    expect(p.installation.materials.find((m) => m.key === "standard_materials")?.charged).toBe(true);
+  it("uses the exact 4-camera package, with standard materials inside it and labour at $95/hour", () => {
+    expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
+    expect(p.installation.materials.find((m) => m.key === "standard_materials")?.charged).toBe(false);
+    expect(p.costing.lines.find((l) => l.key === "standard_materials")).toMatchObject({ internalOnly: true, unitCostExGst: 60 });
     expect(p.labour.internalRate).toBe(95);
     expect(p.labour.internalReferenceExGst).toBe(6 * 95);
   });

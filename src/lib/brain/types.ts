@@ -139,6 +139,8 @@ export type EnquiryInput = {
   customerName?: string | null;
   /** A residential tier asked for (by the customer or Chris). Ignored, with a note, for commercial. */
   requestedTier?: Tier | null;
+  /** Recording profile to design with; the default for the property type when not given. */
+  recordingProfileId?: string | null;
 };
 
 // ---------- catalogue ----------
@@ -178,6 +180,9 @@ export type ProductPrice = {
   routeRank?: number | null;
   /** Why this supplier's offer was used. */
   routeNote?: string | null;
+  stock?: string | null;
+  /** Other suppliers' usable listings, for the approver to compare. Never shown to the customer. */
+  alternatives?: { supplier: string; costExGst: number; approved: boolean; freshness: PriceFreshness; stock: string | null; routeRank: number | null }[];
 };
 
 /** One supplier's listing for a product, before the engine picks which one to quote from. */
@@ -239,9 +244,7 @@ export type CameraProduct = ProductBase & {
   colourNight?: boolean;
   wdrDb?: number | null;
   codecs: string[];
-  /** Average bitrate at the settings Get Secure installs with, Mbps. Set by Get Secure, not the datasheet. */
-  expectedBitrateMbps: number | null;
-  /** Highest main-stream bitrate the manufacturer publishes, Mbps. */
+  /** Highest main-stream bitrate the manufacturer publishes, Mbps: a capability, not a design value. */
   maxBitrateMbps?: number | null;
   /** Maximum power draw, W. */
   poeWatts: number | null;
@@ -289,20 +292,30 @@ export type Product = CameraProduct | NvrProduct | HddProduct | SwitchProduct | 
 
 export type InstallationPackage = {
   id: string;
+  /** Exact package key, e.g. RES_CCTV_SINGLE_4. */
+  key?: string | null;
   name: string;
   propertyType: PropertyType;
+  /** The exact camera count the package covers. */
+  cameraCount?: number | null;
+  storeyType?: "single" | "double" | null;
   minCameras: number;
   maxCameras: number;
   storeys: number | null;
-  /** Null until Get Secure enters it. */
+  /** Expected labour hours. Null until Get Secure enters it. */
   estimatedHours: number | null;
   /** Internal labour rate for this package, NZD/hour; null uses the policy rate. */
   labourRate?: number | null;
-  /** Package price charged, ex GST. Null until Get Secure sets it. */
+  /** Customer sell allowance for the installation, ex GST. Null until Get Secure sets it. */
   allowanceExGst: number | null;
+  /** Internal standard-material cost for this package, ex GST. */
+  materialCostExGst?: number | null;
   materialsPackageId?: string | null;
   conduitIncluded?: boolean;
+  /** Internal conduit allowance, ex GST. */
   conduitAllowanceExGst?: number | null;
+  /** Internal installation-complexity allowance, ex GST. */
+  complexityAllowanceExGst?: number | null;
   includedMaterials: string[];
   assumptions: string[];
   exclusions: string[];
@@ -323,12 +336,59 @@ export type MaterialsPackage = {
   status: KnowledgeStatus;
 };
 
+export type RecordingRule = {
+  id: string;
+  scope: "product" | "family" | "resolution";
+  productId?: string | null;
+  family?: string | null;
+  minMp?: number | null;
+  maxMp?: number | null;
+  designBitrateMbps: number | null;
+  codec?: string | null;
+  frameRate?: number | null;
+  note?: string | null;
+};
+
+export type RecordingProfile = {
+  id: string;
+  key: string;
+  name: string;
+  propertyType: PropertyType | "any";
+  isDefault: boolean;
+  codec: string | null;
+  frameRate: number | null;
+  bitrateControl: "CBR" | "VBR" | null;
+  recordingMode: "continuous" | "motion" | null;
+  retentionTargetDays: number | null;
+  retentionMinimumDays: number | null;
+  rules: RecordingRule[];
+  version: number;
+  status: KnowledgeStatus;
+  approvedBy?: string | null;
+  reviewedAt?: Date | string | null;
+};
+
+/** How one chosen camera is designed to record under the profile. */
+export type CameraDesign = {
+  productId: string;
+  model: string;
+  resolutionMp: number;
+  codec: string | null;
+  frameRate: number | null;
+  /** The bitrate used for bandwidth and storage. Null until the profile sets one for this camera. */
+  designBitrateMbps: number | null;
+  bitrateSource: string | null;
+  bitrateApproved: boolean;
+  publishedMaxBitrateMbps: number | null;
+};
+
 export type Catalogue = {
   products: Product[];
   packages: InstallationPackage[];
   materialsPackages?: MaterialsPackage[];
   compatibility?: CompatibilityLink[];
   routes?: BrandRoute[];
+  recordingProfiles?: RecordingProfile[];
 };
 
 // ---------- policy ----------
@@ -386,15 +446,18 @@ export type CameraChoice = {
   reasons: string[];
 };
 
-/** `unverified`: passed because nothing contradicts it, but the catalogue lacks the data to prove it. */
-export type Check = { name: string; pass: boolean; detail: string; unverified?: boolean };
+/**
+ * `unverified`: passed because nothing contradicts it, but the catalogue lacks the data to prove it.
+ * `warning`: passes the design, with a risk Chris should see (e.g. maximum possible bandwidth).
+ */
+export type Check = { name: string; pass: boolean; detail: string; unverified?: boolean; warning?: boolean };
 
 export type NvrEvaluation = { product: NvrProduct; pass: boolean; checks: Check[] };
 
 export type StorageResult = {
   totalMbps: number | null;
   retentionTargetDays: number;
-  retentionSource: "customer" | "policy";
+  retentionSource: "customer" | "profile" | "policy";
   rawGb: number | null;
   headroomPct: number;
   requiredGb: number | null;
@@ -428,10 +491,20 @@ export type MaterialLine = {
 
 export type LabourResult = {
   package: InstallationPackage | null;
+  /** No exact package for this camera count/storey: a custom installation needing its own calculation. */
+  customInstallation: boolean;
   estimatedHours: number | null;
+  /** Customer sell allowance for the installation, ex GST. */
   allowanceExGst: number | null;
-  /** How the labour price was set: the package price, or entered hours x the internal rate. */
-  basis: "package_price" | "hours_x_rate" | null;
+  /** "package_price" when the sell allowance is set; null otherwise. */
+  basis: "package_price" | null;
+  /** Internal costs, ex GST (null = not set). */
+  labourCostExGst: number | null;
+  materialCostExGst: number | null;
+  conduitCostExGst: number | null;
+  complexityCostExGst: number | null;
+  /** Commercial inputs this package still needs before the installation is priced. */
+  missing: string[];
   internalRate: number;
   internalReferenceExGst: number | null;
   notes: string[];
@@ -453,8 +526,14 @@ export type CostLine = {
   supplierSku?: string | null;
   lastChecked?: Date | string | null;
   freshness?: PriceFreshness | null;
+  stock?: string | null;
+  routeNote?: string | null;
+  /** Other suppliers' listings for the approver (internal). */
+  alternatives?: ProductPrice["alternatives"];
   /** Internal breakdown (materials package contents, kit components). Never shown to the customer. */
   detail?: string[];
+  /** A cost Get Secure carries inside another customer line (materials, conduit, complexity). */
+  internalOnly?: boolean;
 };
 
 export type Costing = {
@@ -462,6 +541,8 @@ export type Costing = {
   equipmentCost: number;
   labourCost: number;
   materialsCost: number;
+  /** Conduit and installation-complexity allowances. */
+  allowancesCost: number;
   otherCost: number;
   sellExGst: number;
   gst: number;
@@ -532,7 +613,15 @@ export type DecisionPacket = {
   tierOptions: TierOption[];
   cameras: CameraChoice[];
   nvr: { selected: NvrProduct | null; channelsNeeded: number | null; expansionChannels: number; evaluated: NvrEvaluation[]; notes: string[] };
-  recording: { mode: "continuous" | "motion"; storage: StorageResult };
+  recording: {
+    mode: "continuous" | "motion";
+    storage: StorageResult;
+    profile: { id: string; key: string; name: string; status: KnowledgeStatus; codec: string | null; frameRate: number | null; bitrateControl: string | null } | null;
+    /** Per chosen camera: design bitrate (used) and published maximum (warning only). */
+    designs: CameraDesign[];
+    designBandwidthMbps: number | null;
+    maxPossibleBandwidthMbps: number | null;
+  };
   network: NetworkResult;
   installation: {
     storeys: number | null;

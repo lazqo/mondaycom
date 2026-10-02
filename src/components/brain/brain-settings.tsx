@@ -21,6 +21,7 @@ import {
 import { Badge, Button, Card, CardHeader, Field, FormError, Input, Select, Textarea } from "@/components/ui";
 import { COMPATIBILITY_KINDS, KNOWLEDGE_STATUSES, KNOWLEDGE_STATUS_LABELS, TIERS, type KnowledgeStatus, type PriceFreshness } from "@/lib/brain/types";
 import { cn } from "@/lib/utils";
+import { ProfileSettings, type ProfileView } from "./profile-settings";
 
 const STATUS_STYLE: Record<KnowledgeStatus, string> = {
   industry_fact: "bg-sky-100 text-sky-800",
@@ -570,6 +571,7 @@ const PRICE_SOURCES: [string, string][] = [
 
 function CsvImport({ supplierId }: { supplierId: string }) {
   const [text, setText] = React.useState("");
+  const [trade, setTrade] = React.useState(false);
   const a = useAction();
   return (
     <div className="space-y-1 sm:col-span-4" data-testid="csv-import">
@@ -588,13 +590,16 @@ function CsvImport({ supplierId }: { supplierId: string }) {
             if (f) setText(await f.text());
           }}
         />
+        <label className="flex items-center gap-1 text-xs">
+          <input type="checkbox" checked={trade} onChange={(e) => setTrade(e.target.checked)} /> These are Get Secure trade (account) prices, not retail
+        </label>
         <Button
           size="sm"
           variant="secondary"
-          disabled={a.pending || !text.trim()}
+          disabled={a.pending || !text.trim() || !trade}
           onClick={() =>
             a.run(
-              () => importSupplierCsvAction(supplierId, text),
+              () => importSupplierCsvAction(supplierId, text, trade),
               (d) =>
                 `${d.recorded} price(s) recorded, ${d.held} held for review, ${d.poa} POA.${d.unmatched.length ? ` Not in the catalogue: ${d.unmatched.slice(0, 8).join(", ")}${d.unmatched.length > 8 ? "…" : ""}.` : ""}${d.errors.length ? ` ${d.errors.length} row(s) skipped.` : ""}`,
             )
@@ -766,17 +771,19 @@ function SupplierForm({ s, canApprove }: { s: SupplierView | null; canApprove: b
 
 export type PackageView = {
   id: string;
+  key: string | null;
   name: string;
   propertyType: string;
-  minCameras: number;
-  maxCameras: number;
-  storeys: number | null;
+  cameraCount: number | null;
+  storeyType: string | null;
   estimatedHours: number | null;
   labourRate: number | null;
   allowanceExGst: number | null;
+  materialCostExGst: number | null;
   materialsPackageId: string | null;
   conduitIncluded: boolean;
   conduitAllowanceExGst: number | null;
+  complexityAllowanceExGst: number | null;
   includedMaterials: string[];
   assumptions: string[];
   exclusions: string[];
@@ -801,17 +808,19 @@ const numOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
 
 function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canApprove: boolean; materials: MaterialsView[] }) {
   const [v, setV] = React.useState({
+    key: p?.key ?? "",
     name: p?.name ?? "",
     propertyType: p?.propertyType ?? "residential",
-    minCameras: String(p?.minCameras ?? 1),
-    maxCameras: String(p?.maxCameras ?? 4),
-    storeys: p?.storeys != null ? String(p.storeys) : "1",
+    cameraCount: p?.cameraCount != null ? String(p.cameraCount) : "4",
+    storeyType: p?.storeyType ?? "single",
     estimatedHours: p?.estimatedHours != null ? String(p.estimatedHours) : "",
     labourRate: p?.labourRate != null ? String(p.labourRate) : "",
     allowanceExGst: p?.allowanceExGst != null ? String(p.allowanceExGst) : "",
+    materialCostExGst: p?.materialCostExGst != null ? String(p.materialCostExGst) : "",
     materialsPackageId: p?.materialsPackageId ?? materials[0]?.id ?? "",
     conduitIncluded: p?.conduitIncluded ?? false,
     conduitAllowanceExGst: p?.conduitAllowanceExGst != null ? String(p.conduitAllowanceExGst) : "",
+    complexityAllowanceExGst: p?.complexityAllowanceExGst != null ? String(p.complexityAllowanceExGst) : "",
     includedMaterials: (p?.includedMaterials ?? []).join(", "),
     assumptions: (p?.assumptions ?? []).join(", "),
     exclusions: (p?.exclusions ?? []).join(", "),
@@ -821,11 +830,26 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
   const a = useAction();
   const set = (k: keyof typeof v, val: string | boolean) => setV((cur) => ({ ...cur, [k]: val }));
   const id = p?.id ?? "new";
-  const unpriced = !v.allowanceExGst && !v.estimatedHours;
+  const n = (x: string) => numOrNull(x);
+  const hours = n(v.estimatedHours);
+  const rate = n(v.labourRate) ?? (v.propertyType === "commercial" ? 110 : 95);
+  const parts = [hours != null ? hours * rate : null, n(v.materialCostExGst), v.conduitIncluded ? n(v.conduitAllowanceExGst) : 0, n(v.complexityAllowanceExGst)];
+  const internal = parts.every((x) => x != null) ? (parts as number[]).reduce((s, x) => s + x, 0) : null;
+  const sell = n(v.allowanceExGst);
+  const missing = [
+    hours == null && "labour hours",
+    n(v.materialCostExGst) == null && "standard material cost",
+    v.conduitIncluded && n(v.conduitAllowanceExGst) == null && "conduit allowance",
+    n(v.complexityAllowanceExGst) == null && "complexity allowance",
+    sell == null && "customer sell allowance",
+  ].filter(Boolean) as string[];
   return (
     <div className="grid gap-2 border-t border-gray-100 p-4 text-sm sm:grid-cols-4" data-testid="package-form">
-      <Field label="Name" htmlFor={`kn-${id}`} className="sm:col-span-2">
-        <Input id={`kn-${id}`} value={v.name} onChange={(e) => set("name", e.target.value)} placeholder="Residential 3–4 cameras, single storey" />
+      <Field label="Key" htmlFor={`kk-${id}`} hint="Exact package key">
+        <Input id={`kk-${id}`} value={v.key} onChange={(e) => set("key", e.target.value.toUpperCase())} placeholder="RES_CCTV_SINGLE_4" />
+      </Field>
+      <Field label="Name" htmlFor={`kn-${id}`}>
+        <Input id={`kn-${id}`} value={v.name} onChange={(e) => set("name", e.target.value)} placeholder="Residential CCTV, single storey, 4 cameras" />
       </Field>
       <Field label="Property" htmlFor={`kp-${id}`}>
         <Select id={`kp-${id}`} value={v.propertyType} onChange={(e) => set("propertyType", e.target.value)}>
@@ -836,25 +860,39 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
       <Field label="Status" htmlFor={`ks-${id}`}>
         <StatusSelect id={`ks-${id}`} value={v.status} onChange={(x) => set("status", x)} canApprove={canApprove} />
       </Field>
-      <Field label="Cameras from" htmlFor={`kmin-${id}`}>
-        <Input id={`kmin-${id}`} type="number" value={v.minCameras} onChange={(e) => set("minCameras", e.target.value)} />
+      <Field label="Exact camera count" htmlFor={`kc-${id}`}>
+        <Input id={`kc-${id}`} type="number" value={v.cameraCount} onChange={(e) => set("cameraCount", e.target.value)} />
       </Field>
-      <Field label="Cameras to" htmlFor={`kmax-${id}`}>
-        <Input id={`kmax-${id}`} type="number" value={v.maxCameras} onChange={(e) => set("maxCameras", e.target.value)} />
+      <Field label="Storey type" htmlFor={`kst-${id}`}>
+        <Select id={`kst-${id}`} value={v.storeyType} onChange={(e) => set("storeyType", e.target.value)}>
+          <option value="single">Single storey</option>
+          <option value="double">Double storey</option>
+        </Select>
       </Field>
-      <Field label="Storeys (blank = any)" htmlFor={`kst-${id}`}>
-        <Input id={`kst-${id}`} type="number" value={v.storeys} onChange={(e) => set("storeys", e.target.value)} />
-      </Field>
-      <Field label="Estimated labour hours" htmlFor={`kh-${id}`}>
+      <Field label="Expected labour hours" htmlFor={`kh-${id}`}>
         <Input id={`kh-${id}`} type="number" value={v.estimatedHours} onChange={(e) => set("estimatedHours", e.target.value)} placeholder="Not set" />
       </Field>
       <Field label="Internal labour rate ($/h)" htmlFor={`kr-${id}`} hint="Blank uses the policy rate">
         <Input id={`kr-${id}`} type="number" value={v.labourRate} onChange={(e) => set("labourRate", e.target.value)} placeholder={v.propertyType === "commercial" ? "110" : "95"} />
       </Field>
-      <Field label="Package price, ex GST ($)" htmlFor={`ka-${id}`} hint="Blank: hours × rate">
+      <Field label="Standard material cost, ex GST ($)" htmlFor={`kmc-${id}`} hint="Internal">
+        <Input id={`kmc-${id}`} type="number" value={v.materialCostExGst} onChange={(e) => set("materialCostExGst", e.target.value)} placeholder="Not set" />
+      </Field>
+      <div className="space-y-1 pt-5">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={v.conduitIncluded} onChange={(e) => set("conduitIncluded", e.target.checked)} /> Conduit allowance applies
+        </label>
+      </div>
+      <Field label="Conduit allowance, ex GST ($)" htmlFor={`kca-${id}`} hint="Internal">
+        <Input id={`kca-${id}`} type="number" value={v.conduitAllowanceExGst} onChange={(e) => set("conduitAllowanceExGst", e.target.value)} placeholder="Not set" disabled={!v.conduitIncluded} />
+      </Field>
+      <Field label="Complexity allowance, ex GST ($)" htmlFor={`kx-${id}`} hint="Internal; 0 if none">
+        <Input id={`kx-${id}`} type="number" value={v.complexityAllowanceExGst} onChange={(e) => set("complexityAllowanceExGst", e.target.value)} placeholder="Not set" />
+      </Field>
+      <Field label="Customer sell allowance, ex GST ($)" htmlFor={`ka-${id}`} hint="Installation incl. cabling and standard materials">
         <Input id={`ka-${id}`} type="number" value={v.allowanceExGst} onChange={(e) => set("allowanceExGst", e.target.value)} placeholder="Not set" />
       </Field>
-      <Field label="Standard materials package" htmlFor={`km-${id}`}>
+      <Field label="Standard materials contents" htmlFor={`km-${id}`}>
         <Select id={`km-${id}`} value={v.materialsPackageId} onChange={(e) => set("materialsPackageId", e.target.value)}>
           <option value="">Default</option>
           {materials.map((m) => (
@@ -864,17 +902,11 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
           ))}
         </Select>
       </Field>
-      <div className="space-y-1 pt-5">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={v.conduitIncluded} onChange={(e) => set("conduitIncluded", e.target.checked)} /> Conduit allowance applies
-        </label>
+      <div className="rounded bg-gray-50 px-3 py-2 text-xs text-gray-700 sm:col-span-2" data-testid="package-totals">
+        Internal cost: {internal != null ? `$${internal.toFixed(2)}` : "—"} · Sell: {sell != null ? `$${sell.toFixed(2)}` : "—"}
+        {internal != null && sell != null ? ` · Installation margin $${(sell - internal).toFixed(2)}` : ""}
+        {missing.length ? <span className="block text-amber-700">Not set: {missing.join(", ")}.</span> : null}
       </div>
-      <Field label="Conduit allowance, ex GST ($)" htmlFor={`kc-${id}`}>
-        <Input id={`kc-${id}`} type="number" value={v.conduitAllowanceExGst} onChange={(e) => set("conduitAllowanceExGst", e.target.value)} placeholder="Not set" disabled={!v.conduitIncluded} />
-      </Field>
-      <Field label="Included materials" htmlFor={`ki-${id}`} className="sm:col-span-2">
-        <Input id={`ki-${id}`} value={v.includedMaterials} onChange={(e) => set("includedMaterials", e.target.value)} />
-      </Field>
       <Field label="Assumptions" htmlFor={`kas-${id}`} className="sm:col-span-2">
         <Input id={`kas-${id}`} value={v.assumptions} onChange={(e) => set("assumptions", e.target.value)} />
       </Field>
@@ -891,17 +923,19 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
               () =>
                 savePackageAction({
                   id: p?.id ?? null,
+                  key: v.key || null,
                   name: v.name,
                   propertyType: v.propertyType,
-                  minCameras: Number(v.minCameras),
-                  maxCameras: Number(v.maxCameras),
-                  storeys: v.storeys ? Number(v.storeys) : null,
-                  estimatedHours: numOrNull(v.estimatedHours),
-                  labourRate: numOrNull(v.labourRate),
-                  allowanceExGst: numOrNull(v.allowanceExGst),
+                  cameraCount: Number(v.cameraCount),
+                  storeyType: v.storeyType,
+                  estimatedHours: n(v.estimatedHours),
+                  labourRate: n(v.labourRate),
+                  allowanceExGst: n(v.allowanceExGst),
+                  materialCostExGst: n(v.materialCostExGst),
                   materialsPackageId: v.materialsPackageId || null,
                   conduitIncluded: v.conduitIncluded,
-                  conduitAllowanceExGst: v.conduitIncluded ? numOrNull(v.conduitAllowanceExGst) : null,
+                  conduitAllowanceExGst: v.conduitIncluded ? n(v.conduitAllowanceExGst) : null,
+                  complexityAllowanceExGst: n(v.complexityAllowanceExGst),
                   includedMaterials: csv(v.includedMaterials),
                   assumptions: csv(v.assumptions),
                   exclusions: csv(v.exclusions),
@@ -914,7 +948,6 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
         >
           {p ? `Save (becomes v${p.version + 1})` : "Add package"}
         </Button>
-        {unpriced ? <span className="text-xs text-amber-700">Hours and price not set: assessments show installation as unpriced.</span> : null}
         {a.msg ? <span className="text-xs text-green-700">{a.msg}</span> : null}
         <FormError message={a.error} />
       </div>
@@ -950,13 +983,10 @@ function MaterialsForm({ m, canApprove }: { m: MaterialsView; canApprove: boolea
       <Field label="Shown to the customer as" htmlFor={`mc-${m.id}`}>
         <Input id={`mc-${m.id}`} value={v.customerDescription} onChange={(e) => set("customerDescription", e.target.value)} />
       </Field>
-      <Field label="Internal cost, ex GST ($)" htmlFor={`mco-${m.id}`}>
-        <Input id={`mco-${m.id}`} type="number" value={v.costExGst} onChange={(e) => set("costExGst", e.target.value)} placeholder="Not set" />
-      </Field>
-      <Field label="Charged, ex GST ($)" htmlFor={`ms-${m.id}`}>
-        <Input id={`ms-${m.id}`} type="number" value={v.sellExGst} onChange={(e) => set("sellExGst", e.target.value)} placeholder="Not set" />
-      </Field>
-      <Field label="Contents (one per line; optional cost after |)" htmlFor={`mi-${m.id}`} className="sm:col-span-3">
+      <p className="text-xs text-gray-500 sm:col-span-2">
+        The cost of these materials is entered on each installation package (it depends on the camera count); the customer sees them inside the installation line.
+      </p>
+      <Field label="Contents (one per line)" htmlFor={`mi-${m.id}`} className="sm:col-span-3">
         <Textarea id={`mi-${m.id}`} value={v.items} onChange={(e) => set("items", e.target.value)} className="min-h-28 text-xs" />
       </Field>
       <div className="space-y-2">
@@ -999,6 +1029,7 @@ const TABS = [
   { key: "policies", label: "Rules" },
   { key: "products", label: "Products & prices" },
   { key: "suppliers", label: "Suppliers & routing" },
+  { key: "profiles", label: "Recording profiles" },
   { key: "packages", label: "Installation & materials" },
 ] as const;
 
@@ -1011,6 +1042,7 @@ export function BrainSettings({
   routes,
   packages,
   materials,
+  profiles,
 }: {
   tab: string;
   canApprove: boolean;
@@ -1020,6 +1052,7 @@ export function BrainSettings({
   routes: RouteView[];
   packages: PackageView[];
   materials: MaterialsView[];
+  profiles: ProfileView[];
 }) {
   const [adding, setAdding] = React.useState(false);
   return (
@@ -1088,13 +1121,22 @@ export function BrainSettings({
         </>
       ) : null}
 
+      {tab === "profiles" ? (
+        <ProfileSettings
+          profiles={profiles}
+          canApprove={canApprove}
+          cameras={products.filter((p) => p.category === "camera").map((p) => ({ id: p.id, label: `${p.manufacturer} ${p.model}` }))}
+        />
+      ) : null}
+
       {tab === "packages" ? (
         <>
           <Card>
             <CardHeader title="Installation packages" />
             <p className="px-4 pt-2 text-xs text-gray-500">
-              Residential labour comes from these packages: the package price when set, otherwise the entered hours × the internal rate. Enter hours and prices from Get Secure
-              job history; until then installation shows as unpriced.
+              One package per exact camera count and storey type (RES_CCTV_SINGLE_4 …); jobs with any other count are custom installations. Labour cost is hours × the
+              internal rate; with the material cost and allowances it is the internal cost. The customer pays the sell allowance. Until every value is entered, installation
+              shows as unpriced.
             </p>
             {packages.map((p) => (
               <PackageForm key={p.id} p={p} canApprove={canApprove} materials={materials} />

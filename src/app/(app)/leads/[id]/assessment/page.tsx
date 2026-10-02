@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { leads } from "@/db/schema";
+import { leads, recordingProfiles } from "@/db/schema";
 import { requireOffice } from "@/lib/auth";
 import { enquiryFromLead, latestAssessment } from "@/lib/brain/store";
 import type { DecisionPacket, EnquiryInput } from "@/lib/brain/types";
@@ -18,7 +18,10 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const lead = await db.query.leads.findFirst({ where: eq(leads.id, id), columns: { id: true, name: true } });
   if (!lead) notFound();
-  const [last, fromLead] = await Promise.all([latestAssessment(id), enquiryFromLead(id)]);
+  const [last, fromLead, profileRows] = await Promise.all([latestAssessment(id), enquiryFromLead(id), db.select().from(recordingProfiles)]);
+  const profiles = profileRows
+    .filter((p) => p.status !== "deprecated")
+    .map((p) => ({ id: p.id, name: p.name, propertyType: p.propertyType, isDefault: p.isDefault, designed: p.rules.some((r) => r.designBitrateMbps != null) }));
   const initial = (last?.input as unknown as EnquiryInput) ?? fromLead!;
 
   return (
@@ -34,7 +37,7 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         <div className="xl:col-span-2">
-          <AssessmentForm leadId={id} initial={initial} assessmentId={last?.id ?? null} canApprove={!!user.canApprove} />
+          <AssessmentForm leadId={id} initial={initial} assessmentId={last?.id ?? null} canApprove={!!user.canApprove} profiles={profiles} />
         </div>
         <div className="xl:col-span-3">
           {last ? (

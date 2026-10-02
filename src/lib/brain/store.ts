@@ -17,6 +17,8 @@ import {
   productCompatibility,
   productPriceHistory,
   products,
+  quotes,
+  recordingProfiles,
   supplierBrandRoutes,
   supplierProducts,
   suppliers,
@@ -42,6 +44,7 @@ import type {
   PolicyValue,
   Product,
   ProductOffer,
+  RecordingProfile,
 } from "./types";
 import { applyReferenceCatalogue } from "./reference/apply";
 import { TRUSTED_STATUSES } from "./types";
@@ -118,7 +121,7 @@ export async function savePolicy(key: keyof Policies, value: unknown, status: Kn
 
 export async function loadCatalogue(): Promise<Catalogue> {
   await applyReferenceCatalogue();
-  const [rows, offers, pkgs, mats, links, routes] = await Promise.all([
+  const [rows, offers, pkgs, mats, links, routes, profiles] = await Promise.all([
     db.select().from(products),
     db
       .select({ o: supplierProducts, supplier: suppliers.name, priority: suppliers.priority, isDefault: suppliers.isDefault, supplierStatus: suppliers.status })
@@ -128,10 +131,12 @@ export async function loadCatalogue(): Promise<Catalogue> {
     db.select().from(materialsPackages),
     db.select().from(productCompatibility),
     db.select({ r: supplierBrandRoutes, supplier: suppliers.name }).from(supplierBrandRoutes).innerJoin(suppliers, eq(supplierBrandRoutes.supplierId, suppliers.id)),
+    db.select({ p: recordingProfiles, approver: users.name }).from(recordingProfiles).leftJoin(users, eq(recordingProfiles.approvedById, users.id)),
   ]);
   const byProduct = new Map<string, ProductOffer[]>();
   for (const o of offers) {
     if (o.supplierStatus === "deprecated") continue;
+    if (o.o.priceBasis !== "trade") continue; // only Get Secure trade pricing is a cost
     const offer: ProductOffer = {
       supplierId: o.o.supplierId,
       supplier: o.supplier,
@@ -175,8 +180,13 @@ export async function loadCatalogue(): Promise<Catalogue> {
   );
   const packages: InstallationPackage[] = pkgs.map((p) => ({
     id: p.id,
+    key: p.key,
     name: p.name,
     propertyType: p.propertyType as InstallationPackage["propertyType"],
+    cameraCount: p.cameraCount,
+    storeyType: p.storeyType as InstallationPackage["storeyType"],
+    materialCostExGst: num(p.materialCostExGst),
+    complexityAllowanceExGst: num(p.complexityAllowanceExGst),
     minCameras: p.minCameras,
     maxCameras: p.maxCameras,
     storeys: p.storeys,
@@ -210,6 +220,28 @@ export async function loadCatalogue(): Promise<Catalogue> {
     materialsPackages: materials,
     compatibility: links.map((l) => ({ kind: l.kind as CompatibilityKind, fromId: l.fromProductId, toId: l.toProductId, quantity: l.quantity, status: l.status })),
     routes: routes.map(({ r, supplier }) => ({ brand: r.brand, supplierId: r.supplierId, supplier, rank: r.rank, market: r.market as BrandRoute["market"], status: r.status })),
+    recordingProfiles: profiles.map(({ p, approver }) => toProfile(p, approver)),
+  };
+}
+
+export function toProfile(p: typeof recordingProfiles.$inferSelect, approver: string | null = null): RecordingProfile {
+  return {
+    id: p.id,
+    key: p.key,
+    name: p.name,
+    propertyType: p.propertyType as RecordingProfile["propertyType"],
+    isDefault: p.isDefault,
+    codec: p.codec,
+    frameRate: p.frameRate,
+    bitrateControl: p.bitrateControl as RecordingProfile["bitrateControl"],
+    recordingMode: p.recordingMode as RecordingProfile["recordingMode"],
+    retentionTargetDays: p.retentionTargetDays,
+    retentionMinimumDays: p.retentionMinimumDays,
+    rules: p.rules,
+    version: p.version,
+    status: p.status,
+    approvedBy: approver,
+    reviewedAt: p.reviewedAt,
   };
 }
 
@@ -413,7 +445,6 @@ export async function prepareFromAssessment(assessmentId: string, what: { email?
     const policies = await loadPolicies();
     const q = composeQuote(packet, { customerName: lead.name, gstPct: Math.round(policies.gstRate.value * 10000) / 100 });
     if (!q.lineItems.length) throw new Error("Nothing in this assessment is priced yet, so there is no quote to prepare.");
-    const c = packet.costing;
     const created = await createPreparedQuote(
       {
         leadId: lead.id,
@@ -423,26 +454,7 @@ export async function prepareFromAssessment(assessmentId: string, what: { email?
         lineItems: q.lineItems,
         taxRatePct: q.taxRatePct,
         notes: q.notes,
-        internalCosting: {
-          equipmentCost: c.equipmentCost,
-          labourCost: c.labourCost,
-          materialsCost: c.materialsCost,
-          otherCost: c.otherCost,
-          sellExGst: c.sellExGst,
-          grossProfit: c.grossProfit,
-          grossMarginPct: c.grossMarginPct,
-          markupPct: c.markupPct,
-          markupLogic: c.markupLogic,
-          complete: c.complete,
-          unpriced: c.unpriced,
-          lines: c.lines,
-          refreshRequired: c.refreshRequired ?? [],
-          kit: c.kit ?? null,
-          labourBasis: packet.labour.basis ?? null,
-          engineVersion: packet.engineVersion,
-          // The product, supplier, cost and price date each line used, frozen with the quote.
-          snapshotAt: new Date().toISOString(),
-        },
+        internalCosting: commercialSnapshot(packet),
         confidence: packet.confidence as unknown as Record<string, unknown>,
       },
       actor,
@@ -451,6 +463,122 @@ export async function prepareFromAssessment(assessmentId: string, what: { email?
     out.quoteNumber = created.number;
   }
   return out;
+}
+
+/**
+ * The internal commercial record frozen with a prepared quote: every line's exact model, supplier,
+ * SKU, cost and price date, the markup, labour, materials, allowances and sell prices. Later
+ * supplier price changes never touch it; only an explicit reprice replaces it (and voids approval).
+ */
+export function commercialSnapshot(packet: DecisionPacket): Record<string, unknown> {
+  const c = packet.costing;
+  const L = packet.labour;
+  return {
+    snapshotAt: new Date().toISOString(),
+    engineVersion: packet.engineVersion,
+    equipmentCost: c.equipmentCost,
+    labourCost: c.labourCost,
+    materialsCost: c.materialsCost,
+    allowancesCost: c.allowancesCost ?? 0,
+    otherCost: c.otherCost,
+    sellExGst: c.sellExGst,
+    gst: c.gst,
+    totalIncGst: c.totalIncGst,
+    grossProfit: c.grossProfit,
+    grossMarginPct: c.grossMarginPct,
+    markupPct: c.markupPct,
+    markupSource: c.markupSource,
+    markupLogic: c.markupLogic,
+    complete: c.complete,
+    unpriced: c.unpriced,
+    refreshRequired: c.refreshRequired ?? [],
+    kit: c.kit ?? null,
+    lines: c.lines.map((l) => ({
+      key: l.key,
+      kind: l.kind,
+      customerDescription: l.customerDescription,
+      productId: l.productId ?? null,
+      model: l.model ?? null,
+      supplier: l.supplier ?? null,
+      supplierSku: l.supplierSku ?? null,
+      lastChecked: l.lastChecked ?? null,
+      freshness: l.freshness ?? null,
+      stock: l.stock ?? null,
+      quantity: l.quantity,
+      unitCostExGst: l.unitCostExGst,
+      markupPct: l.markupPct,
+      unitSellExGst: l.unitSellExGst,
+      priced: l.priced,
+      internalOnly: l.internalOnly ?? false,
+      detail: l.detail ?? [],
+      alternatives: l.alternatives ?? [],
+    })),
+    labour: {
+      packageKey: L.package?.key ?? null,
+      packageName: L.package?.name ?? null,
+      packageVersion: L.package?.version ?? null,
+      packageStatus: L.package?.status ?? null,
+      customInstallation: L.customInstallation,
+      hours: L.estimatedHours,
+      rate: L.internalRate,
+      labourCost: L.labourCostExGst,
+      materialCost: L.materialCostExGst,
+      conduitAllowance: L.conduitCostExGst,
+      complexityAllowance: L.complexityCostExGst,
+      sellAllowance: L.allowanceExGst,
+      missing: L.missing,
+    },
+    recordingProfile: packet.recording.profile ?? null,
+    designs: packet.recording.designs ?? [],
+    designBandwidthMbps: packet.recording.designBandwidthMbps ?? null,
+    maxPossibleBandwidthMbps: packet.recording.maxPossibleBandwidthMbps ?? null,
+    assumptions: packet.assumptions,
+    exclusions: packet.exclusions,
+  };
+}
+
+/**
+ * Reprice a prepared quote with current catalogue prices and rules: re-runs the assessment on the
+ * same enquiry, replaces the quote's lines and snapshot, and sends it back to Needs Review.
+ * Approval never survives a reprice.
+ */
+export async function repriceQuote(quoteId: string, actor: Actor, opts: { markupOverride?: number | null } = {}): Promise<{ changed: boolean; complete: boolean }> {
+  assertAgentMay(actor, "create_quote_draft");
+  const q = await db.query.quotes.findFirst({ where: eq(quotes.id, quoteId) });
+  if (!q) throw new Error("Quote not found");
+  if (q.origin !== "brain" || !q.assessmentId || !q.leadId) throw new Error("Only a quote prepared by the Business Brain can be repriced.");
+  if (!["ai_prepared", "needs_review", "approved"].includes(q.status)) throw new Error(`A quote that is ${q.status.replace(/_/g, " ")} cannot be repriced; prepare a new one.`);
+  const prev = await db.query.cctvAssessments.findFirst({ where: eq(cctvAssessments.id, q.assessmentId) });
+  if (!prev) throw new Error("The assessment behind this quote no longer exists.");
+  const markup = opts.markupOverride !== undefined ? opts.markupOverride : prev.markupOverride != null ? Number(prev.markupOverride) : null;
+  const run = await runAssessment(q.leadId, prev.input as unknown as EnquiryInput, actor, { markupOverride: markup });
+  const policies = await loadPolicies();
+  const lead = await db.query.leads.findFirst({ where: eq(leads.id, q.leadId), columns: { name: true } });
+  const draft = composeQuote(run.packet, { customerName: lead?.name ?? null, gstPct: Math.round(policies.gstRate.value * 10000) / 100 });
+  if (!draft.lineItems.length) throw new Error("Nothing is priced in the current catalogue, so the quote cannot be repriced.");
+  const before = JSON.stringify(q.lineItems);
+  const { computeTotals } = await import("@/lib/quotes");
+  const totals = computeTotals(draft.lineItems, draft.taxRatePct);
+  await db
+    .update(quotes)
+    .set({
+      lineItems: draft.lineItems,
+      notes: draft.notes,
+      subtotal: totals.subtotal,
+      total: totals.total,
+      assessmentId: run.id,
+      internalCosting: commercialSnapshot(run.packet),
+      confidence: run.packet.confidence as unknown as Record<string, unknown>,
+      status: "needs_review",
+      approvedById: null,
+      approvedAt: null,
+      approvalHash: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(quotes.id, quoteId));
+  const { logActivity } = await import("@/lib/activity");
+  await logActivity({ entity: "quote", entityId: quoteId, actorId: actorId(actor), action: "repriced", detail: { from: q.status, assessmentId: run.id } });
+  return { changed: before !== JSON.stringify(draft.lineItems), complete: run.packet.costing.complete };
 }
 
 export function isTrusted(status: KnowledgeStatus) {

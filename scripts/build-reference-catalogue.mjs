@@ -59,7 +59,6 @@ function engineSpecs(category, s) {
     out.wdrDb = num(s.wdrDb);
     out.codecs = Array.isArray(s.codecs) ? s.codecs : [];
     out.maxBitrateMbps = Array.isArray(s.bitrateKbps) && num(s.bitrateKbps[1]) ? s.bitrateKbps[1] / 1000 : null;
-    out.expectedBitrateMbps = null; // Get Secure's planning figure: set in the CRM, never from a datasheet
     out.poeWatts = num(s.poeMaxW);
     out.analytics = Array.isArray(s.analytics) ? s.analytics : [];
     out.audio = s.microphone === true;

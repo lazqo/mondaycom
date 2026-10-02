@@ -473,7 +473,7 @@ from hPanel, which returns the whole machine to that point.
 
 ---
 
-## 14. CCTV Business Brain (v0.2)
+## 14. CCTV Business Brain (v0.3)
 
 The Business Brain works out a CCTV system for a lead — cameras, recorder, storage, network,
 materials, labour and price — with fixed rules, not AI. It **prepares** reply drafts and quotes for
@@ -511,29 +511,50 @@ Chris; it never sends, books or promises anything.
   never re-added or overwritten. Tiers are set by family (VIGI good; HiLook, Dahua, Tiandy better;
   Hikvision best; Ajax premium) and marked provisional for Chris to confirm per product; TVT and
   Uniview have no tier yet. Research files: `data/catalogue-research/`.
-- **Installation packages**: residential 1–2, 3–4, 5–6 and 7–8 cameras, single and double storey,
-  at the $95/h residential rate, with **no hours and no price** until Chris enters them.
-- **Standard materials package**: Cat6, connectors, clips and fixings, weatherproofing, misc. The
-  customer sees "Cabling and standard installation materials"; approvers see contents and cost.
+- **Standard materials contents**: Cat6, connectors, clips and fixings, weatherproofing, misc
+  (Installation & materials tab). Their cost is entered per installation package (v0.3, below).
 
-**What Chris must fill in before quotes are complete**
+**v0.3 real costing**
 
-1. **Supplier prices** — on each product (Products & prices) or by importing a supplier price list
-   (Suppliers → Import prices, CSV). Imported prices arrive unapproved; approve them. A later change
-   of more than 5% (Rules → priceChangeReviewPct) is held for review instead of changing quotes.
-2. **Expected bitrate per camera** — the figure Get Secure configures cameras at. Until it is set,
-   bandwidth and storage are planned on the manufacturer's maximum bitrate, which is conservative
-   (e.g. it can push a 4-camera Hikvision system onto an 8-channel recorder). The packet says so.
-3. **Installation packages** — hours, and a package price if it is not simply hours × rate.
-4. **Standard materials** — internal cost and charged value; double-storey conduit allowance.
-5. **Rules / tiers** — approve or change what is provisional; confirm each product's tier.
+- **Recording profiles** (Settings → Business Brain → Recording profiles): Residential standard
+  (default; 24/7, 28-day target, 14-day minimum), Residential high-detail, Commercial standard,
+  Custom. Each holds codec, frame rate, CBR/VBR and **design bitrates** as rules: a product rule
+  beats a manufacturer/family rule, which beats a resolution band. The design bitrate decides
+  recorder bandwidth, drive size and retention. A camera's published maximum bitrate only raises a
+  warning ("maximum possible configured bandwidth exceeds the recorder"), it never rejects a
+  same-brand system. No design bitrates are filled in: until they are, assessments say "approved
+  recording profile required" and the drive is not sized.
+- **Installation packages** are keyed by an exact camera count: RES_CCTV_SINGLE_2/4/6/8 and
+  RES_CCTV_DOUBLE_2/4/6/8. A 3, 5 or 7 camera job is a **custom installation** and is never
+  mapped to a package. Each package has labour hours, internal rate ($95/h residential), standard
+  material cost, conduit and complexity allowances (internal costs) and the customer sell
+  allowance. The customer sees one line: "Installation, commissioning, cabling and standard
+  installation materials".
+- **Costing**: hardware at approved trade cost from the preferred supplier route (alternatives
+  shown), marked up at the provisional 25% unless Chris overrides it; installation at the package
+  sell allowance. The internal view shows hardware cost, supplier, freshness, labour hours and
+  cost, materials, conduit/complexity, markup, sell ex GST, GST, total, gross profit, gross margin,
+  missing lines and assumptions. None of it appears on the customer quote or email.
+- **Snapshot and reprice**: a prepared quote freezes every line's model, supplier, SKU, cost, price
+  date, markup, labour, materials and sell. Supplier changes never alter it. **Reprice with current
+  prices** (quote page) re-runs it and sends it back to Needs Review.
+- **Trade prices only**: an import must be confirmed as Get Secure trade pricing; RRP/retail
+  columns are never read as cost.
 
-Until these are in, assessments still run but show "Not fully priced" and say exactly what is missing.
+**What Chris must enter and approve before the first fully priced quote**
 
-**Prices and quotes**: every supplier price shows Current (≤14 days), Aging (≤30), Stale or Unknown.
-A quote cannot be approved while a priced item is Stale or undated ("Refresh supplier price before
-final quote approval"). A prepared quote keeps the product, supplier, SKU, cost and price date of
-every line; later imports or price changes never alter an existing quote.
+1. **Recording profile design bitrates** — on Residential standard (at least per resolution band),
+   plus codec and frame rate; then approve the profile.
+2. **Supplier trade prices** — for the cameras, recorders and drives you quote (CSV import or
+   manual entry), then approve them. Stale (>30 days) or undated prices block quote approval.
+3. **Installation packages** — for each of the eight: labour hours, standard material cost,
+   complexity allowance (0 if none), conduit allowance (double storey) and the customer sell
+   allowance; then approve.
+4. **Markup** — confirm or replace the provisional 25% (Rules → suggestedMarkupPct); price bands
+   are not set.
+5. **Tiers and products** — confirm the provisional tier on the products you will quote.
+
+Until these are in, assessments still run and show "Not fully priced" with exactly what is missing.
 
 **Supplier logins** typed under Suppliers are stored encrypted with `ENCRYPTION_KEY`, are never shown again
 and are not available to any agent: only a future price-sync job or an approver can read them. Price

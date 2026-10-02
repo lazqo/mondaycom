@@ -144,7 +144,7 @@ describe("supplier prices", () => {
     const csv = `Manufacturer,Model,SKU,Cost inc GST,Stock\nTP-Link,VIGI C455(2.8mm),TEST-${RUN},230.00,12\nNobody,NOT-A-PRODUCT,X1,10,1\n`;
     const parsed = parseSupplierCsv(csv);
     expect(parsed.listings).toHaveLength(2);
-    const r1 = await importListings(it.id, parsed.listings, chris, { type: "csv", label: "test import" });
+    const r1 = await importListings(it.id, parsed.listings, chris, { type: "csv", label: "test import", confirmedTrade: true });
     expect(r1).toMatchObject({ recorded: 1, held: 0 });
     expect(r1.unmatched).toEqual(["Nobody NOT-A-PRODUCT"]);
     const pid = await productId("TP-Link", "VIGI C455(2.8mm)");
@@ -154,7 +154,7 @@ describe("supplier prices", () => {
     expect(offer.priceApproved).toBe(false); // an import is never its own review, even by Chris
     expect(offer.priceSource).toBe("csv");
     await brain.approveSupplierPrice(offer.id, chris);
-    const r2 = await importListings(it.id, parseSupplierCsv(`SKU,Cost ex GST\nTEST-${RUN},260\n`).listings, chris, { type: "csv", label: "test import" });
+    const r2 = await importListings(it.id, parseSupplierCsv(`SKU,Cost ex GST\nTEST-${RUN},260\n`).listings, chris, { type: "csv", label: "test import", confirmedTrade: true });
     expect(r2.held).toBe(1);
     offer = (await db.query.supplierProducts.findFirst({ where: eq(supplierProducts.id, offer.id) }))!;
     expect(Number(offer.costExGst)).toBe(200);
@@ -162,7 +162,7 @@ describe("supplier prices", () => {
     expect(offer.priceApproved).toBe(true);
   });
   it("refuses imports from an agent", async () => {
-    await expect(importListings((await supplier("IT Plus")).id, [], HERMES, { type: "csv", label: "x" })).rejects.toBeInstanceOf(GuardrailError);
+    await expect(importListings((await supplier("IT Plus")).id, [], HERMES, { type: "csv", label: "x", confirmedTrade: true })).rejects.toBeInstanceOf(GuardrailError);
   });
   it("records price-on-application listings without a cost", async () => {
     const r = await brain.recordSupplierPrice({ productId: await productId("Axis Communications", "AXIS M3216-LVE"), supplierId: (await supplier("Atlas Gentech")).id, priceOnApplication: true, source: "test" }, chris);

@@ -1,11 +1,13 @@
 /**
  * Quote costing. Everything is ex GST internally:
  *
- *   hardware sell = approved cost x (1 + markup)
- *   labour        = installation package price, or entered hours x internal rate
- *   materials     = standard materials package + approved exceptional items
- *   subtotal      = hardware + labour + materials + other
- *   GST           = subtotal x 15%
+ *   hardware sell   = approved trade cost x (1 + markup)
+ *   installation    = the exact package's customer sell allowance (covers labour, cabling and
+ *                     standard installation materials, conduit and complexity)
+ *   internal costs  = hardware + labour (hours x internal rate) + standard material cost +
+ *                     conduit allowance + complexity allowance + approved exceptional items
+ *   subtotal        = hardware sell + installation sell + exceptional items
+ *   GST             = subtotal x 15%
  *
  * Only approved prices are used. A product without one is listed as unpriced and the costing is
  * marked incomplete rather than estimated. Each line keeps a snapshot of the supplier, SKU, cost
@@ -27,7 +29,10 @@ export function markupFor(policies: Policies, override: number | null | undefine
   return {
     pct: s.value,
     source: "suggested",
-    logic: `Suggested ${s.value}% (${s.status}); policy range ${lo}-${hi}%, lower on higher-value hardware. Exact thresholds not yet approved.`,
+    logic:
+      s.status === "getsecure_approved"
+        ? `Suggested ${s.value}% (approved); policy range ${lo}-${hi}%.`
+        : `Provisional suggested markup ${s.value}% (not a Get Secure rule); policy range ${lo}-${hi}%, normally lower on higher-value hardware. Price bands not yet approved: Chris to confirm or override.`,
     outOfRange: false,
   };
 }
@@ -50,6 +55,9 @@ function hardwareLine(key: string, description: string, qty: number, product: Pr
     supplierSku: product?.price?.supplierSku ?? null,
     lastChecked: product?.price?.lastChecked ?? null,
     freshness: product?.price ? (product.price.freshness ?? "unknown") : null,
+    stock: product?.price?.stock ?? null,
+    routeNote: product?.price?.routeNote ?? null,
+    alternatives: product?.price?.alternatives ?? [],
   };
 }
 
@@ -144,65 +152,52 @@ export function costQuote(input: {
   hardware = kitResult.lines;
   for (const l of hardware) if (!l.priced && l.productId) unpriced.push(`${l.model}: no approved price`);
 
+  // Exceptional items a condition called for and Chris has approved charging (none are automatic).
   for (const m of input.materials) {
-    if (!m.charged) continue;
-    if (m.key === "standard_materials") {
-      const mp = input.materialsPackage;
-      other.push({
-        key: m.key,
-        customerDescription: m.description,
-        quantity: 1,
-        unitCostExGst: mp?.costExGst ?? null,
-        unitSellExGst: mp?.sellExGst ?? null,
-        markupPct: null,
-        kind: "materials",
-        priced: mp?.sellExGst != null,
-        detail: mp?.items.map((i) => `${i.description}${i.costExGst != null ? `: $${i.costExGst}` : ""}`),
-      });
-      continue;
-    }
-    if (m.allowanceExGst != null) {
-      other.push({ key: m.key, customerDescription: m.description, quantity: 1, unitCostExGst: null, unitSellExGst: m.allowanceExGst, markupPct: null, kind: "materials", priced: true });
-      continue;
-    }
+    if (!m.charged || m.key === "standard_materials" || m.key === "conduit") continue;
     const line = { ...hardwareLine(m.key, m.description, m.quantity, m.product, mk.pct), kind: "materials" as const };
     if (!line.priced) unpriced.push(`${m.description}: no approved price`);
     other.push(line);
   }
-  if (input.residential && !input.materials.some((m) => m.key === "standard_materials" && m.charged)) unpriced.push("Standard materials package value not set");
-  for (const m of input.materials) if (m.key === "conduit" && !m.charged) unpriced.push("Conduit allowance not set");
 
-  if (input.labour.allowanceExGst != null) {
-    const labourCostRate = policies.labourCostRate.value;
-    const cost = labourCostRate != null && input.labour.estimatedHours != null ? labourCostRate * input.labour.estimatedHours : null;
+  // Installation: one customer line from the package sell allowance; its costs stay internal.
+  const L = input.labour;
+  for (const m of L.missing) unpriced.push(m);
+  if (L.package) {
+    const pkgName = L.package.key ?? L.package.name;
     other.push({
-      key: "labour",
-      customerDescription: "Installation and commissioning",
+      key: "installation",
+      customerDescription: "Installation, commissioning, cabling and standard installation materials",
       quantity: 1,
-      unitCostExGst: cost,
-      unitSellExGst: input.labour.allowanceExGst,
+      unitCostExGst: L.labourCostExGst,
+      unitSellExGst: L.allowanceExGst,
       markupPct: null,
       kind: "labour",
-      priced: true,
-      detail: [
-        input.labour.basis === "package_price" ? `Package price (${input.labour.package?.name})` : `${input.labour.estimatedHours} h x $${input.labour.internalRate}/h (${input.labour.package?.name})`,
-      ],
+      priced: L.allowanceExGst != null && L.labourCostExGst != null,
+      detail: [`${pkgName}: ${L.estimatedHours ?? "?"} h x $${L.internalRate}/h labour${L.allowanceExGst != null ? `, sell allowance $${L.allowanceExGst}` : ""}`],
     });
-  } else {
-    unpriced.push(input.residential ? (input.labour.package ? `Installation: "${input.labour.package.name}" hours and price not set` : "Installation allowance: no package") : "Installation: estimated after the site visit");
+    const mp = input.materialsPackage;
+    const internal = (key: string, label: string, value: number | null, kind: CostLine["kind"], detail?: string[]) =>
+      other.push({ key, customerDescription: label, quantity: 1, unitCostExGst: value, unitSellExGst: 0, markupPct: null, kind, priced: value != null, internalOnly: true, detail });
+    internal("standard_materials", "Standard installation materials (internal)", L.materialCostExGst, "materials", mp?.items.map((i) => i.description));
+    if (L.conduitCostExGst) internal("conduit", "Conduit allowance (internal)", L.conduitCostExGst, "other");
+    else if (L.conduitCostExGst == null) internal("conduit", "Conduit allowance (internal)", null, "other");
+    internal("complexity", "Installation complexity allowance (internal)", L.complexityCostExGst, "other");
   }
 
   const lines = [...hardware, ...other];
-  const sum = (kind: CostLine["kind"], f: (l: CostLine) => number) => round2(lines.filter((l) => l.kind === kind && l.priced).reduce((s, l) => s + f(l), 0));
+  const sum = (kind: CostLine["kind"], f: (l: CostLine) => number, keys?: string[]) =>
+    round2(lines.filter((l) => l.kind === kind && l.priced && (!keys || keys.includes(l.key))).reduce((s, l) => s + f(l), 0));
   const cost = (l: CostLine) => (l.unitCostExGst ?? 0) * l.quantity;
   const sell = (l: CostLine) => (l.unitSellExGst ?? 0) * l.quantity;
   const equipmentCost = sum("hardware", cost);
   const materialsCost = sum("materials", cost);
   const labourCost = sum("labour", cost);
-  const otherCost = sum("other", cost);
-  const sellExGst = round2(lines.filter((l) => l.priced).reduce((s, l) => s + sell(l), 0));
+  const allowancesCost = sum("other", cost, ["conduit", "complexity"]);
+  const otherCost = round2(sum("other", cost) - allowancesCost);
+  const sellExGst = round2(lines.filter((l) => l.priced && !l.internalOnly).reduce((s, l) => s + sell(l), 0));
   const gst = round2(sellExGst * policies.gstRate.value);
-  const grossProfit = round2(sellExGst - equipmentCost - materialsCost - labourCost - otherCost);
+  const grossProfit = round2(sellExGst - equipmentCost - materialsCost - labourCost - allowancesCost - otherCost);
   const refreshRequired = lines
     .filter((l) => l.priced && l.productId && (l.freshness === "stale" || l.freshness === "unknown"))
     .map((l) => ({ model: l.model ?? l.customerDescription, supplier: l.supplier ?? null, freshness: l.freshness! }));
@@ -212,6 +207,7 @@ export function costQuote(input: {
     equipmentCost,
     labourCost,
     materialsCost,
+    allowancesCost,
     otherCost,
     sellExGst,
     gst,
@@ -220,10 +216,7 @@ export function costQuote(input: {
     grossMarginPct: sellExGst > 0 ? round2((grossProfit / sellExGst) * 100) : null,
     markupPct: mk.pct,
     markupSource: mk.source,
-    markupLogic:
-      mk.logic +
-      (policies.labourCostRate.value == null ? " Labour cost not set, so gross profit does not deduct labour." : "") +
-      (input.materialsPackage && input.materialsPackage.costExGst == null && input.materialsPackage.sellExGst != null ? " Materials cost not set, so gross profit does not deduct it." : ""),
+    markupLogic: mk.logic,
     complete: unpriced.length === 0,
     unpriced,
     refreshRequired,

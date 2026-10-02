@@ -77,12 +77,14 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
-const HEADERS: Record<keyof SupplierListing, RegExp> = {
+// Retail/RRP columns are never read as cost, even if their header also says "ex GST".
+const notRetail = (re: RegExp) => ({ test: (h: string) => !/\b(rrp|retail|msrp|list price)\b/i.test(h) && re.test(h) });
+const HEADERS: Record<keyof SupplierListing, { test: (h: string) => boolean }> = {
   supplierSku: /^(supplier[ _-]?)?(sku|part|code|item[ _-]?code|stock[ _-]?code)$/i,
   manufacturer: /^(manufacturer|brand|make|vendor)$/i,
   model: /^(model|model[ _-]?(no|number)|part[ _-]?number|mpn)$/i,
-  costExGst: /^(cost|trade|price|buy)?[ _-]?(price[ _-]?)?(ex|excl?)[ _.-]?gst$|^cost[ _-]?ex$|^trade[ _-]?ex$/i,
-  costIncGst: /^(cost|trade|price|buy)?[ _-]?(price[ _-]?)?(inc|incl?)[ _.-]?gst$|^cost[ _-]?inc$/i,
+  costExGst: notRetail(/^(cost|trade|price|buy|nett?|dealer)?[ _-]?(price[ _-]?)?(ex|excl?)[ _.-]?gst$|^cost[ _-]?ex$|^trade[ _-]?ex$/i),
+  costIncGst: notRetail(/^(cost|trade|price|buy|nett?|dealer)?[ _-]?(price[ _-]?)?(inc|incl?)[ _.-]?gst$|^cost[ _-]?inc$/i),
   stock: /^(stock|availability|soh|qty|quantity)$/i,
   sourceUrl: /^(url|link|source[ _-]?url|product[ _-]?url)$/i,
   priceOnApplication: /^(poa|price[ _-]?on[ _-]?application)$/i,
@@ -102,6 +104,9 @@ export function parseSupplierCsv(text: string): { listings: SupplierListing[]; e
   const header = splitCsvLine(lines[0]);
   const col = Object.fromEntries((Object.keys(HEADERS) as (keyof SupplierListing)[]).map((k) => [k, header.findIndex((h) => HEADERS[k].test(h.trim()))])) as Record<keyof SupplierListing, number>;
   const errors: string[] = [];
+  const retail = header.filter((h) => /\b(rrp|retail|recommended retail|list price|msrp)\b/i.test(h));
+  if (retail.length && header.every((h) => !/trade|cost|buy|nett?\b|dealer|account/i.test(h)))
+    errors.push(`Only trade (account) prices can be imported as cost; this file has ${retail.join(", ")} but no trade/cost column.`);
   if (col.supplierSku < 0 && col.model < 0) errors.push("No SKU or model column found.");
   if (col.costExGst < 0 && col.costIncGst < 0 && col.priceOnApplication < 0) errors.push("No cost column (ex GST or inc GST) found.");
   if (errors.length) return { listings: [], errors };
@@ -148,9 +153,10 @@ export async function importListings(
   supplierId: string,
   listings: SupplierListing[],
   actor: Actor,
-  source: { type: PriceSourceType; label: string },
+  source: { type: PriceSourceType; label: string; confirmedTrade: boolean },
 ): Promise<{ recorded: number; held: number; poa: number; unmatched: string[] }> {
   if (actor.kind === "agent") throw new GuardrailError("Agents cannot import supplier prices.");
+  if (!source.confirmedTrade) throw new Error("Confirm these are Get Secure trade (account) prices. Public retail pricing is never imported as cost.");
   let recorded = 0;
   let held = 0;
   let poa = 0;
@@ -196,5 +202,6 @@ export async function syncSupplierPrices(supplierId: string): Promise<{ recorded
   if (adapter.needsCredential && !credential) throw new Error(`${supplier.name}: no trade login stored.`);
   const skus = (await db.select({ sku: supplierProducts.supplierSku }).from(supplierProducts).where(eq(supplierProducts.supplierId, supplierId))).map((r) => r.sku).filter((s): s is string => !!s);
   const listings = await adapter.fetchListings({ supplierId, credential, skus });
-  return importListings(supplierId, listings, actor, { type: adapter.type, label: `${adapter.label} sync` });
+  // A connector authenticates with Get Secure's trade login, so what it returns is trade pricing.
+  return importListings(supplierId, listings, actor, { type: adapter.type, label: `${adapter.label} sync`, confirmedTrade: true });
 }

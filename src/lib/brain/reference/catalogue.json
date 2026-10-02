@@ -85,7 +85,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -176,7 +175,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -267,7 +265,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -358,7 +355,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -449,7 +445,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -540,7 +535,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -631,7 +625,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -722,7 +715,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -813,7 +805,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -904,7 +895,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -995,7 +985,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -1086,7 +1075,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": null,
     "audio": true,
     "speaker": false,
@@ -1470,7 +1458,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 10.8,
     "audio": false,
     "speaker": false,
@@ -1572,7 +1559,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 10,
     "audio": false,
     "speaker": false,
@@ -1671,7 +1657,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 12.95,
     "audio": false,
     "speaker": false,
@@ -1772,7 +1757,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 12,
     "audio": false,
     "speaker": false,
@@ -2369,7 +2353,6 @@
     "hfovDeg": 111,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 6.8,
     "audio": true,
     "activeDeterrence": []
@@ -2458,7 +2441,6 @@
     "hfovDeg": 87,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 6.8,
     "audio": true,
     "activeDeterrence": []
@@ -2547,7 +2529,6 @@
     "hfovDeg": 51,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 6.8,
     "audio": true,
     "activeDeterrence": []
@@ -2649,7 +2630,6 @@
     "irRangeM": 30,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 17,
     "audio": true
    }
@@ -2750,7 +2730,6 @@
     "irRangeM": 30,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 17,
     "audio": true
    }
@@ -2851,7 +2830,6 @@
     "irRangeM": 60,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 18,
     "audio": true
    }
@@ -2952,7 +2930,6 @@
     "irRangeM": 60,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 18,
     "audio": true
    }
@@ -3046,7 +3023,6 @@
     ],
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 15,
     "audio": false,
     "activeDeterrence": []
@@ -3593,7 +3569,6 @@
     "hfovDeg": 105,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 9.5,
     "audio": true,
     "speaker": false,
@@ -3668,7 +3643,6 @@
     "hfovDeg": 78,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 9.5,
     "audio": true,
     "speaker": false,
@@ -3746,7 +3720,6 @@
     "irRangeM": 30,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 6.5,
     "audio": true,
     "speaker": false,
@@ -3824,7 +3797,6 @@
     "irRangeM": 30,
     "whiteLightRangeM": null,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 6.5,
     "audio": true,
     "speaker": false,
@@ -4081,7 +4053,6 @@
     "hfovDeg": 100,
     "colourNight": false,
     "maxBitrateMbps": 8,
-    "expectedBitrateMbps": null,
     "poeWatts": 7.8,
     "audio": true,
     "speaker": false,
@@ -4172,7 +4143,6 @@
     "hfovDeg": 85,
     "colourNight": false,
     "maxBitrateMbps": 8,
-    "expectedBitrateMbps": null,
     "poeWatts": 7.8,
     "audio": true,
     "speaker": false,
@@ -4250,7 +4220,6 @@
     "hfovDeg": 106,
     "colourNight": false,
     "maxBitrateMbps": 12,
-    "expectedBitrateMbps": null,
     "poeWatts": 7.9,
     "audio": true,
     "activeDeterrence": [],
@@ -4328,7 +4297,6 @@
     "hfovDeg": 87,
     "colourNight": false,
     "maxBitrateMbps": 12,
-    "expectedBitrateMbps": null,
     "poeWatts": 7.9,
     "audio": true,
     "activeDeterrence": [],
@@ -4605,7 +4573,6 @@
     "hfovDeg": 110,
     "colourNight": false,
     "maxBitrateMbps": 16.384,
-    "expectedBitrateMbps": null,
     "poeWatts": 9.5,
     "audio": true,
     "speaker": false,
@@ -4697,7 +4664,6 @@
     "hfovDeg": 86,
     "colourNight": false,
     "maxBitrateMbps": 16.384,
-    "expectedBitrateMbps": null,
     "poeWatts": 9.5,
     "audio": true,
     "speaker": false,
@@ -4792,7 +4758,6 @@
     "hfovDeg": 110,
     "colourNight": false,
     "maxBitrateMbps": 16.384,
-    "expectedBitrateMbps": null,
     "poeWatts": 10,
     "audio": true,
     "speaker": false,
@@ -4887,7 +4852,6 @@
     "hfovDeg": 86,
     "colourNight": false,
     "maxBitrateMbps": 16.384,
-    "expectedBitrateMbps": null,
     "poeWatts": 10,
     "audio": true,
     "speaker": false,
@@ -5181,7 +5145,6 @@
     "colourNight": false,
     "wdrDb": null,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 6.5,
     "audio": true,
     "speaker": false,
@@ -5262,7 +5225,6 @@
     "grossWeightKg": 0.638,
     "mainStreamText": "8MP 3840×2160@20fps",
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 8.5,
     "audio": true,
     "speaker": false,
@@ -5530,7 +5492,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 4.7,
     "audio": true,
     "activeDeterrence": []
@@ -5620,7 +5581,6 @@
     "whiteLightRangeM": null,
     "colourNight": false,
     "maxBitrateMbps": 16,
-    "expectedBitrateMbps": null,
     "poeWatts": 6,
     "audio": true,
     "activeDeterrence": []
@@ -5889,7 +5849,6 @@
     "hfovDeg": 102.5,
     "wdrDb": null,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 8,
     "audio": true
    }
@@ -5968,7 +5927,6 @@
     "hfovDeg": 76.3,
     "wdrDb": null,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 8,
     "audio": true
    }
@@ -6047,7 +6005,6 @@
     "hfovDeg": 50.6,
     "wdrDb": null,
     "maxBitrateMbps": null,
-    "expectedBitrateMbps": null,
     "poeWatts": 8,
     "audio": true
    }
@@ -6133,7 +6090,6 @@
     "lensMm": 2.8,
     "hfovDeg": 100,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 12,
     "audio": true
    }
@@ -6219,7 +6175,6 @@
     "lensMm": 4,
     "hfovDeg": 80.4,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 12,
     "audio": true
    }
@@ -6305,7 +6260,6 @@
     "lensMm": 2.8,
     "hfovDeg": 111.4,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 12,
     "audio": true
    }
@@ -6391,7 +6345,6 @@
     "lensMm": 4,
     "hfovDeg": 88,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 12,
     "audio": true
    }
@@ -6475,7 +6428,6 @@
     "lensMm": 2.8,
     "hfovDeg": 109,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 10.5,
     "audio": true
    }
@@ -6559,7 +6511,6 @@
     "lensMm": 4,
     "hfovDeg": 90,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 10.5,
     "audio": true
    }
@@ -6643,7 +6594,6 @@
     "lensMm": 6,
     "hfovDeg": 56,
     "maxBitrateMbps": 6,
-    "expectedBitrateMbps": null,
     "poeWatts": 10.5,
     "audio": true
    }

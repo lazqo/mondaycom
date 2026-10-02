@@ -7,6 +7,7 @@ import {
   materialsPackages,
   productCompatibility,
   products,
+  recordingProfiles,
   supplierBrandRoutes,
   supplierCredentials,
   supplierProducts,
@@ -14,7 +15,7 @@ import {
   users,
 } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-import { ensurePolicies, loadPolicies } from "@/lib/brain/store";
+import { ensurePolicies, loadPolicies, toProfile } from "@/lib/brain/store";
 import { applyReferenceCatalogue } from "@/lib/brain/reference/apply";
 import { POLICY_DESCRIPTIONS, POLICY_KEYS } from "@/lib/brain/policy";
 import { priceFreshness } from "@/lib/brain/pricing";
@@ -30,17 +31,18 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
   const { tab = "policies" } = await searchParams;
   await ensurePolicies();
   await applyReferenceCatalogue();
-  const [policies, policyRows, productRows, offers, supplierRows, creds, packageRows, materialRows, linkRows, routeRows] = await Promise.all([
+  const [policies, policyRows, productRows, offers, supplierRows, creds, packageRows, materialRows, linkRows, routeRows, profileRows] = await Promise.all([
     loadPolicies(),
     db.select({ p: brainPolicies, approver: users.name }).from(brainPolicies).leftJoin(users, eq(brainPolicies.approvedById, users.id)),
     db.select().from(products).orderBy(asc(products.category), asc(products.manufacturer), asc(products.model)),
     db.select({ o: supplierProducts, supplier: suppliers.name }).from(supplierProducts).innerJoin(suppliers, eq(supplierProducts.supplierId, suppliers.id)),
     db.select().from(suppliers).orderBy(asc(suppliers.priority), asc(suppliers.name)),
     db.select({ supplierId: supplierCredentials.supplierId }).from(supplierCredentials),
-    db.select().from(installationPackages).orderBy(asc(installationPackages.propertyType), asc(installationPackages.storeys), asc(installationPackages.minCameras)),
+    db.select().from(installationPackages).orderBy(asc(installationPackages.propertyType), asc(installationPackages.storeys), asc(installationPackages.cameraCount), asc(installationPackages.minCameras)),
     db.select().from(materialsPackages).orderBy(asc(materialsPackages.name)),
     db.select().from(productCompatibility),
     db.select({ r: supplierBrandRoutes, supplier: suppliers.name }).from(supplierBrandRoutes).innerJoin(suppliers, eq(supplierBrandRoutes.supplierId, suppliers.id)).orderBy(asc(supplierBrandRoutes.brand), asc(supplierBrandRoutes.rank)),
+    db.select({ p: recordingProfiles, approver: users.name }).from(recordingProfiles).leftJoin(users, eq(recordingProfiles.approvedById, users.id)).orderBy(asc(recordingProfiles.propertyType), asc(recordingProfiles.name)),
   ]);
   const order = new Map(POLICY_KEYS.map((k, i) => [k as string, i]));
   const withCred = new Set(creds.map((c) => c.supplierId));
@@ -126,11 +128,13 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
       routes={routeRows.map(({ r, supplier }) => ({ id: r.id, brand: r.brand, supplierId: r.supplierId, supplier, rank: r.rank, market: r.market, status: r.status, notes: r.notes }))}
       packages={packageRows.map((p) => ({
         id: p.id,
+        key: p.key,
         name: p.name,
         propertyType: p.propertyType,
-        minCameras: p.minCameras,
-        maxCameras: p.maxCameras,
-        storeys: p.storeys,
+        cameraCount: p.cameraCount ?? (p.minCameras === p.maxCameras ? p.minCameras : null),
+        storeyType: p.storeyType ?? (p.storeys == null ? null : p.storeys >= 2 ? "double" : "single"),
+        materialCostExGst: num(p.materialCostExGst),
+        complexityAllowanceExGst: num(p.complexityAllowanceExGst),
         estimatedHours: num(p.estimatedHours),
         labourRate: num(p.labourRate),
         allowanceExGst: num(p.allowanceExGst),
@@ -144,6 +148,12 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
         status: p.status,
         notes: p.notes,
       }))}
+      profiles={[...profileRows]
+        .sort((a, b) => ["residential", "commercial", "any"].indexOf(a.p.propertyType) - ["residential", "commercial", "any"].indexOf(b.p.propertyType) || Number(b.p.isDefault) - Number(a.p.isDefault))
+        .map(({ p, approver }) => {
+        const v = toProfile(p, approver);
+        return { ...v, approvedBy: approver, notes: p.notes, reviewedAt: p.reviewedAt ? formatDate(p.reviewedAt) : null };
+      })}
       materials={materialRows.map((m) => ({
         id: m.id,
         name: m.name,

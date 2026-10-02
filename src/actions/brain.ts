@@ -5,7 +5,8 @@ import { z } from "zod";
 import { requireOffice } from "@/lib/auth";
 import { humanFromUser } from "@/lib/guard/actor";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
-import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
+import { prepareFromAssessment, repriceQuote, runAssessment } from "@/lib/brain/store";
+import { assertApprover, GuardrailError } from "@/lib/guard/actor";
 import { CAMERA_PURPOSES, type EnquiryInput } from "@/lib/brain/types";
 
 const tri = z.enum(["yes", "no", "unknown"]);
@@ -56,6 +57,8 @@ const enquiry = z.object({
     .optional(),
   competitorQuote: z.object({ price: z.coerce.number().min(0).nullable().optional(), description: z.string().max(1000).nullable().optional() }).nullable().optional(),
   message: z.string().max(20000).nullable(),
+  requestedTier: z.enum(["good", "better", "best", "premium"]).nullable().optional(),
+  recordingProfileId: z.string().uuid().nullable().optional(),
 });
 
 export async function runAssessmentAction(leadId: string, input: unknown, markupOverride: number | null): Promise<ActionResult<{ id: string }>> {
@@ -83,5 +86,23 @@ export async function prepareDraftsAction(assessmentId: string, what: { email?: 
     return ok(r);
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
+ * Reprice a prepared quote with current supplier prices and rules. The quote goes back to Needs
+ * Review; any approval is removed. A markup override needs an approver.
+ */
+export async function repriceQuoteAction(quoteId: string, markupOverride?: number | null): Promise<ActionResult<{ changed: boolean; complete: boolean }>> {
+  const user = await requireOffice();
+  try {
+    const actor = humanFromUser(user);
+    if (markupOverride != null) assertApprover(actor);
+    const r = await repriceQuote(quoteId, actor, markupOverride !== undefined ? { markupOverride } : {});
+    revalidatePath(`/quotes/${quoteId}`);
+    revalidatePath("/approvals");
+    return ok(r);
+  } catch (err) {
+    return fail(err instanceof GuardrailError || err instanceof Error ? err.message : String(err));
   }
 }

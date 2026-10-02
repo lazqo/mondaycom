@@ -289,8 +289,8 @@ export function PacketView({
             </p>
             <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
               {e.checks.map((ch) => (
-                <li key={ch.name} className={!ch.pass ? "text-red-600" : ch.unverified ? "text-amber-700" : ""}>
-                  {!ch.pass ? "✗" : ch.unverified ? "?" : "✓"} {ch.name}: {ch.detail}
+                <li key={ch.name} className={!ch.pass ? "text-red-600" : ch.warning ? "font-medium text-amber-700" : ch.unverified ? "text-amber-700" : ""}>
+                  {!ch.pass ? "✗" : ch.warning ? "⚠" : ch.unverified ? "?" : "✓"} {ch.name === "bandwidth" ? "design bandwidth" : ch.name === "max_bandwidth" ? "maximum possible bandwidth" : ch.name}: {ch.detail}
                 </li>
               ))}
             </ul>
@@ -308,6 +308,49 @@ export function PacketView({
             : "Get Secure standard"}
           )
         </p>
+        {p.recording.profile ? (
+          <p className="text-xs text-gray-600" data-testid="packet-profile">
+            Recording profile: <strong>{p.recording.profile.name}</strong> ({label(p.recording.profile.status)})
+            {p.recording.profile.codec ? ` · ${p.recording.profile.codec}` : ""}
+            {p.recording.profile.frameRate ? ` · ${p.recording.profile.frameRate} fps` : ""}
+            {p.recording.profile.bitrateControl ? ` · ${p.recording.profile.bitrateControl}` : ""}
+          </p>
+        ) : (
+          <p className="text-xs text-red-600">No recording profile: approved recording profile required.</p>
+        )}
+        {p.recording.designs?.length ? (
+          <table className="w-full text-left text-xs" data-testid="packet-designs">
+            <thead className="text-gray-500">
+              <tr>
+                <th className="py-1">Camera</th>
+                <th className="py-1 text-right">Design bitrate</th>
+                <th className="py-1">Source</th>
+                <th className="py-1 text-right">Published max</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.recording.designs.map((d) => (
+                <tr key={d.productId} className="border-t border-gray-100">
+                  <td className="py-1">
+                    {d.model} ({d.resolutionMp} MP)
+                  </td>
+                  <td className={cn("py-1 text-right", d.designBitrateMbps == null && "text-red-600")}>{d.designBitrateMbps != null ? `${d.designBitrateMbps} Mbps` : "not set"}</td>
+                  <td className="py-1 text-gray-600">
+                    {d.bitrateSource ?? "—"}
+                    {d.designBitrateMbps != null && !d.bitrateApproved ? " (not approved)" : ""}
+                  </td>
+                  <td className="py-1 text-right text-gray-600">{d.publishedMaxBitrateMbps != null ? `${d.publishedMaxBitrateMbps} Mbps` : "not published"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+        {p.recording.designBandwidthMbps != null || p.recording.maxPossibleBandwidthMbps != null ? (
+          <p className="text-xs text-gray-600">
+            Design bandwidth {p.recording.designBandwidthMbps != null ? `${p.recording.designBandwidthMbps.toFixed(1)} Mbps` : "unknown"} · maximum possible configured{" "}
+            {p.recording.maxPossibleBandwidthMbps != null ? `${p.recording.maxPossibleBandwidthMbps.toFixed(1)} Mbps` : "unknown"}
+          </p>
+        ) : null}
         <List items={p.recording.storage.notes} />
         <p>
           Recommended:{" "}
@@ -375,22 +418,35 @@ export function PacketView({
             <List items={p.installation.accessories.map((x) => `${x.camera}: ${label(x.kind.replace("camera_", ""))} ${x.product}`)} />
           </div>
         ) : null}
-        <p className="text-xs text-gray-600">
-          Labour:{" "}
-          {p.labour.package
-            ? `${p.labour.package.name} (${
-                p.labour.basis === "package_price"
-                  ? `${p.labour.estimatedHours ?? "?"} h, package price ${money(p.labour.allowanceExGst)} ex GST`
-                  : p.labour.basis === "hours_x_rate"
-                    ? `${p.labour.estimatedHours} h × rate = ${money(p.labour.allowanceExGst)} ex GST`
-                    : "hours and price not set"
-              })`
-            : "no package"}{" "}
-          · internal rate ${p.labour.internalRate}/h
-          {p.labour.internalReferenceExGst != null
-            ? ` = ${money(p.labour.internalReferenceExGst)}`
-            : ""}
-        </p>
+        <div className="rounded border border-gray-100 p-2 text-xs" data-testid="packet-labour">
+          {p.labour.package ? (
+            <>
+              <p className="font-medium text-gray-800">
+                Installation package {p.labour.package.key ?? p.labour.package.name}
+                {p.labour.package.status !== "getsecure_approved" ? <span className="font-normal text-amber-700"> ({label(p.labour.package.status)})</span> : null}
+              </p>
+              <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-4">
+                <dt className="text-gray-500">Labour hours</dt>
+                <dd>{p.labour.estimatedHours ?? "not set"}</dd>
+                <dt className="text-gray-500">Internal rate</dt>
+                <dd>${p.labour.internalRate}/h</dd>
+                <dt className="text-gray-500">Labour cost</dt>
+                <dd>{money(p.labour.labourCostExGst ?? null)}</dd>
+                <dt className="text-gray-500">Material cost</dt>
+                <dd>{money(p.labour.materialCostExGst ?? null)}</dd>
+                <dt className="text-gray-500">Conduit allowance</dt>
+                <dd>{p.labour.conduitCostExGst === 0 ? "n/a" : money(p.labour.conduitCostExGst ?? null)}</dd>
+                <dt className="text-gray-500">Complexity allowance</dt>
+                <dd>{money(p.labour.complexityCostExGst ?? null)}</dd>
+                <dt className="text-gray-500">Customer sell allowance</dt>
+                <dd>{money(p.labour.allowanceExGst)}</dd>
+              </dl>
+            </>
+          ) : (
+            <p className={p.labour.customInstallation ? "text-red-600" : "text-gray-600"}>{p.labour.customInstallation ? "Custom installation (no exact package)" : "No installation package"} · internal rate ${p.labour.internalRate}/h</p>
+          )}
+          {p.labour.missing?.length ? <p className="mt-1 text-red-600">Not set: {p.labour.missing.join("; ")}</p> : null}
+        </div>
         <List items={p.labour.notes} />
       </Section>
 
@@ -418,10 +474,16 @@ export function PacketView({
                   <td className="py-1">
                     {l.customerDescription}
                     {l.detail?.length ? <p className="text-xs text-gray-500">{l.detail.join("; ")}</p> : null}
+                    {l.alternatives?.length ? (
+                      <p className="text-xs text-gray-500">
+                        Alternatives: {l.alternatives.map((a) => `${a.supplier} $${a.costExGst} (${a.freshness}${a.approved ? "" : ", not approved"}${a.stock ? `, stock ${a.stock}` : ""})`).join("; ")}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="py-1 text-xs text-gray-600">
-                    {l.supplier ?? (l.productId ? "no price" : "")}
+                    {l.supplier ?? (l.productId ? "no price" : l.internalOnly ? "internal" : "")}
                     {l.supplierSku ? ` ${l.supplierSku}` : ""}
+                    {l.stock ? ` · stock ${l.stock}` : ""}
                     {l.freshness ? (
                       <Badge className={cn("ml-1", l.freshness === "current" ? "bg-green-100 text-green-800" : l.freshness === "aging" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800")}>
                         {l.freshness}
@@ -443,6 +505,8 @@ export function PacketView({
           <dd>{money(c.materialsCost)}</dd>
           <dt className="text-gray-500">Labour cost</dt>
           <dd>{money(c.labourCost)}</dd>
+          <dt className="text-gray-500">Conduit / complexity</dt>
+          <dd>{money(c.allowancesCost ?? 0)}</dd>
           <dt className="text-gray-500">Other cost</dt>
           <dd>{money(c.otherCost)}</dd>
           <dt className="text-gray-500">Sell ex GST</dt>

@@ -22,7 +22,10 @@ const LEAD = `Mere Tawhiri ${RUN}`;
 
 const sql = postgres(process.env.DATABASE_URL ?? "postgres://localhost/getsecure", { max: 1, onnotice: () => {} });
 let leadId = "";
-let packageId = "";
+let profileId = "";
+type PackageValues = { estimated_hours: string | null; labour_rate: string | null; material_cost_ex_gst: string | null; complexity_allowance_ex_gst: string | null; allowance_ex_gst: string | null; status: string };
+let pkgBefore: PackageValues | undefined;
+const PROFILE = `E2E profile ${RUN}`;
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -37,6 +40,7 @@ test.describe("CCTV Business Brain", () => {
 
   test.beforeAll(async () => {
     const [it] = await sql`select id from suppliers where name = 'IT Plus'`;
+    const ids: Record<string, string> = {};
     const add = async (category: string, model: string, specs: Record<string, unknown>, cost: number) => {
       const [p] = await sql`
         insert into products (manufacturer, model, category, market, tier, specs, status, source)
@@ -45,15 +49,21 @@ test.describe("CCTV Business Brain", () => {
       await sql`
         insert into supplier_products (product_id, supplier_id, cost_ex_gst, price_approved, last_checked_at, price_confidence)
         values (${p.id}, ${it.id}, ${cost}, true, now(), 1)`;
+      ids[model] = p.id;
     };
-    await add("camera", "FX-CAM-4", { resolutionMp: 4, horizontalPixels: 2560, hfovDeg: 100, irRangeM: 30, colourNight: false, wdrDb: 120, codecs: ["H.265"], expectedBitrateMbps: 4, poeWatts: 5, analytics: ["human_vehicle"], onvifProfiles: ["S", "T"] }, 100);
+    await add("camera", "FX-CAM-4", { resolutionMp: 4, horizontalPixels: 2560, hfovDeg: 100, irRangeM: 30, colourNight: false, wdrDb: 120, codecs: ["H.265"], maxBitrateMbps: 8, poeWatts: 5, analytics: ["human_vehicle"], onvifProfiles: ["S", "T"] }, 100);
     await add("nvr", "FX-NVR-4", { channels: 4, incomingMbps: 40, poePorts: 4, poePerPortW: 25, poeBudgetW: 50, hddBays: 1, maxHddTb: 10, maxTotalTb: 10, features: ["human_vehicle"], onvifProfiles: ["S", "T"] }, 200);
     await add("hdd", "FX-HDD-4TB", { capacityTb: 4, surveillanceRated: true }, 120);
-    const [pkg] = await sql`
-      insert into installation_packages (name, property_type, min_cameras, max_cameras, storeys, estimated_hours, allowance_ex_gst, status, source)
-      values (${`E2E 1-4 cameras ${RUN}`}, 'residential', 1, 4, 1, 6, 760, 'getsecure_approved', 'e2e fixture')
+    // A recording profile with a design bitrate for the test camera (TEST VALUE), approved.
+    const [prof] = await sql`
+      insert into recording_profiles (key, name, property_type, codec, frame_rate, bitrate_control, recording_mode, retention_target_days, retention_minimum_days, rules, status, source)
+      values (${`E2E_${RUN.toUpperCase()}`}, ${PROFILE}, 'residential', 'H.265', 15, 'VBR', 'continuous', 28, 14,
+              ${sql.json([{ id: "p1", scope: "product", productId: ids["FX-CAM-4"], designBitrateMbps: 2 }] as never)}, 'getsecure_approved', 'e2e fixture')
       returning id`;
-    packageId = pkg.id;
+    profileId = prof.id;
+    // The exact 4-camera package with every value entered (TEST VALUES); put back afterwards.
+    [pkgBefore] = await sql<PackageValues[]>`select estimated_hours, labour_rate, material_cost_ex_gst, complexity_allowance_ex_gst, allowance_ex_gst, status from installation_packages where key = 'RES_CCTV_SINGLE_4'`;
+    await sql`update installation_packages set estimated_hours = 6, labour_rate = 95, material_cost_ex_gst = 80, complexity_allowance_ex_gst = 0, allowance_ex_gst = 790, status = 'getsecure_approved' where key = 'RES_CCTV_SINGLE_4'`;
     const [lead] = await sql`
       insert into leads (name, email, phone, site, service, status, source, notes)
       values (${LEAD}, ${`mere+${RUN}@example.com`}, '021 555 0199', '8 Kowhai Road, Mt Albert, Auckland', 'CCTV', 'new', 'website',
@@ -66,7 +76,10 @@ test.describe("CCTV Business Brain", () => {
     if (leadId) await sql`delete from quotes where lead_id = ${leadId}`;
     if (leadId) await sql`delete from leads where id = ${leadId}`;
     await sql`delete from products where manufacturer = ${MAKER}`;
-    if (packageId) await sql`delete from installation_packages where id = ${packageId}`;
+    if (profileId) await sql`delete from recording_profiles where id = ${profileId}`;
+    if (pkgBefore)
+      await sql`update installation_packages set estimated_hours = ${pkgBefore.estimated_hours}, labour_rate = ${pkgBefore.labour_rate}, material_cost_ex_gst = ${pkgBefore.material_cost_ex_gst},
+                complexity_allowance_ex_gst = ${pkgBefore.complexity_allowance_ex_gst}, allowance_ex_gst = ${pkgBefore.allowance_ex_gst}, status = ${pkgBefore.status} where key = 'RES_CCTV_SINGLE_4'`;
     await sql.end();
   });
 
@@ -81,11 +94,15 @@ test.describe("CCTV Business Brain", () => {
     await page.getByLabel("Cameras", { exact: true }).fill("4");
     await page.getByLabel("Storeys", { exact: true }).fill("1");
     await page.getByLabel("Areas to cover (one per line)").fill("Front door\nDriveway\nBack yard\nSide gate");
+    await page.getByLabel("Recording profile").selectOption({ label: PROFILE });
     await page.getByTestId("run-assessment").click();
     const packet = page.getByTestId("decision-packet");
     await expect(packet).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("packet-nvr")).toContainText("FX-NVR-4");
     await expect(page.getByTestId("packet-storage")).toContainText(/days/);
+    await expect(page.getByTestId("packet-designs")).toContainText("2 Mbps");
+    await expect(page.getByTestId("packet-labour")).toContainText("RES_CCTV_SINGLE_4");
+    await expect(page.getByTestId("packet-total")).toContainText(/inc GST/); // fully priced
     await expect(page.getByTestId("packet-cameras")).toContainText("FX-CAM-4");
     // Supplier cost and margin are internal; the assessment page is internal too, but the
     // prepared email body must not carry them (checked below).
@@ -120,6 +137,9 @@ test.describe("CCTV Business Brain", () => {
     await expect(quoteRow).toBeVisible();
     await quoteRow.click();
     await expect(page.getByTestId("quote-approval")).toBeVisible();
+    await expect(page.getByTestId("quote-priced")).toHaveText("Fully priced");
+    await expect(page.getByTestId("quote-commercial-totals")).toContainText("Gross margin");
+    await expect(page.getByTestId("quote-labour")).toContainText("RES_CCTV_SINGLE_4");
     await expect(page.getByRole("button", { name: "Mark as sent" })).toHaveCount(0);
     await page.getByTestId("approve-quote").click();
     await expect(page.getByTestId("quote-approval")).toContainText("Approved by");
@@ -130,6 +150,13 @@ test.describe("CCTV Business Brain", () => {
     await page.getByRole("button", { name: "Save quote" }).click();
     await expect(page.getByText("needs approving again")).toBeVisible();
     await page.reload();
+    await expect(page.getByTestId("quote-approval")).toContainText("Waiting for Chris");
+    await expect(page.getByRole("button", { name: "Mark as sent" })).toHaveCount(0);
+
+    // Approve again, then reprice with current prices: approval is removed, back to Needs Review.
+    await page.getByTestId("approve-quote").click();
+    await expect(page.getByTestId("quote-approval")).toContainText("Approved by");
+    await page.getByTestId("reprice-quote").click();
     await expect(page.getByTestId("quote-approval")).toContainText("Waiting for Chris");
     await expect(page.getByRole("button", { name: "Mark as sent" })).toHaveCount(0);
   });

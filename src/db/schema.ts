@@ -709,6 +709,8 @@ export const supplierProducts = pgTable(
     priceOnApplication: boolean("price_on_application").notNull().default(false),
     /** manual | csv | authenticated_web | public_plus_trade | api — how the current cost arrived. */
     priceSource: text("price_source"),
+    /** Only trade (Get Secure account) pricing is a cost. Retail/RRP is never stored as cost. */
+    priceBasis: text("price_basis").notNull().default("trade"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -776,26 +778,83 @@ export const productPriceHistory = pgTable(
   (t) => [index("price_history_offer_idx").on(t.supplierProductId, t.recordedAt)],
 );
 
+/**
+ * Installation packages. Residential packages are keyed by an exact camera count and storey type
+ * (RES_CCTV_SINGLE_4 …); a job with any other count is a custom installation, never mapped to the
+ * nearest package. Every value is Get Secure's to enter; nothing is derived.
+ */
 export const installationPackages = pgTable("installation_packages", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Exact package key, e.g. RES_CCTV_SINGLE_4. */
+  key: text("key").unique(),
   name: text("name").notNull(),
   propertyType: text("property_type").notNull().default("residential"),
+  /** Exact camera count the package is for. */
+  cameraCount: integer("camera_count"),
+  /** single | double */
+  storeyType: text("storey_type"),
+  // Legacy range columns, kept equal to cameraCount on exact packages.
   minCameras: integer("min_cameras").notNull(),
   maxCameras: integer("max_cameras").notNull(),
   storeys: integer("storeys"),
-  /** Null until Get Secure enters it. */
+  /** Expected labour hours. Null until Get Secure enters it. */
   estimatedHours: numeric("estimated_hours", { precision: 6, scale: 2 }),
   /** Internal labour rate, NZD/hour ex GST. Null uses the policy rate. */
   labourRate: numeric("labour_rate", { precision: 8, scale: 2 }),
-  /** Package price charged for installation, ex GST. Null until Get Secure sets it. */
+  /** Customer sell allowance for the installation, ex GST. Null until Get Secure sets it. */
   allowanceExGst: numeric("allowance_ex_gst", { precision: 12, scale: 2 }),
+  /** Internal cost of the standard materials for this package, ex GST. */
+  materialCostExGst: numeric("material_cost_ex_gst", { precision: 12, scale: 2 }),
   materialsPackageId: uuid("materials_package_id").references(() => materialsPackages.id, { onDelete: "set null" }),
   conduitIncluded: boolean("conduit_included").notNull().default(false),
-  /** Conduit allowance charged, ex GST, when conduit applies. Null until set. */
+  /** Internal conduit allowance, ex GST, when conduit applies. Null until set. */
   conduitAllowanceExGst: numeric("conduit_allowance_ex_gst", { precision: 12, scale: 2 }),
+  /** Internal installation-complexity allowance, ex GST. Null until set. */
+  complexityAllowanceExGst: numeric("complexity_allowance_ex_gst", { precision: 12, scale: 2 }),
   includedMaterials: jsonb("included_materials").$type<string[]>().notNull().default([]),
   assumptions: jsonb("assumptions").$type<string[]>().notNull().default([]),
   exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
+  version: integer("version").notNull().default(1),
+  ...provenance(),
+});
+
+/**
+ * How cameras are configured to record, which sets the design bitrate used for recorder bandwidth,
+ * storage and retention. Rules resolve most specific first: product, then manufacturer/family,
+ * then resolution band. Values are Get Secure's; none are derived from datasheets.
+ */
+export const recordingProfiles = pgTable("recording_profiles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  /** residential | commercial | any */
+  propertyType: text("property_type").notNull().default("residential"),
+  isDefault: boolean("is_default").notNull().default(false),
+  codec: text("codec"),
+  frameRate: integer("frame_rate"),
+  /** CBR | VBR */
+  bitrateControl: text("bitrate_control"),
+  /** continuous | event */
+  recordingMode: text("recording_mode"),
+  retentionTargetDays: integer("retention_target_days"),
+  retentionMinimumDays: integer("retention_minimum_days"),
+  rules: jsonb("rules")
+    .$type<
+      {
+        id: string;
+        scope: "product" | "family" | "resolution";
+        productId?: string | null;
+        family?: string | null;
+        minMp?: number | null;
+        maxMp?: number | null;
+        designBitrateMbps: number | null;
+        codec?: string | null;
+        frameRate?: number | null;
+        note?: string | null;
+      }[]
+    >()
+    .notNull()
+    .default([]),
   version: integer("version").notNull().default(1),
   ...provenance(),
 });
@@ -1029,3 +1088,4 @@ export type Supplier = typeof suppliers.$inferSelect;
 export type SupplierBrandRoute = typeof supplierBrandRoutes.$inferSelect;
 export type ProductCompatibilityRow = typeof productCompatibility.$inferSelect;
 export type MaterialsPackage = typeof materialsPackages.$inferSelect;
+export type RecordingProfileRow = typeof recordingProfiles.$inferSelect;

@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { installationPackages, materialsPackages, productCompatibility, products, supplierBrandRoutes, supplierCredentials, suppliers } from "@/db/schema";
+import { installationPackages, materialsPackages, productCompatibility, products, recordingProfiles, supplierBrandRoutes, supplierCredentials, suppliers } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { assertApprover, humanFromUser, type Actor } from "@/lib/guard/actor";
@@ -207,19 +207,28 @@ export async function setSupplierCredentialAction(supplierId: string, username: 
   }
 }
 
+const optMoney = z.coerce.number().min(0).nullable();
 const packageInput = z.object({
   id: z.string().uuid().nullable().optional(),
+  key: z
+    .string()
+    .trim()
+    .regex(/^[A-Z0-9_]+$/, "Key: capitals, digits and _ only (e.g. RES_CCTV_SINGLE_4)")
+    .max(60)
+    .nullable()
+    .optional(),
   name: z.string().trim().min(1).max(200),
   propertyType: z.enum(["residential", "commercial"]),
-  minCameras: z.coerce.number().int().min(1),
-  maxCameras: z.coerce.number().int().min(1),
-  storeys: z.coerce.number().int().min(1).max(10).nullable(),
+  cameraCount: z.coerce.number().int().min(1).max(64),
+  storeyType: z.enum(["single", "double"]),
   estimatedHours: z.coerce.number().positive().nullable(),
   labourRate: z.coerce.number().positive().nullable(),
-  allowanceExGst: z.coerce.number().min(0).nullable(),
+  allowanceExGst: optMoney,
+  materialCostExGst: optMoney,
   materialsPackageId: z.string().uuid().nullable(),
   conduitIncluded: z.boolean().default(false),
-  conduitAllowanceExGst: z.coerce.number().min(0).nullable(),
+  conduitAllowanceExGst: optMoney,
+  complexityAllowanceExGst: optMoney,
   includedMaterials: z.array(z.string().trim().min(1)).default([]),
   assumptions: z.array(z.string().trim().min(1)).default([]),
   exclusions: z.array(z.string().trim().min(1)).default([]),
@@ -227,20 +236,37 @@ const packageInput = z.object({
   notes: z.string().trim().max(2000).nullable().optional(),
 });
 
+/** Save an installation package (exact camera count + storey type). Each save is a new version. */
 export async function savePackageAction(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const actor = await admin();
     const parsed = packageInput.safeParse(input);
-    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid input");
+    if (!parsed.success) return fail(`${parsed.error.issues[0]?.path.join(".")}: ${parsed.error.issues[0]?.message}`);
     const { id: given, ...d } = parsed.data;
-    if (d.maxCameras < d.minCameras) return fail("Max cameras must be at least min cameras");
     const existing = given ? await db.query.installationPackages.findFirst({ where: eq(installationPackages.id, given) }) : null;
+    const key = d.key || (d.propertyType === "residential" ? `RES_CCTV_${d.storeyType.toUpperCase()}_${d.cameraCount}` : null);
+    const m = (v: number | null) => (v != null ? v.toFixed(2) : null);
     const values = {
-      ...d,
-      estimatedHours: d.estimatedHours != null ? d.estimatedHours.toFixed(2) : null,
-      labourRate: d.labourRate != null ? d.labourRate.toFixed(2) : null,
-      allowanceExGst: d.allowanceExGst != null ? d.allowanceExGst.toFixed(2) : null,
-      conduitAllowanceExGst: d.conduitAllowanceExGst != null ? d.conduitAllowanceExGst.toFixed(2) : null,
+      key,
+      name: d.name,
+      propertyType: d.propertyType,
+      cameraCount: d.cameraCount,
+      storeyType: d.storeyType,
+      minCameras: d.cameraCount,
+      maxCameras: d.cameraCount,
+      storeys: d.storeyType === "double" ? 2 : 1,
+      estimatedHours: m(d.estimatedHours),
+      labourRate: m(d.labourRate),
+      allowanceExGst: m(d.allowanceExGst),
+      materialCostExGst: m(d.materialCostExGst),
+      materialsPackageId: d.materialsPackageId,
+      conduitIncluded: d.conduitIncluded,
+      conduitAllowanceExGst: d.conduitIncluded ? m(d.conduitAllowanceExGst) : null,
+      complexityAllowanceExGst: m(d.complexityAllowanceExGst),
+      includedMaterials: d.includedMaterials,
+      assumptions: d.assumptions,
+      exclusions: d.exclusions,
+      status: d.status,
       notes: d.notes ?? null,
       version: existing ? existing.version + 1 : 1,
       updatedAt: new Date(),
@@ -252,7 +278,74 @@ export async function savePackageAction(input: unknown): Promise<ActionResult<{ 
     revalidatePath("/settings/brain");
     return ok({ id: id! });
   } catch (err) {
-    return fail(err instanceof Error ? err.message : String(err));
+    return fail(err instanceof Error ? (/installation_packages_key_unique/.test(err.message) ? "A package with that key already exists." : err.message) : String(err));
+  }
+}
+
+// ---------- recording profiles ----------
+
+const ruleInput = z.object({
+  id: z.string().trim().min(1).max(60),
+  scope: z.enum(["product", "family", "resolution"]),
+  productId: z.string().uuid().nullable().optional(),
+  family: z.string().trim().max(100).nullable().optional(),
+  minMp: z.coerce.number().min(0).nullable().optional(),
+  maxMp: z.coerce.number().min(0).nullable().optional(),
+  designBitrateMbps: z.coerce.number().positive().max(100).nullable(),
+  codec: z.string().trim().max(30).nullable().optional(),
+  frameRate: z.coerce.number().int().positive().max(120).nullable().optional(),
+  note: z.string().trim().max(300).nullable().optional(),
+});
+const profileInput = z.object({
+  id: z.string().uuid().nullable().optional(),
+  key: z.string().trim().regex(/^[A-Z0-9_]+$/, "Key: capitals, digits and _ only").max(60),
+  name: z.string().trim().min(1).max(100),
+  propertyType: z.enum(["residential", "commercial", "any"]),
+  isDefault: z.boolean().default(false),
+  codec: z.string().trim().max(30).nullable(),
+  frameRate: z.coerce.number().int().positive().max(120).nullable(),
+  bitrateControl: z.enum(["CBR", "VBR"]).nullable(),
+  recordingMode: z.enum(["continuous", "motion"]).nullable(),
+  retentionTargetDays: z.coerce.number().int().positive().max(365).nullable(),
+  retentionMinimumDays: z.coerce.number().int().positive().max(365).nullable(),
+  rules: z.array(ruleInput).default([]),
+  status,
+  notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+/**
+ * Save a recording profile. Its design bitrates are Get Secure's values: they decide recorder
+ * bandwidth and storage. Only an approver can mark a profile approved.
+ */
+export async function saveRecordingProfileAction(input: unknown): Promise<ActionResult<{ id: string }>> {
+  try {
+    const actor = await admin();
+    const parsed = profileInput.safeParse(input);
+    if (!parsed.success) return fail(`${parsed.error.issues[0]?.path.join(".")}: ${parsed.error.issues[0]?.message}`);
+    const { id: given, ...d } = parsed.data;
+    for (const r of d.rules) {
+      if (r.scope === "product" && !r.productId) return fail("A product rule needs a product.");
+      if (r.scope === "family" && !r.family) return fail("A manufacturer/family rule needs a brand.");
+      if (r.minMp != null && r.maxMp != null && r.minMp > r.maxMp) return fail("A resolution band's from MP is above its to MP.");
+    }
+    const existing = given ? await db.query.recordingProfiles.findFirst({ where: eq(recordingProfiles.id, given) }) : null;
+    if (d.isDefault) await db.update(recordingProfiles).set({ isDefault: false }).where(and(eq(recordingProfiles.propertyType, d.propertyType), eq(recordingProfiles.isDefault, true)));
+    const values = {
+      ...d,
+      rules: d.rules.map((r) => ({ ...r, productId: r.productId ?? null, family: r.family ?? null, minMp: r.minMp ?? null, maxMp: r.maxMp ?? null, codec: r.codec ?? null, frameRate: r.frameRate ?? null, note: r.note ?? null })),
+      notes: d.notes ?? null,
+      version: existing ? existing.version + 1 : 1,
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+      ...approvalFields(actor, d.status),
+    };
+    let id = given ?? null;
+    if (id) await db.update(recordingProfiles).set(values).where(eq(recordingProfiles.id, id));
+    else [{ id }] = await db.insert(recordingProfiles).values({ ...values, source: `Entered by ${actor.name}` }).returning({ id: recordingProfiles.id });
+    revalidatePath("/settings/brain");
+    return ok({ id: id! });
+  } catch (err) {
+    return fail(err instanceof Error ? (/recording_profiles_key_unique/.test(err.message) ? "A profile with that key already exists." : err.message) : String(err));
   }
 }
 
@@ -398,12 +491,13 @@ export async function saveMaterialsPackageAction(input: unknown): Promise<Action
 // ---------- CSV import ----------
 
 /** Import a supplier price list. Prices are recorded unapproved (or held if they moved a lot). */
-export async function importSupplierCsvAction(supplierId: string, text: string): Promise<ActionResult<{ recorded: number; held: number; poa: number; unmatched: string[]; errors: string[] }>> {
+export async function importSupplierCsvAction(supplierId: string, text: string, confirmedTrade: boolean): Promise<ActionResult<{ recorded: number; held: number; poa: number; unmatched: string[]; errors: string[] }>> {
   try {
     const actor = await admin();
+    if (!confirmedTrade) return fail("Tick to confirm these are Get Secure trade (account) prices. Retail pricing is never imported as cost.");
     const { listings, errors } = parseSupplierCsv(text);
     if (!listings.length) return fail(errors[0] ?? "No rows found.");
-    const r = await importListings(supplierId, listings, actor, { type: "csv", label: `CSV import by ${actor.name}` });
+    const r = await importListings(supplierId, listings, actor, { type: "csv", label: `CSV import by ${actor.name}`, confirmedTrade });
     revalidatePath("/settings/brain");
     return ok({ ...r, errors });
   } catch (err) {

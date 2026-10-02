@@ -78,6 +78,13 @@
       "when": 1790971915280,
       "tag": "0010_current_suppliers",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790974912025,
+      "tag": "0011_real_costing",
+      "breakpoints": true
     }
   ]
 }

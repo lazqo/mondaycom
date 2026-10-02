@@ -3,10 +3,9 @@
  * check: channels, incoming bandwidth, PoE (per port and in total), storage, recording
  * resolution, simultaneous decoding, features/analytics, and camera compatibility.
  */
-import type { CameraProduct, Check, CompatibilityLink, NvrEvaluation, NvrProduct, Policies, Product, PropertyType, Tier } from "./types";
+import type { CameraDesign, CameraProduct, Check, CompatibilityLink, NvrEvaluation, NvrProduct, Policies, Product, PropertyType, Tier } from "./types";
 import { TRUSTED_STATUSES } from "./types";
 import { chooseDrives } from "./storage";
-import { planningBitrate } from "./cameras";
 import { cameraNvrBasis } from "./compat";
 import { familyOf } from "./pricing";
 
@@ -28,6 +27,8 @@ export type NvrContext = {
   products: Product[];
   policies: Policies;
   links?: CompatibilityLink[];
+  /** Design per camera from the recording profile (design bitrate, published maximum). */
+  designs?: Map<string, CameraDesign>;
 };
 
 /** "1080p" → 2, "4K" → 8, "6" → 6: decoding keys as megapixels. */
@@ -46,19 +47,32 @@ export function validateNvr(nvr: NvrProduct, ctx: NvrContext): NvrEvaluation {
 
   checks.push({ name: "channels", pass: n <= nvr.channels && ctx.channelsNeeded <= nvr.channels, detail: `${n} camera(s), ${ctx.channelsNeeded} channel(s) needed, recorder has ${nvr.channels}` });
 
-  const bitrates = ctx.cameras.map((c) => planningBitrate(c));
-  if (bitrates.some((b) => b.mbps == null)) {
-    checks.push({ name: "bandwidth", pass: false, detail: "A camera has no bitrate in the catalogue, so incoming bandwidth cannot be verified" });
-  } else if (!(nvr.incomingMbps > 0)) {
+  // Design bandwidth (the approved recording profile) decides; the published maximum only warns.
+  const design = ctx.cameras.map((c) => ctx.designs?.get(c.id)?.designBitrateMbps ?? null);
+  const max = ctx.cameras.map((c) => c.maxBitrateMbps ?? null);
+  const knownIncoming = nvr.incomingMbps > 0;
+  if (design.some((b) => b == null)) {
+    const missing = [...new Set(ctx.cameras.filter((_, i) => design[i] == null).map((c) => c.model))];
+    checks.push({ name: "bandwidth", pass: true, unverified: true, detail: `Design bandwidth not checked: approved recording profile required (no design bitrate for ${missing.join(", ")})` });
+  } else if (!knownIncoming) {
     checks.push({ name: "bandwidth", pass: true, unverified: true, detail: "Recorder incoming bandwidth not in the catalogue" });
   } else {
-    const total = bitrates.reduce((s, b) => s + b.mbps!, 0);
-    const conservative = bitrates.some((b) => b.basis === "max_published");
+    const total = (design as number[]).reduce((s, b) => s + b, 0);
+    checks.push({ name: "bandwidth", pass: total <= nvr.incomingMbps, detail: `Design bandwidth ${total.toFixed(1)} Mbps, recorder accepts ${nvr.incomingMbps} Mbps` });
+  }
+  if (max.every((b) => b != null) && knownIncoming) {
+    const total = (max as number[]).reduce((s, b) => s + b, 0);
     checks.push({
-      name: "bandwidth",
-      pass: total <= nvr.incomingMbps,
-      detail: `${total.toFixed(1)} Mbps from cameras${conservative ? " (at the maximum published bitrate)" : ""}, recorder accepts ${nvr.incomingMbps} Mbps`,
+      name: "max_bandwidth",
+      pass: true,
+      warning: total > nvr.incomingMbps,
+      detail:
+        total > nvr.incomingMbps
+          ? `Maximum possible configured bandwidth ${total.toFixed(1)} Mbps exceeds the recorder's ${nvr.incomingMbps} Mbps: keep the cameras at the approved recording profile`
+          : `Maximum possible configured bandwidth ${total.toFixed(1)} Mbps is within the recorder's ${nvr.incomingMbps} Mbps`,
     });
+  } else {
+    checks.push({ name: "max_bandwidth", pass: true, unverified: true, detail: "Maximum possible bandwidth unknown (a camera or the recorder does not publish it)" });
   }
 
   if (nvr.poePorts > 0) {
@@ -86,7 +100,7 @@ export function validateNvr(nvr: NvrProduct, ctx: NvrContext): NvrEvaluation {
   }
 
   if (ctx.requiredGb == null) {
-    checks.push({ name: "storage", pass: false, detail: "Storage requirement unknown" });
+    checks.push({ name: "storage", pass: true, unverified: true, detail: "Storage not sized: design bitrates from an approved recording profile are needed" });
   } else {
     const drives = chooseDrives(ctx.requiredGb, nvr, ctx.products, ctx.policies, ctx.links);
     checks.push({

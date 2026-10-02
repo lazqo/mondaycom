@@ -45,11 +45,13 @@ export function AssessmentForm({
   initial,
   assessmentId,
   canApprove,
+  profiles = [],
 }: {
   leadId: string;
   initial: EnquiryInput;
   assessmentId: string | null;
   canApprove: boolean;
+  profiles?: { id: string; name: string; propertyType: string; isDefault: boolean; designed: boolean }[];
 }) {
   const router = useRouter();
   const [v, setV] = React.useState<EnquiryInput>(initial);
@@ -166,6 +168,17 @@ export function AssessmentForm({
           <TriSelect id="a-internet" label="Internet at property" value={v.internet} onChange={(x) => set("internet", x)} />
           <TriSelect id="a-router" label="Recorder next to router" value={v.recorderNearRouter} onChange={(x) => set("recorderNearRouter", x)} />
           <TriSelect id="a-wired" label="Cable route to router possible" value={v.wiredRoutePossible} onChange={(x) => set("wiredRoutePossible", x)} />
+          <Field label="Recording profile" htmlFor="a-profile" hint="Sets design bitrates for bandwidth and storage">
+            <Select id="a-profile" value={v.recordingProfileId ?? ""} onChange={(e) => set("recordingProfileId", e.target.value || null)}>
+              <option value="">Default for the property type</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.designed ? "" : " (no design bitrates yet)"}
+                </option>
+              ))}
+            </Select>
+          </Field>
           <Field label="Retention asked for (days)" htmlFor="a-ret">
             <Input id="a-ret" type="number" min={1} value={v.retentionDays ?? ""} onChange={(e) => set("retentionDays", num(e.target.value))} placeholder="28 (standard)" />
           </Field>

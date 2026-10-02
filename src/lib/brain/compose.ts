@@ -89,7 +89,8 @@ export function composeEmail(packet: DecisionPacket, ctx: { firstName: string | 
 
 export function composeQuote(packet: DecisionPacket, ctx: { customerName: string | null; gstPct: number }): QuoteDraft {
   const lineItems = packet.costing.lines
-    .filter((l) => l.priced && l.unitSellExGst != null)
+    // Internal-only cost lines (materials, conduit, complexity inside the installation) never appear.
+    .filter((l) => l.priced && l.unitSellExGst != null && !l.internalOnly)
     .map((l) => ({ description: l.customerDescription, quantity: l.quantity, unitPrice: l.unitSellExGst! }));
   const notes = [
     packet.assumptions.length ? `Assumptions:\n${packet.assumptions.map((a) => `- ${a}`).join("\n")}` : null,

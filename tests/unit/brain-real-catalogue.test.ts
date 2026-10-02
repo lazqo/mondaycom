@@ -1,21 +1,21 @@
 /**
- * Business Brain v0.2 on the real, verified reference catalogue (specifications from the
+ * Business Brain v0.2/v0.3 on the real, verified reference catalogue (specifications from the
  * manufacturers' own pages and datasheets; see data/catalogue-research and
  * src/lib/brain/reference/catalogue.json).
  *
  * Scenarios A-E from the v0.2 brief, plus supplier routing, price freshness, kits, junction boxes,
  * installation packages and the standard materials package.
  *
- * Supplier costs used here are TEST VALUES, not real trade prices: the reference catalogue has
- * none, and prices only ever come from a supplier.
+ * Supplier costs, design bitrates and package values used here are TEST VALUES, not Get Secure's:
+ * the reference catalogue has none of them, and they only ever come from Chris or a supplier.
  */
 import { describe, it, expect } from "vitest";
 import { assessCctv } from "@/lib/brain/engine";
-import { composeQuote } from "@/lib/brain/compose";
+import { composeEmail, composeQuote } from "@/lib/brain/compose";
 import { chooseOffer, priceFreshness } from "@/lib/brain/pricing";
 import { DEFAULT_POLICIES } from "@/lib/brain/policy";
 import { REFERENCE_CATALOGUE, referenceLinks, referenceProducts } from "@/lib/brain/reference/products";
-import type { BrandRoute, CameraProduct, Catalogue, InstallationPackage, MaterialsPackage, Policies, Product, ProductOffer } from "@/lib/brain/types";
+import type { BrandRoute, CameraProduct, Catalogue, InstallationPackage, MaterialsPackage, Policies, Product, ProductOffer, RecordingProfile, RecordingRule } from "@/lib/brain/types";
 import { house } from "./brain-fixtures";
 
 const NOW = new Date("2026-10-02T09:00:00+13:00");
@@ -82,31 +82,31 @@ const MATERIALS: MaterialsPackage = {
   status: "requires_review",
 };
 
-/** The eight residential packages as seeded: structure only, no hours, no price. */
+/** The eight residential packages as seeded: exact camera counts, no hours, no costs, no price. */
 function seededPackages(): InstallationPackage[] {
   const out: InstallationPackage[] = [];
-  for (const storeys of [1, 2])
-    for (const [min, max] of [
-      [1, 2],
-      [3, 4],
-      [5, 6],
-      [7, 8],
-    ])
+  for (const st of ["single", "double"] as const)
+    for (const n of [2, 4, 6, 8])
       out.push({
-        id: `pkg-${min}-${max}-${storeys}`,
-        name: `Residential ${min}–${max} cameras, ${storeys === 1 ? "single" : "double"} storey`,
+        id: `RES_CCTV_${st.toUpperCase()}_${n}`,
+        key: `RES_CCTV_${st.toUpperCase()}_${n}`,
+        name: `Residential CCTV, ${st} storey, ${n} cameras`,
         propertyType: "residential",
-        minCameras: min,
-        maxCameras: max,
-        storeys,
+        cameraCount: n,
+        storeyType: st,
+        minCameras: n,
+        maxCameras: n,
+        storeys: st === "double" ? 2 : 1,
         estimatedHours: null,
         labourRate: 95,
         allowanceExGst: null,
+        materialCostExGst: null,
         materialsPackageId: "mat",
-        conduitIncluded: storeys === 2,
+        conduitIncluded: st === "double",
         conduitAllowanceExGst: null,
+        complexityAllowanceExGst: null,
         includedMaterials: [],
-        assumptions: storeys === 2 ? ["Additional installation complexity for upper-storey cameras", "Cable routes to be confirmed (site/cable-route assumption)"] : [],
+        assumptions: st === "double" ? ["Additional installation complexity for upper-storey cameras", "Cable routes to be confirmed (site/cable-route assumption)"] : [],
         exclusions: [],
         version: 1,
         status: "requires_review",
@@ -114,15 +114,46 @@ function seededPackages(): InstallationPackage[] {
   return out;
 }
 
+/** A package with every commercial input entered (TEST VALUES). */
+const filled = (key: string, over: Partial<InstallationPackage> = {}) => (pkgs: InstallationPackage[]) =>
+  pkgs.map((k) => (k.key === key ? { ...k, estimatedHours: 6, materialCostExGst: 80, conduitAllowanceExGst: k.conduitIncluded ? 60 : null, complexityAllowanceExGst: 0, allowanceExGst: 790, ...over } : k));
+
+const profile = (over: Partial<RecordingProfile> = {}): RecordingProfile => ({
+  id: "RES_STANDARD",
+  key: "RES_STANDARD",
+  name: "Residential standard",
+  propertyType: "residential",
+  isDefault: true,
+  codec: null,
+  frameRate: null,
+  bitrateControl: null,
+  recordingMode: "continuous",
+  retentionTargetDays: 28,
+  retentionMinimumDays: 14,
+  rules: [],
+  version: 1,
+  status: "requires_review",
+  ...over,
+});
+/** Design bitrates by resolution band (TEST VALUES, not Get Secure's). */
+const BANDS: RecordingRule[] = [
+  { id: "b4", scope: "resolution", minMp: 0, maxMp: 4.5, designBitrateMbps: 4 },
+  { id: "b6", scope: "resolution", minMp: 4.5, maxMp: 6.5, designBitrateMbps: 6 },
+  { id: "b8", scope: "resolution", minMp: 6.5, maxMp: null, designBitrateMbps: 8 },
+];
+const designedProfile = (rules: RecordingRule[] = BANDS) => profile({ codec: "H.265", frameRate: 15, bitrateControl: "VBR", rules, status: "getsecure_approved" });
+
+/** The real catalogue as seeded: products, routes, unpriced packages and a profile with no design bitrates. */
 function realCatalogue(edit: (products: Product[]) => Product[] = (p) => p, over: Partial<Catalogue> = {}): Catalogue {
-  return { products: edit(referenceProducts()), packages: seededPackages(), materialsPackages: [MATERIALS], compatibility: referenceLinks(), routes: ROUTES, ...over };
+  return { products: edit(referenceProducts()), packages: seededPackages(), materialsPackages: [MATERIALS], compatibility: referenceLinks(), routes: ROUTES, recordingProfiles: [profile()], ...over };
 }
+/** The same with a designed (test) recording profile. */
+const designed = (edit?: (products: Product[]) => Product[], over: Partial<Catalogue> = {}) => realCatalogue(edit, { recordingProfiles: [designedProfile()], ...over });
 
 const policies = (over: Partial<Policies> = {}): Policies => ({ ...DEFAULT_POLICIES, ...over });
 const run = (input = house(), cat = realCatalogue(), pol = policies()) => assessCctv(input, cat, pol, { now: NOW });
 const REF_IDS = new Set(REFERENCE_CATALOGUE.products.map((p) => `${p.manufacturer}|${p.model}`));
 const hardware = (p: ReturnType<typeof run>): Product[] => [...p.cameras.map((c) => c.product), p.nvr.selected, p.recording.storage.drives?.product].filter(Boolean) as Product[];
-const withSpecs = (match: (p: Product) => boolean, specs: Record<string, unknown>) => (list: Product[]) => list.map((p) => (match(p) ? ({ ...p, ...specs } as Product) : p));
 
 describe("the reference catalogue", () => {
   const products = referenceProducts();
@@ -131,9 +162,9 @@ describe("the reference catalogue", () => {
     for (const f of ["TP-Link VIGI", "HiLook", "Hikvision", "TVT", "Dahua", "Tiandy", "Uniview", "Ajax", "Axis", "Hanwha"]) expect(families).toContain(f);
     expect(REFERENCE_CATALOGUE.products.every((p) => /^https?:\/\//.test(p.sourceUrl) && p.verifiedAt)).toBe(true);
   });
-  it("stores no prices and no Get Secure planning bitrate", () => {
-    expect(JSON.stringify(REFERENCE_CATALOGUE)).not.toMatch(/costExGst|costIncGst|"price"/);
-    expect(products.filter((p): p is CameraProduct => p.category === "camera").every((c) => c.expectedBitrateMbps == null)).toBe(true);
+  it("stores no prices and no design bitrates (those are Get Secure's)", () => {
+    expect(JSON.stringify(REFERENCE_CATALOGUE)).not.toMatch(/costExGst|costIncGst|"price"|designBitrate|expectedBitrate/);
+    expect(products.filter((p): p is CameraProduct => p.category === "camera").some((c) => c.maxBitrateMbps != null)).toBe(true);
   });
   it("has surveillance drives from more than one manufacturer at 2-12 TB", () => {
     const hdds = products.filter((p) => p.category === "hdd") as Extract<Product, { category: "hdd" }>[];
@@ -169,7 +200,7 @@ describe("the reference catalogue", () => {
 });
 
 describe("Scenario A: 4-camera VIGI good/value residential system", () => {
-  const p = run(house({ requestedTier: "good" }));
+  const p = run(house({ requestedTier: "good" }), designed());
   it("selects real VIGI cameras, a 4-channel VIGI recorder and a surveillance drive", () => {
     expect(p.recommendedTier).toBe("good");
     expect(p.cameras).toHaveLength(4);
@@ -181,19 +212,29 @@ describe("Scenario A: 4-camera VIGI good/value residential system", () => {
   });
   it("runs every recorder check separately", () => {
     const e = p.nvr.evaluated.find((x) => x.product.id === p.nvr.selected!.id)!;
-    expect(e.checks.map((c) => c.name)).toEqual(expect.arrayContaining(["channels", "bandwidth", "poe", "storage", "recording", "decoding", "features", "compatibility"]));
+    expect(e.checks.map((c) => c.name)).toEqual(expect.arrayContaining(["channels", "bandwidth", "max_bandwidth", "poe", "storage", "recording", "decoding", "features", "compatibility"]));
     expect(e.pass).toBe(true);
   });
-  it("sizes storage from the bitrate calculation, and says it used the maximum published bitrate", () => {
+  it("sizes storage from the design bitrate in the recording profile", () => {
+    expect(p.recording.profile?.key).toBe("RES_STANDARD");
+    expect(p.recording.designs.every((d) => d.designBitrateMbps != null && d.bitrateApproved)).toBe(true);
     expect(p.recording.storage.status).toBe("meets_target");
-    expect(p.recording.storage.notes.join(" ")).toMatch(/maximum published bitrate/);
-    expect(p.approvals.map((a) => a.key)).toContain("expected_bitrate");
+    expect(p.recording.storage.totalMbps).toBe(p.recording.designBandwidthMbps);
+    expect(p.recording.storage.notes.join(" ")).toMatch(/design bitrate/);
+  });
+  it("without design bitrates it still picks the system, but says an approved recording profile is required", () => {
+    const q = run(house({ requestedTier: "good" }));
+    expect(q.nvr.selected?.family).toBe("TP-Link VIGI");
+    expect(q.recording.storage.status).toBe("cannot_calculate");
+    expect(q.recording.storage.notes.join(" ")).toMatch(/approved recording profile required/);
+    expect(q.approvals.find((a) => a.key === "recording_profile")?.description).toMatch(/Approved recording profile required/);
+    expect(q.costing.unpriced.join(" ")).toMatch(/Hard drive: none selected/);
   });
   it("is honest about what is not priced yet", () => {
     expect(p.costing.complete).toBe(false);
     expect(p.costing.unpriced.join(" ")).toMatch(/no approved price/);
-    expect(p.costing.unpriced.join(" ")).toMatch(/hours and price not set/);
-    expect(p.labour.package?.name).toBe("Residential 3–4 cameras, single storey");
+    expect(p.costing.unpriced.join(" ")).toMatch(/RES_CCTV_SINGLE_4: labour hours not set/);
+    expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
   });
 });
 
@@ -208,22 +249,20 @@ describe("Scenario B: 4-camera HiLook better residential system", () => {
     expect(p.nvr.selected?.family).toBe("HiLook");
     expect(hardware(p).every((x) => REF_IDS.has(x.id))).toBe(true);
   });
-  it("on the maximum published bitrate the 40 Mbps 4-channel recorder is shown failing bandwidth, and the 8-channel is used", () => {
-    const p = run(house({ requestedTier: "better" }));
-    const four = p.nvr.evaluated.find((e) => e.product.model === "NVR-104MH-K/4P(B)")!;
-    expect(four.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: false });
-    expect(four.checks.find((c) => c.name === "channels")!.pass).toBe(true);
-    expect(p.nvr.selected?.model).toBe("NVR-108MH-K/8P(B)");
-    expect(p.approvals.map((a) => a.key)).toContain("expected_bitrate");
-  });
-  it("with Get Secure's expected bitrate entered, the 4-channel HiLook recorder passes each check on its own", () => {
-    // What Chris would enter as the planning bitrate (test value).
-    const p = run(house({ requestedTier: "better" }), realCatalogue(withSpecs((x) => x.family === "HiLook" && x.category === "camera", { expectedBitrateMbps: 6 })));
+  it("passes design bandwidth on the 4-channel recorder and warns about maximum possible bandwidth, without rejecting it", () => {
+    const p = run(house({ requestedTier: "better" }), designed());
     expect(p.nvr.selected?.model).toBe("NVR-104MH-K/4P(B)");
+    expect(check(p, "bandwidth")).toMatchObject({ pass: true });
+    expect(check(p, "bandwidth").detail).toMatch(/Design bandwidth 24\.0 Mbps, recorder accepts 40 Mbps/);
+    expect(check(p, "max_bandwidth")).toMatchObject({ pass: true, warning: true });
+    expect(check(p, "max_bandwidth").detail).toMatch(/Maximum possible configured bandwidth 64\.0 Mbps exceeds the recorder's 40 Mbps/);
+    expect(p.risks.join(" ")).toMatch(/keep the cameras at the approved recording profile/);
+    expect(p.recording.maxPossibleBandwidthMbps).toBe(64);
+  });
+  it("checks channels, bandwidth, PoE, storage, recording, decoding, features and compatibility each on its own", () => {
+    const p = run(house({ requestedTier: "better" }), designed());
     expect(check(p, "channels")).toMatchObject({ pass: true });
     expect(check(p, "channels").detail).toMatch(/4 camera\(s\), 4 channel\(s\) needed, recorder has 4/);
-    expect(check(p, "bandwidth")).toMatchObject({ pass: true });
-    expect(check(p, "bandwidth").detail).toMatch(/24\.0 Mbps from cameras, recorder accepts 40 Mbps/);
     expect(check(p, "poe")).toMatchObject({ pass: true }); // per-port limit not published; total within 50 W
     expect(check(p, "poe").detail).toMatch(/budget 50 W/);
     expect(check(p, "storage")).toMatchObject({ pass: true });
@@ -234,6 +273,16 @@ describe("Scenario B: 4-camera HiLook better residential system", () => {
     expect(check(p, "compatibility")).toMatchObject({ pass: true, unverified: false });
     expect(check(p, "compatibility").detail).toMatch(/same family/);
     expect(p.recording.storage.status).toBe("meets_target");
+  });
+  it("a product-specific design bitrate beats the family rule, which beats the resolution band", () => {
+    const cam = referenceProducts().find((x) => x.model === "IPC-T361H-MU(2.8mm)")!;
+    const rules: RecordingRule[] = [...BANDS, { id: "fam", scope: "family", family: "HiLook", designBitrateMbps: 5 }, { id: "prod", scope: "product", productId: cam.id, designBitrateMbps: 3 }];
+    const p = run(house({ requestedTier: "better" }), realCatalogue(undefined, { recordingProfiles: [designedProfile(rules)] }));
+    const byModel = new Map(p.recording.designs.map((d) => [d.model, d]));
+    expect(byModel.get("HiLook IPC-T361H-MU(2.8mm)")?.designBitrateMbps ?? 3).toBe(3);
+    const other = p.recording.designs.find((d) => d.model !== "HiLook IPC-T361H-MU(2.8mm)");
+    if (other) expect(other.designBitrateMbps).toBe(5);
+    expect(p.recording.designs.every((d) => d.bitrateSource)).toBe(true);
   });
   it("names the documented junction box for the HiLook cameras without charging it", () => {
     const p = run(house({ requestedTier: "better", mountingSurface: "brick" }));
@@ -255,19 +304,19 @@ describe("Scenario C: 4-camera Hikvision best residential system", () => {
     expect(p.nvr.selected?.family).toBe("Hikvision");
     expect(hardware(p).every((x) => REF_IDS.has(x.id))).toBe(true);
   });
-  it("on the maximum published bitrate, the 4-channel recorder's bandwidth is exceeded and that is shown, not hidden", () => {
-    const p = run(house({ requestedTier: "best" }));
-    const four = p.nvr.evaluated.find((e) => e.product.model === "DS-7604NI-M1/4P")!;
+  it("keeps the 4-channel Hikvision recorder on design bandwidth and warns about the 64 Mbps maximum", () => {
+    const p = run(house({ requestedTier: "best" }), designed());
+    expect(p.nvr.selected?.model).toBe("DS-7604NI-M1/4P");
+    const e = p.nvr.evaluated.find((x) => x.product.model === "DS-7604NI-M1/4P")!;
+    expect(e.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: true });
+    expect(e.checks.find((c) => c.name === "max_bandwidth")).toMatchObject({ pass: true, warning: true });
+  });
+  it("still rejects a recorder whose design bandwidth is exceeded", () => {
+    const heavy = designedProfile([{ id: "hk", scope: "family", family: "Hikvision", designBitrateMbps: 12 }, ...BANDS]);
+    const p = run(house({ requestedTier: "best" }), realCatalogue(undefined, { recordingProfiles: [heavy] }));
+    const four = p.nvr.evaluated.find((x) => x.product.model === "DS-7604NI-M1/4P")!;
     expect(four.checks.find((c) => c.name === "bandwidth")!.pass).toBe(false);
     expect(p.nvr.selected?.channels).toBe(8);
-    expect(p.nvr.notes.join(" ")).toMatch(/No 4-channel recorder passed/);
-  });
-  it("with Get Secure's expected bitrate entered, the 4-channel recorder passes every check", () => {
-    // What Chris would enter on the camera record as the planning bitrate (test value).
-    const cat = realCatalogue(withSpecs((x) => x.family === "Hikvision" && x.category === "camera", { expectedBitrateMbps: 6 }));
-    const p = run(house({ requestedTier: "best" }), cat);
-    expect(p.nvr.selected?.model).toBe("DS-7604NI-M1/4P");
-    expect(p.approvals.map((a) => a.key)).not.toContain("expected_bitrate");
   });
   it("is not chosen just because a camera is 8 MP", () => {
     // Only VIGI/Tiandy/TVT 8 MP alternatives would exist without Hikvision: best stays empty.
@@ -277,7 +326,7 @@ describe("Scenario C: 4-camera Hikvision best residential system", () => {
 });
 
 describe("Scenario D: 6-camera residential system", () => {
-  const p = run(house({ requestedTier: "good", cameraCount: 6, areas: [] }));
+  const p = run(house({ requestedTier: "good", cameraCount: 6, areas: [] }), designed());
   it("needs more than a 4-channel recorder, and the PoE budget decides which 8-channel", () => {
     expect(p.cameras).toHaveLength(6);
     expect(p.nvr.selected?.channels).toBeGreaterThan(4);
@@ -287,8 +336,8 @@ describe("Scenario D: 6-camera residential system", () => {
     if (lowBudget) expect(lowBudget.checks.find((c) => c.name === "poe")!.pass).toBe(false);
     expect(hardware(p).every((x) => REF_IDS.has(x.id))).toBe(true);
   });
-  it("uses the 5–6 camera package", () => {
-    expect(p.labour.package?.name).toBe("Residential 5–6 cameras, single storey");
+  it("uses the exact 6-camera package", () => {
+    expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_6");
   });
 });
 
@@ -355,7 +404,7 @@ describe("price freshness", () => {
 describe("kits", () => {
   // Test prices: the kit is cheaper than 4 cameras + the recorder bought separately.
   const priced = (kitCost: number) =>
-    realCatalogue((list) =>
+    designed((list) =>
       list.map((x) => {
         if (x.model === "VIGI C445(2.8mm)") return { ...x, offers: [offer("itplus", 90)] } as Product;
         if (x.family === "TP-Link VIGI" && x.category === "camera") return { ...x, offers: [offer("itplus", 150)] } as Product;
@@ -399,55 +448,149 @@ describe("junction boxes", () => {
   });
 });
 
-describe("installation packages and materials", () => {
-  it("leaves labour unpriced until hours or a package price are entered", () => {
-    const p = run(house({ requestedTier: "good" }));
+describe("installation packages (exact camera counts) and materials", () => {
+  it("matches only the exact package: 4 cameras single storey is RES_CCTV_SINGLE_4", () => {
+    const p = run(house({ requestedTier: "good" }), designed());
+    expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
+    expect(p.labour.customInstallation).toBe(false);
+  });
+  it("never maps 3, 5 or 7 cameras to a range: it is a custom installation", () => {
+    for (const n of [3, 5, 7]) {
+      const p = run(house({ requestedTier: "good", cameraCount: n, areas: [] }), designed());
+      expect(p.labour.package, `${n} cameras`).toBeNull();
+      expect(p.labour.customInstallation).toBe(true);
+      expect(p.approvals.map((a) => a.key)).toContain("custom_installation");
+      expect(p.costing.unpriced.join(" ")).toMatch(new RegExp(`Custom installation for ${n} camera`));
+      expect(p.costing.complete).toBe(false);
+    }
+  });
+  it("leaves installation unpriced, listing each missing input, until Get Secure enters them", () => {
+    const p = run(house({ requestedTier: "good" }), designed());
     expect(p.labour.basis).toBeNull();
-    expect(p.costing.lines.some((l) => l.kind === "labour")).toBe(false);
+    expect(p.labour.missing).toEqual([
+      "RES_CCTV_SINGLE_4: labour hours not set",
+      "RES_CCTV_SINGLE_4: standard material cost not set",
+      "RES_CCTV_SINGLE_4: installation complexity allowance not set (enter 0 if none)",
+      "RES_CCTV_SINGLE_4: customer sell allowance not set",
+    ]);
   });
-  it("uses entered hours x the $95 residential rate when no package price is set", () => {
-    const pkgs = seededPackages().map((k) => (k.id === "pkg-3-4-1" ? { ...k, estimatedHours: 6 } : k));
-    const p = run(house({ requestedTier: "good" }), realCatalogue(undefined, { packages: pkgs }));
-    expect(p.labour.basis).toBe("hours_x_rate");
-    expect(p.labour.allowanceExGst).toBe(6 * 95);
-    expect(p.approvals.map((a) => a.key)).toContain("labour_basis");
+  it("prices labour cost at hours x $95 and charges the package sell allowance", () => {
+    const p = run(house({ requestedTier: "good" }), designed(undefined, { packages: filled("RES_CCTV_SINGLE_4")(seededPackages()) }));
+    expect(p.labour.missing).toEqual([]);
+    expect(p.labour.labourCostExGst).toBe(6 * 95);
+    const inst = p.costing.lines.find((l) => l.key === "installation")!;
+    expect(inst).toMatchObject({ unitCostExGst: 570, unitSellExGst: 790, priced: true });
+    expect(p.costing.lines.find((l) => l.key === "standard_materials")).toMatchObject({ unitCostExGst: 80, internalOnly: true });
   });
-  it("uses the package price when one is set", () => {
-    const pkgs = seededPackages().map((k) => (k.id === "pkg-3-4-1" ? { ...k, estimatedHours: 6, allowanceExGst: 690 } : k));
-    const p = run(house({ requestedTier: "good" }), realCatalogue(undefined, { packages: pkgs }));
-    expect(p.labour.basis).toBe("package_price");
-    expect(p.costing.lines.find((l) => l.kind === "labour")?.unitSellExGst).toBe(690);
-  });
-  it("double storey: uses the double-storey package, considers conduit, keeps the cable-route assumption, no automatic site visit", () => {
-    const p = run(house({ requestedTier: "good", storeys: 2 }));
-    expect(p.labour.package?.name).toBe("Residential 3–4 cameras, double storey");
+  it("double storey: uses the exact double-storey package, needs its conduit allowance, keeps the cable-route assumption, no automatic site visit", () => {
+    const p = run(house({ requestedTier: "good", storeys: 2 }), designed());
+    expect(p.labour.package?.key).toBe("RES_CCTV_DOUBLE_4");
     expect(p.installation.conduitRequired).toBe(true);
-    expect(p.costing.unpriced).toContain("Conduit allowance not set");
+    expect(p.labour.missing).toContain("RES_CCTV_DOUBLE_4: conduit allowance not set");
     expect(p.assumptions.join(" ")).toMatch(/cable-route assumption/);
     expect(p.siteVisit.required).toBe(false);
   });
-  it("shows the customer one materials line and keeps its contents and cost internal", () => {
-    const mat = { ...MATERIALS, costExGst: 60, sellExGst: 150, status: "getsecure_approved" as const };
-    const cat = realCatalogue(
+  it("shows the customer one installation line that includes cabling and standard materials, and keeps the costs internal", () => {
+    const cat = designed(
       (list) => list.map((x) => (x.family === "TP-Link VIGI" || x.category === "hdd" ? ({ ...x, offers: [offer("itplus", 100)] } as Product) : x)),
-      { materialsPackages: [mat] },
+      { packages: filled("RES_CCTV_SINGLE_4")(seededPackages()) },
     );
     const p = run(house({ requestedTier: "good" }), cat);
-    const line = p.costing.lines.find((l) => l.key === "standard_materials")!;
-    expect(line.customerDescription).toBe("Cabling and standard installation materials");
-    expect(line.detail?.join(" ")).toMatch(/Cat6/);
+    expect(p.costing.lines.find((l) => l.key === "standard_materials")!.detail?.join(" ")).toMatch(/Cat6/);
     const q = composeQuote(p, { customerName: "Test", gstPct: 15 });
     const text = JSON.stringify(q);
-    expect(text).toMatch(/Cabling and standard installation materials/);
-    expect(text).not.toMatch(/Cat6|IT Plus|costExGst|unitCost|margin/i);
+    expect(q.lineItems.map((l) => l.description)).toContain("Installation, commissioning, cabling and standard installation materials");
+    expect(text).not.toMatch(/Cat6|IT Plus|internal|costExGst|unitCost|margin|complexity|conduit allowance/i);
   });
 });
 
 describe("hard drives", () => {
   it("chooses capacity from the storage calculation, not the camera count", () => {
-    const week = run(house({ requestedTier: "good", retentionDays: 7 }));
-    const month = run(house({ requestedTier: "good", retentionDays: 30 }));
+    const week = run(house({ requestedTier: "good", retentionDays: 7 }), designed());
+    const month = run(house({ requestedTier: "good", retentionDays: 30 }), designed());
     expect(week.cameras.length).toBe(month.cameras.length);
     expect(week.recording.storage.drives!.product.capacityTb).toBeLessThan(month.recording.storage.drives!.product.capacityTb);
   });
+});
+
+describe("first genuinely priced 4-camera residential quote (all inputs are TEST VALUES)", () => {
+  // Trade costs for every product a VIGI system could use, current and approved.
+  const tradePrices = (list: Product[]) =>
+    list.map((x) => {
+      if (x.family === "TP-Link VIGI" && x.category === "camera") return { ...x, offers: [offer("itplus", 120, { stock: "In stock" }), offer("clear", 110, { stock: "2" })] } as Product;
+      if (x.family === "TP-Link VIGI" && x.category === "nvr") return { ...x, offers: [offer("itplus", 210, { stock: "In stock" })] } as Product;
+      if (x.category === "hdd") return { ...x, offers: [offer("itplus", 60 + 25 * (x as { capacityTb: number }).capacityTb)] } as Product;
+      if (x.category === "junction_box") return { ...x, offers: [offer("itplus", 18)] } as Product;
+      return x;
+    });
+  const complete = (over: Partial<Catalogue> = {}) => designed(tradePrices, { packages: filled("RES_CCTV_SINGLE_4")(seededPackages()), ...over });
+  const p = run(house({ requestedTier: "good", mountingSurface: "brick" }), complete());
+
+  it("selects the real camera, recorder and calculated drive, with accessories and network", () => {
+    expect(p.cameras.every((c) => c.product?.family === "TP-Link VIGI")).toBe(true);
+    expect(p.nvr.selected?.family).toBe("TP-Link VIGI");
+    expect(p.recording.storage.status).toBe("meets_target");
+    expect(p.recording.storage.drives).toBeTruthy();
+    expect(p.installation.accessories?.length).toBeGreaterThan(0);
+    expect(p.network.method).toBe("direct_lan");
+    expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
+  });
+  it("is fully priced from current supplier costs, using the preferred supplier, not the cheapest", () => {
+    expect(p.costing.complete).toBe(true);
+    expect(p.costing.unpriced).toEqual([]);
+    const cam = p.costing.lines.find((l) => l.key.startsWith("camera:"))!;
+    expect(cam).toMatchObject({ supplier: "IT Plus", unitCostExGst: 120, freshness: "current", stock: "In stock" });
+    expect(cam.alternatives?.map((a) => a.supplier)).toEqual(["Clear Digital"]);
+    expect(p.costing.refreshRequired).toEqual([]);
+  });
+  it("shows the junction box's real supplier cost but does not charge it without Chris", () => {
+    const jb = p.installation.materials.find((m) => m.key.startsWith("junction_box"))!;
+    expect(jb.reason).toMatch(/Supplier cost \$18 ex GST each \(IT Plus\)/);
+    expect(jb.charged).toBe(false);
+    expect(p.costing.lines.some((l) => l.key.startsWith("junction_box"))).toBe(false);
+  });
+  it("proposes a sell price with a provisional markup, and works out gross profit and margin", () => {
+    const c = p.costing;
+    expect(c.markupSource).toBe("suggested");
+    expect(c.markupLogic).toMatch(/Provisional suggested markup 25%/);
+    const hardwareCost = c.lines.filter((l) => l.kind === "hardware" && l.priced).reduce((s, l) => s + l.unitCostExGst! * l.quantity, 0);
+    expect(c.equipmentCost).toBeCloseTo(hardwareCost, 2);
+    expect(c.labourCost).toBe(570);
+    expect(c.materialsCost).toBe(80);
+    expect(c.allowancesCost).toBe(0);
+    const hardwareSell = c.lines.filter((l) => l.kind === "hardware" && l.priced).reduce((s, l) => s + l.unitSellExGst! * l.quantity, 0);
+    expect(c.sellExGst).toBeCloseTo(hardwareSell + 790, 2);
+    expect(c.gst).toBeCloseTo(c.sellExGst * 0.15, 2);
+    expect(c.grossProfit).toBeCloseTo(c.sellExGst - c.equipmentCost - 570 - 80, 2);
+    expect(c.grossMarginPct).toBeCloseTo((c.grossProfit / c.sellExGst) * 100, 1);
+  });
+  it("lets Chris override the markup", () => {
+    const q = assessCctv(house({ requestedTier: "good" }), complete(), DEFAULT_POLICIES, { now: NOW, markupOverride: 20 });
+    expect(q.costing.markupPct).toBe(20);
+    expect(q.costing.markupSource).toBe("override");
+  });
+  it("produces a customer quote and email draft with no cost, supplier or margin, both needing Chris", () => {
+    const quote = composeQuote(p, { customerName: "Dave Lincoln", gstPct: 15 });
+    const email = composeEmail(p, { firstName: "Dave", subject: "CCTV quote", address: "12 Test Street", areas: house().areas });
+    expect(quote.complete).toBe(true);
+    expect(quote.lineItems.length).toBeGreaterThan(2);
+    const text = JSON.stringify(quote) + email.body;
+    const hit = text.match(/.{0,60}(IT Plus|Clear Digital|cost price|supplier cost|trade|unit cost|margin|markup|\binternal\b).{0,60}/i);
+    expect(hit?.[0] ?? null).toBeNull();
+    expect(p.approvals.map((a) => a.key)).toEqual(expect.arrayContaining(["customer_email", "quote"]));
+  });
+  const missing: [string, () => Catalogue, RegExp][] = [
+    ["a camera price", () => designed((l) => tradePrices(l).map((x) => (x.family === "TP-Link VIGI" && x.category === "camera" ? ({ ...x, offers: [] } as Product) : x)), { packages: filled("RES_CCTV_SINGLE_4")(seededPackages()) }), /no approved price/],
+    ["the design bitrate", () => complete({ recordingProfiles: [profile()] }), /Hard drive: none selected/],
+    ["the labour hours", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { estimatedHours: null })(seededPackages()) }), /labour hours not set/],
+    ["the material cost", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { materialCostExGst: null })(seededPackages()) }), /standard material cost not set/],
+    ["the sell allowance", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { allowanceExGst: null })(seededPackages()) }), /customer sell allowance not set/],
+  ];
+  for (const [what, cat, msg] of missing) {
+    it(`is Not fully priced, and says why, without ${what}`, () => {
+      const q = run(house({ requestedTier: "good" }), cat());
+      expect(q.costing.complete).toBe(false);
+      expect(q.costing.unpriced.join(" ")).toMatch(msg);
+    });
+  }
 });

@@ -1,10 +1,12 @@
 /**
- * Installation: materials derived from the site conditions, and labour from the matching
- * installation package.
+ * Installation: materials derived from the site conditions, and labour from the installation
+ * package for the exact camera count and storey type (RES_CCTV_SINGLE_4 …). Any other count is a
+ * custom installation: it is never mapped to the nearest package.
  *
- * Residential quotes carry the standard materials package as one line ("Cabling and standard
- * installation materials") instead of listing every fixing; approvers still see its contents and
- * cost. Items beyond it are added only when a condition calls for them. The exact compatible
+ * The package carries Get Secure's expected hours, internal labour rate, standard-material cost,
+ * conduit and complexity allowances (internal costs) and the customer sell allowance. The customer
+ * sees one installation line that includes cabling and standard installation materials; approvers
+ * see each cost. Items beyond it are added only when a condition calls for them. The exact compatible
  * junction box is identified from documented links and recommended, never charged, until Chris
  * confirms it (v1). A 4G router is an option for the customer, not a line in the base quote.
  */
@@ -83,22 +85,20 @@ export function installationPlan(input: {
   const commercial = enquiry.propertyType === "commercial";
   const marketOk = (p: Product) => (commercial ? p.commercialAllowed : p.residentialAllowed);
 
-  // Standard materials package (residential): one customer line, contents and cost internal.
+  // Standard materials (residential): part of the installation package; contents shown internally.
   const mp = commercial ? null : materialsPackageFor(pkg, input.materialsPackages ?? [], true);
   if (!commercial) {
-    const set = mp?.sellExGst != null;
+    const cost = pkg?.materialCostExGst ?? null;
     materials.push({
       key: "standard_materials",
       description: mp?.customerDescription ?? "Cabling and standard installation materials",
       quantity: 1,
       product: null,
-      charged: set,
-      approvalRequired: !set || !TRUSTED_STATUSES.includes(mp!.status),
-      reason: !mp
-        ? "No standard materials package (Settings → Business Brain)."
-        : set
-          ? `${mp.name}: ${mp.items.map((i) => i.description).join(", ")}.`
-          : `${mp.name}: value not set (Settings → Business Brain).`,
+      charged: false,
+      approvalRequired: !pkg || cost == null,
+      reason: `${mp ? `${mp.name}: ${mp.items.map((i) => i.description).join(", ")}. ` : ""}${
+        pkg ? (cost != null ? `Included in ${pkg.key ?? pkg.name}; internal cost $${cost}.` : `Included in ${pkg.key ?? pkg.name}; material cost not set.`) : "No installation package for this job."
+      }`,
     });
   }
 
@@ -137,7 +137,9 @@ export function installationPlan(input: {
         product: e.product,
         charged: false,
         approvalRequired: true,
-        reason: `${junctionBoxReason} ${e.product ? `Compatible with ${[...new Set(e.cams)].join(", ")} (documented).` : "No documented junction box for this camera."} Chris to confirm before it is charged.`,
+        reason: `${junctionBoxReason} ${e.product ? `Compatible with ${[...new Set(e.cams)].join(", ")} (documented).` : "No documented junction box for this camera."}${
+        e.product?.price ? ` Supplier cost $${e.product.price.costExGst} ex GST each (${e.product.price.supplier}${e.product.price.approved ? "" : ", not approved"}).` : e.product ? " No supplier price yet." : ""
+      } Chris to confirm whether to include and charge it.`,
       });
     }
   }
@@ -147,19 +149,18 @@ export function installationPlan(input: {
   const conduitRequired = doubleStorey && policies.doubleStoreyConduit.value;
   if (conduitRequired) {
     const allowance = pkg?.conduitIncluded ? (pkg.conduitAllowanceExGst ?? null) : null;
-    const conduit = allowance == null ? pickProduct(products, of("conduit"), marketOk) : null;
     materials.push({
       key: "conduit",
       description: "Conduit for exposed upper-storey cable runs",
       quantity: 1,
-      product: conduit,
-      charged: allowance != null || !!conduit?.price?.approved,
-      approvalRequired: allowance == null && !conduit?.price?.approved,
+      product: null,
+      charged: false,
+      approvalRequired: allowance == null,
       allowanceExGst: allowance,
       reason:
         allowance != null
-          ? `Double-storey conduit allowance from "${pkg!.name}"; subject to accessible cable routes on site.`
-          : `Double-storey: conduit allowance considered, value not set${pkg ? ` on "${pkg.name}"` : ""}; subject to accessible cable routes on site.`,
+          ? `Double-storey conduit allowance (internal $${allowance}) included in ${pkg!.key ?? pkg!.name}; subject to accessible cable routes on site.`
+          : `Double-storey: conduit allowance considered, value not set${pkg ? ` on ${pkg.key ?? pkg.name}` : ""}; subject to accessible cable routes on site.`,
     });
   }
 
@@ -220,50 +221,91 @@ export function installationPlan(input: {
   return { storeys: enquiry.storeys, doubleStorey, junctionBoxRecommended, junctionBoxReason, conduitRequired, complexity, materials, accessories, materialsPackage: mp, notes };
 }
 
-/** The installation package for this job (residential only), most specific first. */
+/** Package key for an exact camera count and storey type. */
+export const packageKey = (cameraCount: number, storeys: number | null) => `RES_CCTV_${(storeys ?? 1) >= 2 ? "DOUBLE" : "SINGLE"}_${cameraCount}`;
+
+/**
+ * The installation package for this job: residential only, for exactly this camera count and
+ * storey type. No range matching: 3, 5 or 7 cameras find nothing and are a custom installation.
+ */
 export function packageFor(enquiry: EnquiryInput, cameraCount: number, packages: InstallationPackage[]): InstallationPackage | null {
   if (enquiry.propertyType === "commercial") return null;
-  const storeys = enquiry.storeys ?? 1;
+  const storeyType = (enquiry.storeys ?? 1) >= 2 ? "double" : "single";
   const matches = packages
-    .filter((p) => p.status !== "deprecated" && p.propertyType === "residential" && cameraCount >= p.minCameras && cameraCount <= p.maxCameras)
-    .filter((p) => p.storeys == null || p.storeys === Math.min(storeys, 2) || (storeys >= 2 && p.storeys >= 2))
-    .sort((a, b) => (a.storeys == null ? 1 : 0) - (b.storeys == null ? 1 : 0) || b.version - a.version || a.name.localeCompare(b.name));
+    .filter((p) => p.status !== "deprecated" && p.propertyType === "residential")
+    .filter((p) => {
+      const exact = p.cameraCount ?? (p.minCameras === p.maxCameras ? p.minCameras : null);
+      const type = p.storeyType ?? (p.storeys == null ? null : p.storeys >= 2 ? "double" : "single");
+      return exact === cameraCount && type === storeyType;
+    })
+    .sort((a, b) => Number(b.key === packageKey(cameraCount, enquiry.storeys)) - Number(a.key === packageKey(cameraCount, enquiry.storeys)) || b.version - a.version || a.name.localeCompare(b.name));
   return matches[0] ?? null;
 }
 
 /**
- * Labour: the package price when Get Secure has set one; otherwise the entered package hours x the
- * internal labour rate. With neither, labour is left unpriced rather than guessed.
+ * Labour and installation costs from the exact package. Nothing is derived: hours, material cost,
+ * allowances and the customer sell allowance are what Get Secure entered, and anything missing is
+ * listed so the quote shows as not fully priced.
  */
 export function labourPlan(input: { enquiry: EnquiryInput; cameraCount: number; packages: InstallationPackage[]; policies: Policies }): LabourResult {
   const { enquiry, cameraCount, packages, policies } = input;
   const commercial = enquiry.propertyType === "commercial";
   const policyRate = commercial ? policies.labourRateCommercial.value : policies.labourRateResidential.value;
   const notes: string[] = [];
-  const none = { package: null, estimatedHours: null, allowanceExGst: null, basis: null, internalRate: policyRate, internalReferenceExGst: null };
+  const none: LabourResult = {
+    package: null,
+    customInstallation: false,
+    estimatedHours: null,
+    allowanceExGst: null,
+    basis: null,
+    labourCostExGst: null,
+    materialCostExGst: null,
+    conduitCostExGst: null,
+    complexityCostExGst: null,
+    missing: [],
+    internalRate: policyRate,
+    internalReferenceExGst: null,
+    notes,
+  };
   if (commercial) {
-    notes.push(`Commercial labour is estimated after the site visit; internal reference rate $${policyRate}/hour.`);
-    return { ...none, notes };
+    notes.push(`Commercial labour is estimated after the site visit; internal rate $${policyRate}/hour.`);
+    return { ...none, missing: ["Commercial installation: estimated after the site visit"] };
   }
+  const doubleStorey = (enquiry.storeys ?? 1) >= 2;
   const pkg = packageFor(enquiry, cameraCount, packages);
   if (!pkg) {
-    notes.push(`No installation package for ${cameraCount} camera(s), ${enquiry.storeys ?? 1}-storey. Add one in Settings → Business Brain.`);
-    return { ...none, notes };
+    const key = packageKey(cameraCount, enquiry.storeys);
+    const exact = [2, 4, 6, 8].includes(cameraCount);
+    notes.push(
+      exact
+        ? `No ${key} installation package found. Add it in Settings → Business Brain.`
+        : `Custom installation: ${cameraCount} camera(s), ${doubleStorey ? "double" : "single"} storey has no standard package (packages are for exactly 2, 4, 6 or 8 cameras). Labour needs an explicit calculation.`,
+    );
+    return { ...none, customInstallation: !exact, missing: [exact ? `Installation package ${key} missing` : `Custom installation for ${cameraCount} camera(s): labour not calculated`] };
   }
   const rate = pkg.labourRate ?? policyRate;
-  if (!TRUSTED_STATUSES.includes(pkg.status)) notes.push(`Installation package "${pkg.name}" is ${pkg.status}: needs approval.`);
-  const reference = pkg.estimatedHours != null ? Math.round(pkg.estimatedHours * rate * 100) / 100 : null;
-  let allowance: number | null = null;
-  let basis: LabourResult["basis"] = null;
-  if (pkg.allowanceExGst != null) {
-    allowance = pkg.allowanceExGst;
-    basis = "package_price";
-  } else if (reference != null) {
-    allowance = reference;
-    basis = "hours_x_rate";
-    notes.push(`"${pkg.name}" has no package price: labour is ${pkg.estimatedHours} h x $${rate}/h.`);
-  } else {
-    notes.push(`Installation package "${pkg.name}": hours and price not set yet (Settings → Business Brain).`);
-  }
-  return { package: pkg, estimatedHours: pkg.estimatedHours, allowanceExGst: allowance, basis, internalRate: rate, internalReferenceExGst: reference, notes };
+  if (!TRUSTED_STATUSES.includes(pkg.status)) notes.push(`Installation package ${pkg.key ?? pkg.name} is ${pkg.status}: needs approval.`);
+  const missing: string[] = [];
+  const name = pkg.key ?? pkg.name;
+  if (pkg.estimatedHours == null) missing.push(`${name}: labour hours not set`);
+  if (pkg.materialCostExGst == null) missing.push(`${name}: standard material cost not set`);
+  if (doubleStorey && pkg.conduitIncluded && pkg.conduitAllowanceExGst == null) missing.push(`${name}: conduit allowance not set`);
+  if (pkg.complexityAllowanceExGst == null) missing.push(`${name}: installation complexity allowance not set (enter 0 if none)`);
+  if (pkg.allowanceExGst == null) missing.push(`${name}: customer sell allowance not set`);
+  const labourCost = pkg.estimatedHours != null ? Math.round(pkg.estimatedHours * rate * 100) / 100 : null;
+  return {
+    package: pkg,
+    customInstallation: false,
+    estimatedHours: pkg.estimatedHours,
+    allowanceExGst: pkg.allowanceExGst,
+    basis: pkg.allowanceExGst != null ? "package_price" : null,
+    labourCostExGst: labourCost,
+    materialCostExGst: pkg.materialCostExGst ?? null,
+    conduitCostExGst: doubleStorey && pkg.conduitIncluded ? (pkg.conduitAllowanceExGst ?? null) : 0,
+    complexityCostExGst: pkg.complexityAllowanceExGst ?? null,
+    missing,
+    internalRate: rate,
+    internalReferenceExGst: labourCost,
+    notes,
+  };
 }

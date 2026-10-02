@@ -65,6 +65,14 @@ export function chooseOffer(
   else if (preferred) routeNote = `${best.supplier}: not a ${familyOf(product)} route; ${preferred.supplier} has no approved price.`;
   else routeNote = best.supplierIsDefault ? `${best.supplier}: default supplier (no route for ${familyOf(product)}).` : `${best.supplier}: no route for ${familyOf(product)}.`;
   const f = priceFreshness(best.lastChecked, policies, now);
+  const alternatives = sorted.slice(1).map((o) => ({
+    supplier: o.supplier,
+    costExGst: o.costExGst!,
+    approved: o.approved,
+    freshness: priceFreshness(o.lastChecked, policies, now).freshness,
+    stock: o.stock,
+    routeRank: rankOf(o),
+  }));
   return {
     supplier: best.supplier,
     supplierSku: best.supplierSku,
@@ -76,6 +84,8 @@ export function chooseOffer(
     ageDays: f.ageDays,
     routeRank: rank,
     routeNote,
+    stock: best.stock,
+    alternatives,
   };
 }
 
