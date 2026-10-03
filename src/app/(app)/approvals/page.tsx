@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { drafts, quotes } from "@/db/schema";
+import { drafts, quoteDocuments, quotes } from "@/db/schema";
+import { documentIsCurrent } from "@/lib/proposals/workflow";
 import { requireOffice } from "@/lib/auth";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { DraftCard } from "@/components/brain/draft-card";
@@ -27,6 +28,14 @@ export default async function ApprovalsPage() {
       limit: 50,
     }),
   ]);
+  const docIds = [...new Set(openDrafts.map((d) => d.quoteDocumentId).filter(Boolean) as string[])];
+  const docs = docIds.length
+    ? await db.query.quoteDocuments.findMany({ where: inArray(quoteDocuments.id, docIds), columns: { id: true, quoteId: true, filename: true, voidedAt: true, approvalHash: true }, with: { quote: true } })
+    : [];
+  const attachment = (id: string | null) => {
+    const doc = docs.find((x) => x.id === id);
+    return doc ? { id: doc.id, filename: doc.filename, current: documentIsCurrent(doc, doc.quote) } : null;
+  };
 
   return (
     <div className="space-y-4">
@@ -75,6 +84,7 @@ export default async function ApprovalsPage() {
               reviewNote: d.reviewNote,
               lead: d.lead,
               inTitanDrafts: !!d.mailboxDraftMessageId,
+              attachment: attachment(d.quoteDocumentId),
             }}
           />
         ))}

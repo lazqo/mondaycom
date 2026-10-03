@@ -21,6 +21,7 @@ import {
 import { Badge, Button, Card, CardHeader, Field, FormError, Input, Select, Textarea } from "@/components/ui";
 import { COMPATIBILITY_KINDS, KNOWLEDGE_STATUSES, KNOWLEDGE_STATUS_LABELS, TIERS, type KnowledgeStatus, type PriceFreshness } from "@/lib/brain/types";
 import { cn } from "@/lib/utils";
+import { ProductProposalContent, type ProductQuoteContent } from "./product-proposal-content";
 import { KitSettings, type KitProductOption, type KitView } from "./kit-settings";
 import { SupplierPricing, type ConnectorView } from "./supplier-pricing";
 
@@ -205,6 +206,7 @@ export type ProductRowView = {
   source: string | null;
   sourceUrl: string | null;
   notes: string | null;
+  quote: ProductQuoteContent;
   offers: OfferRow[];
   links: LinkRow[];
 };
@@ -464,6 +466,7 @@ function ProductRowItem({ p, canApprove, suppliers, allProducts }: { p: ProductR
       {open ? (
         <div className="bg-gray-50">
           <ProductForm product={p} canApprove={canApprove} />
+          <ProductProposalContent productId={p.id} content={p.quote} canApprove={canApprove} />
           <div className="space-y-2 border-t border-gray-200 px-4 py-3">
             <p className="text-xs font-semibold text-gray-700">Supplier listings</p>
             {p.offers.map((o) => (

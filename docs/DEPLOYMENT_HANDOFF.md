@@ -154,13 +154,15 @@ docker compose -f docker-compose.prod.yml exec db psql -U getsecure -d getsecure
 
 ## 6. Where uploaded photos and email attachments are stored
 
-**In the PostgreSQL database**, as binary columns (`job_photos.content`, `email_attachments.content`).
+**In the PostgreSQL database**, as binary columns (`job_photos.content`, `email_attachments.content`,
+and for proposals `catalogue_images.content` and `quote_documents.content`).
 There is no S3 bucket, no separate file directory and no public file URL anywhere in the system.
 
 This matters in three ways:
 
-- **Access.** A file is only ever served through `/api/photos/…` or `/api/attachments/…`, which check
-  your login session first. A signed-out request gets a 401, and there is no URL that shows a photo
+- **Access.** A file is only ever served through `/api/photos/…`, `/api/attachments/…`,
+  `/api/catalogue-images/…`, `/api/quotes/…/proposal` or `/api/quote-documents/…`, which check your
+  login session first (proposal PDFs: office staff only). A signed-out request gets a 401, and there is no URL that shows a photo
   to someone without an account. Email attachments are sent with `Cache-Control: private, no-store`.
   Job photos use `private, max-age=3600` so a technician's phone does not re-download the same photo
   all day; that means a browser that already fetched a photo may still show it for up to an hour
@@ -731,6 +733,94 @@ Products for the first real 4-camera VIGI system at IT Plus: **VIGI InSight S455
 stocks the InSight S range, not the C340/C350/C445/C455 in the catalogue), **VIGI NVR1004H-4P**, a
 **WD Purple** drive (choose `-SUP` or `-Inst`) and the **VJB-240** junction box (documented for the
 S455; recommended on brick/concrete and not charged until Chris confirms it).
+
+---
+
+## 16. Branded PDF proposals
+
+When Chris approves a Business Brain quote, the CRM makes a branded Get Secure PDF from exactly what he
+approved, stores it, and attaches it to the prepared email for that lead. **Nothing is sent.** The
+email still needs Chris's approval and his Send, as before.
+
+```
+Business Brain prepares the quote → Chris reviews → Chris approves the quote
+  → the CRM makes the PDF from the approved quote (stored; nothing sent)
+  → the prepared customer email carries the PDF
+  → Chris approves the email, then sends it (separately)
+```
+
+**What is on it** (A4, normally 2 pages for a residential quote):
+- **Header and cover:** the Get Secure logo (from getsecure.co.nz), the forest green / sage / beige
+  palette and the website's typefaces (Outfit and Inter).
+- **Customer details:** name, site address, quote number, date, and the validity date if one is set.
+- **Recommendation:** a short summary built from the approved lines (camera count, areas covered,
+  recorder, storage), with the total investment.
+- **"Your system":** a card for each main product (cameras, recorder, drive). Each card has the photo,
+  customer name, model in small text, quantity, one-line description and 2–4 highlights. Small
+  accessories such as junction boxes are listed but get no card.
+- **Installation:** the installation line and what it includes.
+- **Investment summary:** every approved line with its quantity, then subtotal ex GST, GST and total
+  inc GST. There are no per-line prices.
+- **"Good to know":** the quote's assumptions, exclusions and notes, plus "Recording duration depends
+  on camera settings, recording configuration and scene activity." There is no number of days.
+- **Closing:** warranty and support, next steps, and contact details in the footer of every page.
+
+**Never on it:**
+- supplier, supplier SKU or trade cost;
+- markup, gross profit or margin;
+- labour hours or rate;
+- complexity or other internal allowances.
+
+The PDF's data is built from the quote's customer lines and each product's customer content only, and
+the tests check that none of these fields appear.
+
+**Validity and invalidation.** A PDF is tied to the quote's approval fingerprint. If the quote is
+repriced, edited, sent back for review or superseded:
+- The PDF is voided and can no longer be downloaded as current.
+- An approved email carrying it goes back to Ready for review.
+- That email cannot be approved or sent until the quote is approved again.
+
+Re-approving makes a new PDF from the new snapshot and moves the email onto it.
+
+**Where to find it:**
+- **The quote page:** the "Customer proposal (PDF)" panel lets you view or download it, remake it,
+  preview the quote as a PDF before approval (marked DRAFT, not stored), and attach it to or remove it
+  from the prepared emails. It also lists product wording still to check.
+- **Approvals:** each email shows its attachment and whether it is still valid.
+
+**Product content** (Settings → Business Brain → Products → open a product → *Proposal content*):
+- **Fields:** name on proposals, short description, up to 4 highlights, optional feature notes,
+  whether the product gets a card (default: by category), and the photo.
+- **Separate from specs:** this content is kept apart from the technical data and reused by every
+  quote.
+- **Photos:** stored once in the database, converted to print-ready JPEG/PNG of at most 800 px. You
+  can upload a file, or paste the manufacturer's image address and press *Fetch once*. A PDF never
+  fetches anything. A product without a photo simply prints without one.
+
+**Starter content for the VIGI kit.** These products are filled in once, into empty fields only:
+- VIGI InSight S455 (2.8 mm and 4 mm)
+- VIGI NVR1004H-4P, NVR1008H-8MP and NVR1008H-8P
+- VJB-240 junction box
+- WD Purple 2/4/6/8 TB
+
+The wording comes only from each product's verified specifications. The photos are the
+manufacturers' own, from vigi.com and westerndigital.com; for the S455, it's the photo VIGI shows on
+its InSight S455 page. All of it is marked **provisional** until Chris reviews it and sets the wording
+status to Get Secure approved. Anything Chris enters is never overwritten.
+
+**Company details and standard wording** (Settings → Proposals):
+- **Contact details:** company name, phone, email, website, address and GST number. Defaults: Get
+  Secure Limited, 09 977 9990, info@getsecure.co.nz, getsecure.co.nz.
+- **Validity:** proposal validity in days. Blank (the default) prints no validity date.
+- **Wording:** what installation includes, warranty and support, and next steps. The default warranty
+  wording follows Get Secure's published warranty page: manufacturer's warranty (TP-Link VIGI 2
+  years), claims handled locally, installation labour 12 months.
+
+Saving changes affects new PDFs only.
+
+**Later services.** Alarms, access control and intercom can use the same framework. The data is
+service-neutral (product cards, line items, note sections), and the card categories already include
+alarm panels, keypads, intercoms and access controllers.
 
 ---
 

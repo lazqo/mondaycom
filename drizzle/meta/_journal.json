@@ -106,6 +106,13 @@
       "when": 1791059771883,
       "tag": "0014_cctv_kits",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791064853994,
+      "tag": "0015_proposal_pdf",
+      "breakpoints": true
     }
   ]
 }

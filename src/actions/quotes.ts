@@ -7,6 +7,7 @@ import { quotes } from "@/db/schema";
 import { computeTotals } from "@/lib/quotes";
 import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { generateProposal } from "@/lib/proposals/workflow";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
 import { humanFromUser } from "@/lib/guard/actor";
@@ -90,15 +91,26 @@ export async function setQuoteStatus(id: string, status: string): Promise<Action
   }
 }
 
-/** Chris approves a prepared quote exactly as it stands. */
-export async function approveQuoteAction(id: string): Promise<ActionResult<undefined>> {
+/**
+ * Chris approves a prepared quote exactly as it stands; the branded proposal PDF is then made from
+ * it and attached to the prepared email. Nothing is sent. If the PDF cannot be made, the approval
+ * still stands and the reason is returned so it can be made again from the quote page.
+ */
+export async function approveQuoteAction(id: string): Promise<ActionResult<{ proposalError: string | null }>> {
   const user = await requireUser();
   try {
-    await approveQuote(id, humanFromUser(user));
+    const actor = humanFromUser(user);
+    await approveQuote(id, actor);
+    let proposalError: string | null = null;
+    try {
+      await generateProposal(id, actor);
+    } catch (err) {
+      proposalError = err instanceof Error ? err.message : String(err);
+    }
     revalidatePath(`/quotes/${id}`);
     revalidatePath("/quotes");
     revalidatePath("/approvals");
-    return ok(undefined);
+    return ok({ proposalError });
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));
   }

@@ -12,7 +12,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // Node-only libraries used by email ingestion; keep them out of the webpack bundles.
-  serverExternalPackages: ["imapflow", "mailparser", "nodemailer"],
+  serverExternalPackages: ["imapflow", "mailparser", "nodemailer", "@react-pdf/renderer", "sharp"],
+  // Product photo uploads for proposals (images up to 8 MB).
+  experimental: { serverActions: { bodySizeLimit: "10mb" } },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

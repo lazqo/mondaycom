@@ -603,6 +603,8 @@ export async function repriceQuote(quoteId: string, actor: Actor, opts: { markup
     .where(eq(quotes.id, quoteId));
   const { logActivity } = await import("@/lib/activity");
   await logActivity({ entity: "quote", entityId: quoteId, actorId: actorId(actor), action: "repriced", detail: { from: q.status, assessmentId: run.id } });
+  const { voidProposals } = await import("@/lib/proposals/void");
+  await voidProposals(quoteId, "quote repriced", actorId(actor));
   return { changed: before !== JSON.stringify(draft.lineItems), complete: run.packet.costing.complete };
 }
 

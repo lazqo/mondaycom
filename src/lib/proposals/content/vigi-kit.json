@@ -1,0 +1,175 @@
+{
+ "version": 1,
+ "about": "Customer-facing proposal content for the products in the first approved VIGI kit. Wording is drafted only from each product's verified catalogue specification (manufacturer pages and datasheets) and is marked provisional for Chris to review. Images are the manufacturers' own product photos (vigi.com, westerndigital.com), stored once in the CRM; the S455 photo is the one VIGI shows on the InSight S455 page. Applied once: anything already entered in the CRM is never overwritten.",
+ "products": [
+  {
+   "manufacturer": "TP-Link",
+   "model": "VIGI InSight S455(2.8mm)",
+   "quoteDisplayName": "VIGI 5MP Full-Colour Turret Camera",
+   "quoteDescription": "Outdoor 5MP camera with full-colour night vision and smart person and vehicle detection.",
+   "quoteHighlights": [
+    "5MP image quality",
+    "Full-colour night vision (up to 30 m)",
+    "Person and vehicle detection",
+    "Built-in microphone and speaker"
+   ],
+   "quoteFeatureNotes": "Weatherproof (IP67), with a flashing light and audible warning to deter intruders.",
+   "image": "vigi-insight-s455.jpg",
+   "imageSourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/insight-s455/"
+  },
+  {
+   "manufacturer": "TP-Link",
+   "model": "VIGI InSight S455(4mm)",
+   "quoteDisplayName": "VIGI 5MP Full-Colour Turret Camera",
+   "quoteDescription": "Outdoor 5MP camera with full-colour night vision and smart person and vehicle detection.",
+   "quoteHighlights": [
+    "5MP image quality",
+    "Full-colour night vision (up to 30 m)",
+    "Person and vehicle detection",
+    "Built-in microphone and speaker"
+   ],
+   "quoteFeatureNotes": "Weatherproof (IP67), with a flashing light and audible warning to deter intruders.",
+   "image": "vigi-insight-s455.jpg",
+   "imageSourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/insight-s455/"
+  },
+  {
+   "manufacturer": "TP-Link",
+   "model": "VIGI NVR1004H-4P",
+   "quoteDisplayName": "VIGI 4-Channel PoE+ Recorder",
+   "quoteDescription": "Records your cameras around the clock and powers each one through a single network cable.",
+   "quoteHighlights": [
+    "Connects up to 4 cameras",
+    "Powers cameras over the network cable (PoE+)",
+    "Live and recorded footage in the VIGI app",
+    "4K HDMI output for a TV or monitor"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "vigi-nvr1004h-4p.jpg",
+   "imageSourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1004h-4p/v1%20(no%20hdd)/"
+  },
+  {
+   "manufacturer": "TP-Link",
+   "model": "VIGI NVR1008H-8MP",
+   "quoteDisplayName": "VIGI 8-Channel PoE+ Recorder",
+   "quoteDescription": "Records your cameras around the clock and powers each one through a single network cable.",
+   "quoteHighlights": [
+    "Connects up to 8 cameras",
+    "Powers cameras over the network cable (PoE+)",
+    "Live and recorded footage in the VIGI app",
+    "4K HDMI output for a TV or monitor"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "vigi-nvr1008h-8mp.jpg",
+   "imageSourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1008h-8mp/"
+  },
+  {
+   "manufacturer": "TP-Link",
+   "model": "VIGI NVR1008H-8P",
+   "quoteDisplayName": "VIGI 8-Channel PoE+ Recorder",
+   "quoteDescription": "Records your cameras around the clock and powers each one through a single network cable.",
+   "quoteHighlights": [
+    "Connects up to 8 cameras",
+    "Powers cameras over the network cable (PoE+)",
+    "Live and recorded footage in the VIGI app",
+    "4K HDMI output for a TV or monitor"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "vigi-nvr1008h-8p.jpg",
+   "imageSourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nvr1008h-8p/"
+  },
+  {
+   "manufacturer": "TP-Link",
+   "model": "VJB-240",
+   "quoteDisplayName": "VIGI Camera Junction Box",
+   "quoteDescription": "Mounting base that neatly houses the cable connections behind the camera.",
+   "quoteHighlights": [],
+   "quoteFeatureNotes": null,
+   "image": "vigi-vjb-240.jpg",
+   "imageSourceUrl": "https://www.vigi.com/au/business-networking/vigi-accessory/vjb-240/"
+  },
+  {
+   "manufacturer": "Western Digital",
+   "model": "WD22PURZ",
+   "quoteDisplayName": "WD Purple 2 TB Surveillance Hard Drive",
+   "quoteDescription": "Hard drive designed for 24/7 security recording, fitted inside the recorder.",
+   "quoteHighlights": [
+    "2 TB of recording storage",
+    "Built for 24/7 surveillance recording",
+    "3-year manufacturer warranty"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "wd-purple-2tb.png",
+   "imageSourceUrl": "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd?sku=WD22PURZ"
+  },
+  {
+   "manufacturer": "Western Digital",
+   "model": "WD23PURZ",
+   "quoteDisplayName": "WD Purple 2 TB Surveillance Hard Drive",
+   "quoteDescription": "Hard drive designed for 24/7 security recording, fitted inside the recorder.",
+   "quoteHighlights": [
+    "2 TB of recording storage",
+    "Built for 24/7 surveillance recording",
+    "3-year manufacturer warranty"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "wd-purple-2tb.png",
+   "imageSourceUrl": "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd?sku=WD23PURZ"
+  },
+  {
+   "manufacturer": "Western Digital",
+   "model": "WD43PURZ",
+   "quoteDisplayName": "WD Purple 4 TB Surveillance Hard Drive",
+   "quoteDescription": "Hard drive designed for 24/7 security recording, fitted inside the recorder.",
+   "quoteHighlights": [
+    "4 TB of recording storage",
+    "Built for 24/7 surveillance recording",
+    "3-year manufacturer warranty"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "wd-purple-4tb.png",
+   "imageSourceUrl": "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd?sku=WD43PURZ"
+  },
+  {
+   "manufacturer": "Western Digital",
+   "model": "WD44PURZ",
+   "quoteDisplayName": "WD Purple 4 TB Surveillance Hard Drive",
+   "quoteDescription": "Hard drive designed for 24/7 security recording, fitted inside the recorder.",
+   "quoteHighlights": [
+    "4 TB of recording storage",
+    "Built for 24/7 surveillance recording",
+    "3-year manufacturer warranty"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "wd-purple-4tb.png",
+   "imageSourceUrl": "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd?sku=WD44PURZ"
+  },
+  {
+   "manufacturer": "Western Digital",
+   "model": "WD64PURZ",
+   "quoteDisplayName": "WD Purple 6 TB Surveillance Hard Drive",
+   "quoteDescription": "Hard drive designed for 24/7 security recording, fitted inside the recorder.",
+   "quoteHighlights": [
+    "6 TB of recording storage",
+    "Built for 24/7 surveillance recording",
+    "3-year manufacturer warranty"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "wd-purple-6tb.png",
+   "imageSourceUrl": "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd?sku=WD64PURZ"
+  },
+  {
+   "manufacturer": "Western Digital",
+   "model": "WD85PURZ",
+   "quoteDisplayName": "WD Purple 8 TB Surveillance Hard Drive",
+   "quoteDescription": "Hard drive designed for 24/7 security recording, fitted inside the recorder.",
+   "quoteHighlights": [
+    "8 TB of recording storage",
+    "Built for 24/7 surveillance recording",
+    "3-year manufacturer warranty"
+   ],
+   "quoteFeatureNotes": null,
+   "image": "wd-purple-8tb.png",
+   "imageSourceUrl": "https://www.westerndigital.com/products/internal-drives/wd-purple-sata-hdd?sku=WD85PURZ"
+  }
+ ]
+}

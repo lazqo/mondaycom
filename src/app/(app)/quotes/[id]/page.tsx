@@ -9,6 +9,8 @@ import { QuoteEditor } from "@/components/quotes/quote-editor";
 import { QuoteStatusActions } from "@/components/quotes/quote-status-actions";
 import { ActivityFeed } from "@/components/activity-feed";
 import { QuoteApprovalPanel } from "@/components/quotes/quote-approval-panel";
+import { ProposalPanel } from "@/components/quotes/proposal-panel";
+import { proposalPanelData } from "@/lib/proposals/workflow";
 import { QUOTE_STATUS_META } from "@/lib/constants";
 import { JourneyBar } from "@/components/journey/journey-bar";
 import { buildJourney } from "@/lib/journey";
@@ -23,6 +25,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   if (!quote) notFound();
   const meta = QUOTE_STATUS_META[quote.status];
   const journey = buildJourney(await getJourneyForQuote(quote), "quote");
+  const proposal = quote.origin === "brain" ? await proposalPanelData(quote.id) : null;
 
   return (
     <div className="space-y-4">
@@ -80,6 +83,16 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                 internalCosting: quote.internalCosting,
                 confidence: quote.confidence,
               }}
+            />
+          ) : null}
+          {proposal ? (
+            <ProposalPanel
+              quoteId={quote.id}
+              quoteNumber={quote.number}
+              approved={proposal.approved}
+              current={proposal.current ? { ...proposal.current, generatedAt: formatDateTime(proposal.current.generatedAt) } : null}
+              emails={proposal.emails}
+              contentGaps={proposal.contentGaps}
             />
           ) : null}
           <Card>

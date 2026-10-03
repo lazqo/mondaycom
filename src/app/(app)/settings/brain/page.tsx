@@ -21,6 +21,7 @@ import { requireAdmin } from "@/lib/auth";
 import { ensurePolicies, loadPolicies } from "@/lib/brain/store";
 import { applyReferenceCatalogue } from "@/lib/brain/reference/apply";
 import { POLICY_DESCRIPTIONS, POLICY_KEYS } from "@/lib/brain/policy";
+import { applyStarterContent } from "@/lib/proposals/content";
 import { priceFreshness } from "@/lib/brain/pricing";
 import { BrainSettings } from "@/components/brain/brain-settings";
 import type { ConnectorView } from "@/components/brain/supplier-pricing";
@@ -36,6 +37,7 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
   const { tab = "policies" } = await searchParams;
   await ensurePolicies();
   await applyReferenceCatalogue();
+  await applyStarterContent().catch(() => {});
   const [policies, policyRows, productRows, offers, supplierRows, creds, packageRows, materialRows, linkRows, routeRows, kitRows] = await Promise.all([
     loadPolicies(),
     db.select({ p: brainPolicies, approver: users.name }).from(brainPolicies).leftJoin(users, eq(brainPolicies.approvedById, users.id)),
@@ -93,6 +95,15 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
         source: r.source,
         sourceUrl: r.sourceUrl,
         notes: r.notes,
+        quote: {
+          displayName: r.quoteDisplayName,
+          description: r.quoteDescription,
+          highlights: r.quoteHighlights,
+          featureNotes: r.quoteFeatureNotes,
+          imageId: r.quoteImageId,
+          showCard: r.quoteShowCard,
+          status: r.quoteContentStatus,
+        },
         offers: offers
           .filter((o) => o.o.productId === r.id)
           .map(({ o, supplier }) => ({

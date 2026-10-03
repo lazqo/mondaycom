@@ -80,6 +80,8 @@ export function QuoteApprovalPanel({
     startTransition(async () => {
       const res = await fn();
       if (!res.ok) return setError(res.error ?? "Failed");
+      const proposalError = (res.data as { proposalError?: string | null } | undefined)?.proposalError;
+      if (proposalError) setError(`Approved, but the proposal PDF could not be made: ${proposalError}`);
       if (done) setMsg(done);
       router.refresh();
     });
@@ -227,7 +229,7 @@ export function QuoteApprovalPanel({
         ) : null}
         {canApprove && (quote.status === "needs_review" || quote.status === "ai_prepared") ? (
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <Button size="sm" onClick={() => act(() => approveQuoteAction(quote.id))} disabled={pending} data-testid="approve-quote">
+            <Button size="sm" onClick={() => act(() => approveQuoteAction(quote.id), "Approved. The proposal PDF is ready below; nothing has been sent.")} disabled={pending} data-testid="approve-quote">
               Approve quote
             </Button>
           </div>

@@ -125,6 +125,12 @@ export type QuoteLineItem = {
   unitPrice: number;
 };
 
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
+
 export const quotes = pgTable(
   "quotes",
   {
@@ -158,6 +164,37 @@ export const quotes = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("quotes_contact_idx").on(t.contactId)],
+);
+
+/**
+ * A customer-facing document generated from an approved quote (the branded PDF proposal). It is
+ * rendered once from the approved quote and stored; it is valid only while the quote is still
+ * approved with the same fingerprint. Repricing, editing or returning the quote voids it.
+ */
+export const quoteDocuments = pgTable(
+  "quote_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    quoteId: uuid("quote_id")
+      .notNull()
+      .references(() => quotes.id, { onDelete: "cascade" }),
+    /** proposal (for now; later alarm/access/intercom proposals share the framework). */
+    kind: text("kind").notNull().default("proposal"),
+    /** The quote's approval fingerprint this document was rendered from. */
+    approvalHash: text("approval_hash").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull().default("application/pdf"),
+    size: integer("size").notNull().default(0),
+    sha256: text("sha256").notNull(),
+    /** Exactly what was rendered (customer-facing data only), for audit. */
+    data: jsonb("data").$type<Record<string, unknown>>().notNull(),
+    content: bytea("content").notNull(),
+    generatedById: uuid("generated_by_id").references(() => users.id, { onDelete: "set null" }),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+  },
+  (t) => [index("quote_documents_quote_idx").on(t.quoteId, t.generatedAt)],
 );
 
 export const jobs = pgTable(
@@ -700,6 +737,25 @@ export const supplierBrandRoutes = pgTable(
   (t) => [uniqueIndex("supplier_brand_routes_idx").on(t.brand, t.supplierId, t.market)],
 );
 
+/**
+ * Images kept in the catalogue (product photos for proposals). Stored once, from an upload or a
+ * one-time download, already converted for print; never fetched again when a document is made.
+ */
+export const catalogueImages = pgTable("catalogue_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  size: integer("size").notNull().default(0),
+  sha256: text("sha256").notNull(),
+  /** Where the image came from (manufacturer page), for the record. */
+  sourceUrl: text("source_url"),
+  content: bytea("content").notNull(),
+  uploadedById: uuid("uploaded_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const products = pgTable(
   "products",
   {
@@ -726,6 +782,20 @@ export const products = pgTable(
     specs: jsonb("specs").$type<Record<string, unknown>>().notNull().default({}),
     warranty: text("warranty"),
     alternatives: jsonb("alternatives").$type<string[]>().notNull().default([]),
+    // ---- Customer-facing quote content: separate from the technical data above, reused by every proposal. ----
+    /** Friendly name on proposals, e.g. "VIGI 5MP Full-Colour Turret Camera". */
+    quoteDisplayName: text("quote_display_name"),
+    /** One short sentence: what it is and what it does. */
+    quoteDescription: text("quote_description"),
+    /** 2–4 short highlights. */
+    quoteHighlights: jsonb("quote_highlights").$type<string[]>().notNull().default([]),
+    /** Optional customer-facing feature notes (a line or two). */
+    quoteFeatureNotes: text("quote_feature_notes"),
+    quoteImageId: uuid("quote_image_id").references(() => catalogueImages.id, { onDelete: "set null" }),
+    /** Show as a product card on proposals; null = by category (cameras, recorders, drives, kits). */
+    quoteShowCard: boolean("quote_show_card"),
+    quoteContentStatus: knowledgeStatusEnum("quote_content_status").notNull().default("requires_review"),
+    quoteContentUpdatedAt: timestamp("quote_content_updated_at", { withTimezone: true }),
     ...provenance(),
   },
   (t) => [uniqueIndex("products_model_idx").on(t.manufacturer, t.model), index("products_category_idx").on(t.category)],
@@ -989,6 +1059,8 @@ export const drafts = pgTable(
     approvedById: uuid("approved_by_id").references(() => users.id, { onDelete: "set null" }),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     approvalHash: text("approval_hash"),
+    /** The proposal PDF attached to this email, if any. Sent only while it is still valid. */
+    quoteDocumentId: uuid("quote_document_id").references(() => quoteDocuments.id, { onDelete: "set null" }),
     /** Message-ID of the copy placed in the mailbox's Drafts folder, if any. */
     mailboxDraftMessageId: text("mailbox_draft_message_id"),
     sentEmailId: uuid("sent_email_id").references(() => emails.id, { onDelete: "set null" }),
@@ -1081,6 +1153,7 @@ export const eventsRelations = relations(events, ({ one }) => ({
 }));
 
 export const productsRelations = relations(products, ({ many }) => ({ offers: many(supplierProducts) }));
+export const quoteDocumentsRelations = relations(quoteDocuments, ({ one }) => ({ quote: one(quotes, { fields: [quoteDocuments.quoteId], references: [quotes.id] }) }));
 export const supplierProductsRelations = relations(supplierProducts, ({ one, many }) => ({
   product: one(products, { fields: [supplierProducts.productId], references: [products.id] }),
   supplier: one(suppliers, { fields: [supplierProducts.supplierId], references: [suppliers.id] }),
@@ -1150,6 +1223,8 @@ export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type Quote = typeof quotes.$inferSelect;
+export type QuoteDocument = typeof quoteDocuments.$inferSelect;
+export type CatalogueImage = typeof catalogueImages.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type Activity = typeof activityLog.$inferSelect;

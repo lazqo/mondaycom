@@ -10,5 +10,7 @@ export default defineConfig({
     hookTimeout: 60_000,
     setupFiles: ["dotenv/config"],
   },
+  // tsconfig keeps JSX for Next; tests compile it themselves.
+  oxc: { jsx: { runtime: "automatic" } },
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
 });

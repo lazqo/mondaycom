@@ -9,6 +9,8 @@
  *   3. A prepared email cannot be sent until it is approved.
  *   4. A prepared quote cannot be marked as sent until it is approved; editing it after approval
  *      takes the approval away.
+ *   5. Approving the quote makes the branded PDF proposal from it and attaches it to the prepared
+ *      email (nothing is sent); changing the quote voids the PDF.
  *
  * The catalogue rows are invented test values (not real products or prices) inserted for this run
  * and removed afterwards.
@@ -34,6 +36,15 @@ async function login(page: Page) {
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
+}
+
+/** Fetch with the signed-in browser session (the session cookie is not sent by the request API over http). */
+async function fetchInPage(page: Page, url: string) {
+  return page.evaluate(async (u) => {
+    const res = await fetch(u);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return { status: res.status, type: res.headers.get("content-type"), head: String.fromCharCode(...bytes.slice(0, 5)) };
+  }, url);
 }
 
 test.describe("CCTV Business Brain", () => {
@@ -70,7 +81,9 @@ test.describe("CCTV Business Brain", () => {
     if (leadId) await sql`delete from quotes where lead_id = ${leadId}`;
     if (leadId) await sql`delete from leads where id = ${leadId}`;
     await sql`delete from cctv_kits where name = ${KIT}`;
+    const imgs = await sql`select quote_image_id from products where manufacturer = ${MAKER} and quote_image_id is not null`;
     await sql`delete from products where manufacturer = ${MAKER}`;
+    for (const i of imgs) await sql`delete from catalogue_images where id = ${i.quote_image_id}`;
     if (pkgBefore)
       await sql`update installation_packages set estimated_hours = ${pkgBefore.estimated_hours}, labour_rate = ${pkgBefore.labour_rate}, material_cost_ex_gst = ${pkgBefore.material_cost_ex_gst},
                 complexity_allowance_ex_gst = ${pkgBefore.complexity_allowance_ex_gst}, allowance_ex_gst = ${pkgBefore.allowance_ex_gst}, status = ${pkgBefore.status} where key = 'RES_CCTV_SINGLE_4'`;
@@ -96,6 +109,43 @@ test.describe("CCTV Business Brain", () => {
     await expect(row).toBeVisible();
     await expect(row).toContainText("FX-HDD-4TB");
     await expect(row).toContainText("Get Secure approved");
+  });
+
+  test("Chris writes a product's proposal content and stores its photo once", async ({ page }) => {
+    await login(page);
+    await page.goto("/settings/brain?tab=products");
+    await page.getByLabel("Search products").fill("FX-CAM-4");
+    const row = page.getByTestId("product-row").filter({ hasText: "FX-CAM-4" });
+    await row.getByRole("button").first().click();
+    const content = row.getByTestId("proposal-content");
+    await content.getByLabel("Name on proposals").fill(`E2E Turret Camera ${RUN}`);
+    await content.getByLabel("Short description").fill("Outdoor camera for clear day and night coverage.");
+    await content.getByLabel("Highlight 1").fill("4MP image quality");
+    await content.getByLabel("Highlight 2").fill("Night vision");
+    await content.getByTestId("save-proposal-content").click();
+    await expect(content.getByText("Proposal content saved.")).toBeVisible();
+    await content.getByLabel("Product photo file").setInputFiles("src/lib/proposals/content/images/vigi-insight-s455.jpg");
+    await expect(content.getByTestId("proposal-image")).toBeVisible();
+    const [p] = await sql`select quote_display_name, quote_highlights, quote_image_id from products where manufacturer = ${MAKER} and model = 'FX-CAM-4'`;
+    expect(p.quote_display_name).toBe(`E2E Turret Camera ${RUN}`);
+    expect(p.quote_highlights).toEqual(["4MP image quality", "Night vision"]);
+    expect(p.quote_image_id).toBeTruthy();
+  });
+
+  test("company details and standard wording for proposals are editable in Settings → Proposals", async ({ page }) => {
+    await login(page);
+    await page.goto("/settings/proposals");
+    const form = page.getByTestId("proposal-settings");
+    await expect(form.getByLabel("Company name")).toHaveValue("Get Secure Limited");
+    await expect(form.getByLabel("Phone")).toHaveValue("09 977 9990");
+    const before = await sql`select value from app_settings where key = 'proposal'`;
+    await form.getByLabel("Proposal valid for (days)").fill("30");
+    await form.getByTestId("save-proposal-settings").click();
+    await expect(form.getByText(/Saved/)).toBeVisible();
+    const [row] = await sql`select value from app_settings where key = 'proposal'`;
+    expect(row.value.validityDays).toBe(30);
+    if (before.length) await sql`update app_settings set value = ${sql.json(before[0].value)} where key = 'proposal'`;
+    else await sql`delete from app_settings where key = 'proposal'`;
   });
 
   test("assessment, prepared drafts and the approval gate", async ({ page }) => {
@@ -163,12 +213,31 @@ test.describe("CCTV Business Brain", () => {
     await expect(page.getByTestId("quote-approval")).toContainText("Approved by");
     await expect(page.getByRole("button", { name: "Mark as sent" })).toBeVisible();
 
+    // 5. Approving made the branded PDF from the approved quote and attached it to the prepared email.
+    const quoteId = page.url().split("/quotes/")[1];
+    const panel = page.getByTestId("proposal-panel");
+    await expect(panel.getByTestId("proposal-current")).toContainText(/Get-Secure-Proposal-Q-\d+/);
+    await expect(panel.getByTestId("proposal-email").first()).toContainText("PDF attached");
+    const pdf = await fetchInPage(page, `/api/quotes/${quoteId}/proposal`);
+    expect(pdf).toMatchObject({ status: 200, type: "application/pdf", head: "%PDF-" });
+    const [doc] = await sql`select data from quote_documents where quote_id = ${quoteId} and voided_at is null`;
+    expect(JSON.stringify(doc.data)).toContain(`E2E Turret Camera ${RUN}`);
+    expect(JSON.stringify(doc.data)).not.toMatch(/IT Plus|supplier|markup|margin|costExGst/i);
+    const [{ status: qStatus }] = await sql`select status from quotes where id = ${quoteId}`;
+    expect(qStatus).toBe("approved"); // approved, not sent
+    await page.goto("/approvals");
+    await expect(page.getByTestId("draft-card").filter({ hasText: LEAD }).getByTestId("draft-attachment")).toContainText("Approved proposal");
+    await page.goto(`/quotes/${quoteId}`);
+
     // Editing the approved quote voids the approval.
     await page.getByLabel("Line 1 quantity").fill("2");
     await page.getByRole("button", { name: "Save quote" }).click();
     await expect(page.getByText("needs approving again")).toBeVisible();
     await page.reload();
     await expect(page.getByTestId("quote-approval")).toContainText("Waiting for Chris");
+    // The PDF went with the approval: the email's attachment is no longer valid.
+    await expect(page.getByTestId("proposal-panel")).toContainText("After approval");
+    expect((await fetchInPage(page, `/api/quotes/${quoteId}/proposal`)).status).toBe(404);
     await expect(page.getByRole("button", { name: "Mark as sent" })).toHaveCount(0);
 
     // Approve again, then reprice with current prices: approval is removed, back to Needs Review.

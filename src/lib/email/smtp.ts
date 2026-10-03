@@ -36,6 +36,8 @@ export type SendReplyInput = {
   fromName?: string | null;
   /** Extra headers, e.g. the CRM draft this message came from. */
   headers?: Record<string, string>;
+  /** Files to attach (e.g. the approved proposal PDF). */
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 };
 
 /**
@@ -66,6 +68,7 @@ export async function sendReply(input: SendReplyInput): Promise<{ emailId: strin
     references: references.length ? references : undefined,
     date: new Date(),
     headers: { [CRM_MESSAGE_HEADER]: messageId, ...(input.headers ?? {}) },
+    attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
   });
   const raw = await composer.compile().build();
 

@@ -19,6 +19,7 @@ import { type Actor, GuardrailError, actorLabel, assertAgentMay, assertApprover 
 import { connectionFromMailbox, createImapClient } from "@/lib/email/imap";
 import { normalizeSubject } from "@/lib/email/parse";
 import { sendReply } from "@/lib/email/smtp";
+import { attachmentForDraft } from "@/lib/proposals/workflow";
 
 export const DRAFT_HEADER = "X-GetSecure-CRM-Draft";
 
@@ -26,10 +27,12 @@ export class DraftError extends Error {}
 
 const actorId = (a: Actor) => (a.kind === "human" ? a.userId : null);
 
-export function draftFingerprint(d: Pick<Draft, "toAddresses" | "ccAddresses" | "subject" | "body">): string {
-  return createHash("sha256")
-    .update(JSON.stringify({ to: d.toAddresses.map((a) => a.toLowerCase()), cc: d.ccAddresses.map((a) => a.toLowerCase()), subject: d.subject, body: d.body }))
-    .digest("hex");
+export function draftFingerprint(d: Pick<Draft, "toAddresses" | "ccAddresses" | "subject" | "body"> & { quoteDocumentId?: string | null }): string {
+  const content: Record<string, unknown> = { to: d.toAddresses.map((a) => a.toLowerCase()), cc: d.ccAddresses.map((a) => a.toLowerCase()), subject: d.subject, body: d.body };
+  // The attached proposal is part of what Chris approves (only present when there is one, so
+  // approvals made before attachments existed still match).
+  if (d.quoteDocumentId) content.attachment = d.quoteDocumentId;
+  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
 }
 
 async function load(id: string) {
@@ -84,7 +87,7 @@ export async function updateDraft(id: string, patch: { to?: string[]; cc?: strin
   const d = await load(id);
   if (["sent", "rejected", "cancelled"].includes(d.status)) throw new DraftError(`A ${d.status} draft cannot be edited.`);
   if (actor.kind !== "human" && d.status === "approved") throw new GuardrailError("An approved draft can only be changed by a person.");
-  const next = { toAddresses: patch.to ?? d.toAddresses, ccAddresses: patch.cc ?? d.ccAddresses, subject: patch.subject ?? d.subject, body: patch.body ?? d.body };
+  const next = { toAddresses: patch.to ?? d.toAddresses, ccAddresses: patch.cc ?? d.ccAddresses, subject: patch.subject ?? d.subject, body: patch.body ?? d.body, quoteDocumentId: d.quoteDocumentId };
   const changed = draftFingerprint(next) !== draftFingerprint(d);
   const voids = d.status === "approved" && changed;
   const status = voids || (actor.kind !== "human" && d.status === "revision_requested") ? "ready_for_review" : d.status;
@@ -108,6 +111,7 @@ export async function approveDraft(id: string, actor: Actor): Promise<void> {
   const d = await load(id);
   if (!["draft", "ready_for_review"].includes(d.status)) throw new DraftError(`A draft that is ${d.status.replace(/_/g, " ")} cannot be approved.`);
   if (!d.toAddresses.length) throw new DraftError("The draft has no recipient.");
+  if (d.quoteDocumentId) await attachmentForDraft(d.quoteDocumentId); // refuses a proposal that is no longer valid
   await db.update(drafts).set({ status: "approved", approvedById: actor.userId, approvedAt: new Date(), approvalHash: draftFingerprint(d), updatedAt: new Date() }).where(eq(drafts.id, id));
 }
 
@@ -139,12 +143,15 @@ export async function sendDraft(id: string, actor: Actor): Promise<{ emailId: st
   const d = await load(id);
   if (d.status !== "approved") throw new GuardrailError("Only an approved draft can be sent.");
   if (draftFingerprint(d) !== d.approvalHash) throw new GuardrailError("The draft changed after it was approved. Approve it again first.");
+  // The proposal goes only while it is still the valid PDF for the approved quote.
+  const attachment = d.quoteDocumentId ? await attachmentForDraft(d.quoteDocumentId) : null;
   const mailbox = await mailboxFor(d);
   if (!mailbox) throw new DraftError("No mailbox is connected to send from.");
   const replyTo = d.threadId
     ? await db.query.emails.findFirst({ where: and(eq(emails.threadId, d.threadId), eq(emails.direction, "inbound")), orderBy: [desc(emails.receivedAt)], columns: { id: true } })
     : null;
   const res = await sendReply({
+    attachments: attachment ? [attachment] : undefined,
     mailboxId: mailbox.id,
     threadId: d.threadId,
     inReplyToEmailId: replyTo?.id ?? null,
@@ -181,6 +188,7 @@ export async function placeInMailboxDrafts(id: string, actor: Actor): Promise<{ 
   if (actor.kind !== "human") throw new GuardrailError("Only a person can place a draft in the mailbox.");
   const d = await load(id);
   if (!["ready_for_review", "approved"].includes(d.status)) throw new DraftError("Submit the draft for review first.");
+  const attachment = d.quoteDocumentId ? await attachmentForDraft(d.quoteDocumentId) : null;
   const mailbox = await mailboxFor(d);
   if (!mailbox) throw new DraftError("No mailbox is connected.");
   const domain = mailbox.emailAddress.split("@")[1] ?? "get-secure-crm";
@@ -198,6 +206,7 @@ export async function placeInMailboxDrafts(id: string, actor: Actor): Promise<{ 
     inReplyTo: replyTo?.messageId,
     references: replyTo ? [...replyTo.references, replyTo.messageId] : undefined,
     headers: { [DRAFT_HEADER]: d.id },
+    attachments: attachment ? [attachment] : undefined,
   })
     .compile()
     .build();

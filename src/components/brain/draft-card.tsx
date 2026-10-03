@@ -27,6 +27,8 @@ export type DraftView = {
   reviewNote: string | null;
   lead: { id: string; name: string } | null;
   inTitanDrafts: boolean;
+  /** The proposal PDF attached to this email, and whether it is still the valid one. */
+  attachment: { id: string; filename: string; current: boolean } | null;
 };
 
 export function DraftCard({ draft, canApprove }: { draft: DraftView; canApprove: boolean }) {
@@ -90,6 +92,19 @@ export function DraftCard({ draft, canApprove }: { draft: DraftView; canApprove:
           <Textarea id={`body-${draft.id}`} value={body} onChange={(e) => setBody(e.target.value)} className="min-h-56 font-mono text-[13px]" />
         </Field>
       </div>
+      {draft.attachment ? (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="draft-attachment">
+          <span className="text-gray-500">Attachment:</span>
+          <a href={`/api/quote-documents/${draft.attachment.id}`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:underline">
+            {draft.attachment.filename}
+          </a>
+          {draft.attachment.current ? (
+            <Badge className="bg-green-100 text-green-800">Approved proposal</Badge>
+          ) : (
+            <Badge className="bg-red-100 text-red-800">No longer valid: the quote changed. It cannot be sent.</Badge>
+          )}
+        </p>
+      ) : null}
       {dirty && draft.status === "approved" ? <p className="mt-1 text-xs text-amber-700">Saving changes takes the approval away; it will need approving again.</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

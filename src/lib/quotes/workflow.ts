@@ -19,6 +19,7 @@ import { jobs, leads, quotes, type Quote, type QuoteLineItem } from "@/db/schema
 import { logActivity } from "@/lib/activity";
 import { computeTotals } from "@/lib/quotes";
 import { nextNumber } from "@/lib/numbering";
+import { voidProposals } from "@/lib/proposals/void";
 import { type Actor, GuardrailError, assertAgentMay, assertApprover, assertMayActOnCustomer } from "@/lib/guard/actor";
 
 export class QuoteWorkflowError extends Error {}
@@ -73,7 +74,10 @@ export async function updateQuoteContent(id: string, patch: QuoteContent, actor:
     .set({ ...next, updatedAt: new Date(), ...(voids ? { status: "needs_review" as const, approvedById: null, approvedAt: null, approvalHash: null } : {}) })
     .where(eq(quotes.id, id));
   await logActivity({ entity: "quote", entityId: id, actorId: actorId(actor), action: "updated" });
-  if (voids) await logActivity({ entity: "quote", entityId: id, actorId: actorId(actor), action: "approval_invalidated", detail: { reason: "changed after approval" } });
+  if (voids) {
+    await logActivity({ entity: "quote", entityId: id, actorId: actorId(actor), action: "approval_invalidated", detail: { reason: "changed after approval" } });
+    await voidProposals(id, "quote changed after approval", actorId(actor));
+  }
   return { approvalVoided: voids };
 }
 
@@ -112,6 +116,7 @@ export async function returnQuoteForReview(id: string, actor: Actor, note: strin
   if (!["ai_prepared", "needs_review", "approved"].includes(q.status)) throw new QuoteWorkflowError("Only an unsent quote can be sent back for review.");
   await db.update(quotes).set({ status: "needs_review", approvedById: null, approvedAt: null, approvalHash: null, updatedAt: new Date() }).where(eq(quotes.id, id));
   await logActivity({ entity: "quote", entityId: id, actorId: actor.userId, action: "returned_for_review", detail: { note } });
+  await voidProposals(id, "quote sent back for review", actor.userId);
 }
 
 const LEAD_STATUS_FOR: Partial<Record<Quote["status"], "quote_sent" | "won" | "lost">> = { sent: "quote_sent", accepted: "won", declined: "lost" };
@@ -223,6 +228,9 @@ export async function createPreparedQuote(
     return { ...row, superseded: open.map((q) => q.id) };
   });
   await logActivity({ entity: "quote", entityId: result.id, actorId: actorId(actor), action: "created", detail: { prepared: true, by: actor.kind === "agent" ? actor.agent : actor.kind } });
-  for (const s of result.superseded) await logActivity({ entity: "quote", entityId: s, actorId: actorId(actor), action: "superseded", detail: { by: result.id } });
+  for (const s of result.superseded) {
+    await logActivity({ entity: "quote", entityId: s, actorId: actorId(actor), action: "superseded", detail: { by: result.id } });
+    await voidProposals(s, "superseded by a newer quote", actorId(actor));
+  }
   return result;
 }
