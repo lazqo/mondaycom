@@ -24,6 +24,8 @@ const LEVEL: Record<Level, string> = {
   low: "bg-red-100 text-red-800",
 };
 const label = (s: string) => s.replace(/_/g, " ");
+const sumSell = (lines: { unitSellExGst: number | null; quantity: number; internalOnly?: boolean }[]) =>
+  lines.some((l) => l.unitSellExGst == null && !l.internalOnly) ? null : lines.reduce((t, l) => t + (l.internalOnly ? 0 : (l.unitSellExGst ?? 0) * l.quantity), 0);
 
 function Section({
   title,
@@ -97,6 +99,23 @@ export function PacketView({
           </span>
         }
       />
+
+      {p.readiness ? (
+        <Section title={p.readiness.ready ? "Ready: fully priced from approved inputs" : c.complete ? "Priced, but not all inputs are approved yet" : "Not fully priced yet"} testid="packet-readiness">
+          <ul className="space-y-1 text-xs">
+            {p.readiness.items.map((i) => (
+              <li key={i.key} className="flex gap-1.5" data-testid="readiness-item">
+                {i.ok ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />}
+                <span>
+                  <strong className={i.ok ? "text-gray-800" : "text-red-700"}>{i.label}</strong>
+                  <span className="text-gray-600"> · {i.detail}</span>
+                  {!i.ok && i.fix ? <span className="block text-gray-500">Fix: {i.fix}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
 
       <Section title="Summary" testid="packet-summary">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -351,6 +370,13 @@ export function PacketView({
             {p.recording.maxPossibleBandwidthMbps != null ? `${p.recording.maxPossibleBandwidthMbps.toFixed(1)} Mbps` : "unknown"}
           </p>
         ) : null}
+        {p.recording.storage.rawGb != null ? (
+          <p className="text-xs text-gray-600" data-testid="packet-storage-calc">
+            Raw storage {(p.recording.storage.rawGb / 1000).toFixed(2)} TB for {p.recording.storage.retentionTargetDays} days · headroom {p.recording.storage.headroomPct}% · required{" "}
+            {p.recording.storage.requiredGb != null ? `${(p.recording.storage.requiredGb / 1000).toFixed(2)} TB` : "—"}
+            {p.recording.storage.installedTb != null ? ` · installed ${p.recording.storage.installedTb} TB` : ""}
+          </p>
+        ) : null}
         <List items={p.recording.storage.notes} />
         <p>
           Recommended:{" "}
@@ -412,6 +438,18 @@ export function PacketView({
             ))}
           </tbody>
         </table>
+        <p className="text-xs" data-testid="packet-junction-box">
+          <span className="text-gray-500">Junction boxes: </span>
+          {p.installation.junctionBoxRecommended ? (
+            <strong>recommended</strong>
+          ) : (
+            <strong>not recommended</strong>
+          )}{" "}
+          <span className="text-gray-600">
+            {p.installation.junctionBoxReason ??
+              "— no camera is on a surface the junction-box rule lists (brick/concrete by default); the documented box below is the candidate if Chris wants one."}
+          </span>
+        </p>
         {p.installation.accessories?.length ? (
           <div data-testid="packet-accessories">
             <p className="text-xs font-semibold text-gray-700">Documented accessories (not charged unless Chris adds them)</p>
@@ -459,7 +497,10 @@ export function PacketView({
                 <th className="py-1">Supplier · price date</th>
                 <th className="py-1 text-right">Qty</th>
                 <th className="py-1 text-right">Unit cost</th>
+                <th className="py-1 text-right">Cost</th>
+                <th className="py-1 text-right">Markup</th>
                 <th className="py-1 text-right">Unit sell</th>
+                <th className="py-1 text-right">Sell</th>
               </tr>
             </thead>
             <tbody>
@@ -492,15 +533,28 @@ export function PacketView({
                   </td>
                   <td className="py-1 text-right">{l.quantity}</td>
                   <td className="py-1 text-right">{money(l.unitCostExGst)}</td>
-                  <td className="py-1 text-right">{money(l.unitSellExGst)}</td>
+                  <td className="py-1 text-right">{l.unitCostExGst != null ? money(l.unitCostExGst * l.quantity) : "—"}</td>
+                  <td className="py-1 text-right">{l.markupPct != null ? `${l.markupPct}%` : "—"}</td>
+                  <td className="py-1 text-right">{l.internalOnly ? "in installation" : money(l.unitSellExGst)}</td>
+                  <td className="py-1 text-right">{l.internalOnly ? "—" : l.unitSellExGst != null ? money(l.unitSellExGst * l.quantity) : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : null}
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-4">
-          <dt className="text-gray-500">Equipment cost</dt>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 sm:grid-cols-4" data-testid="packet-commercial">
+          <dt className="text-gray-500">Hardware cost</dt>
           <dd>{money(c.equipmentCost)}</dd>
+          <dt className="text-gray-500">Hardware markup</dt>
+          <dd>
+            {c.markupPct}% {c.markupSource === "override" ? "(Chris, this quote)" : "(suggested)"}
+          </dd>
+          <dt className="text-gray-500">Hardware sell</dt>
+          <dd>{money(sumSell(c.lines.filter((l) => l.kind === "hardware")))}</dd>
+          <dt className="text-gray-500">Installation sell allowance</dt>
+          <dd>{money(p.labour.allowanceExGst)}</dd>
+          <dt className="text-gray-500">Total internal cost</dt>
+          <dd>{money(c.equipmentCost + c.labourCost + c.materialsCost + (c.allowancesCost ?? 0) + c.otherCost)}</dd>
           <dt className="text-gray-500">Materials cost</dt>
           <dd>{money(c.materialsCost)}</dd>
           <dt className="text-gray-500">Labour cost</dt>
@@ -509,17 +563,16 @@ export function PacketView({
           <dd>{money(c.allowancesCost ?? 0)}</dd>
           <dt className="text-gray-500">Other cost</dt>
           <dd>{money(c.otherCost)}</dd>
-          <dt className="text-gray-500">Sell ex GST</dt>
+          <dt className="text-gray-500">Subtotal ex GST</dt>
           <dd>{money(c.sellExGst)}</dd>
           <dt className="text-gray-500">GST</dt>
           <dd>{money(c.gst)}</dd>
           <dt className="text-gray-500">Total inc GST</dt>
           <dd className="font-semibold">{money(c.totalIncGst)}</dd>
           <dt className="text-gray-500">Gross profit</dt>
-          <dd>
-            {money(c.grossProfit)}
-            {c.grossMarginPct != null ? ` (${c.grossMarginPct}%)` : ""}
-          </dd>
+          <dd>{money(c.grossProfit)}</dd>
+          <dt className="text-gray-500">Gross margin</dt>
+          <dd>{c.grossMarginPct != null ? `${c.grossMarginPct}%` : "—"}</dd>
         </dl>
         <p className="text-xs text-gray-600">{c.markupLogic}</p>
         <List items={c.unpriced.map((u) => `Unpriced: ${u}`)} />

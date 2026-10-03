@@ -71,6 +71,7 @@ export function QuoteApprovalPanel({
   const conf = quote.confidence ?? {};
   const lines = (Array.isArray(c.lines) ? c.lines : []) as SnapLine[];
   const labour = (c.labour ?? null) as SnapLabour | null;
+  const readiness = (c.readiness ?? null) as { ready: boolean; items: { key: string; label: string; ok: boolean; detail: string }[] } | null;
   const editable = ["ai_prepared", "needs_review", "approved"].includes(quote.status);
 
   function act(fn: () => Promise<{ ok: boolean; error?: string; data?: unknown }>, done?: string) {
@@ -96,8 +97,22 @@ export function QuoteApprovalPanel({
           <p className="text-amber-700">Waiting for Chris. It cannot be sent until it is approved.</p>
         ) : null}
         <p className={c.complete ? "text-green-700" : "font-medium text-red-600"} data-testid="quote-priced">
-          {c.complete ? "Fully priced" : "Not fully priced"}
+          {c.complete ? "Fully priced" : "Not fully priced: it cannot be approved until every input is entered."}
         </p>
+        {readiness && !readiness.ready ? (
+          <div className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-900" data-testid="quote-readiness">
+            <p className="font-medium">Inputs not yet entered or approved:</p>
+            <ul className="list-disc pl-4">
+              {readiness.items
+                .filter((i) => !i.ok)
+                .map((i) => (
+                  <li key={i.key}>
+                    {i.label}: {i.detail}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ) : null}
 
         {lines.length ? (
           <div className="overflow-x-auto">

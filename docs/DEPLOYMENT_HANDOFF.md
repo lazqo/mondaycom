@@ -583,6 +583,21 @@ Chris; it never sends, books or promises anything.
 
 Until these are in, assessments still run and show "Not fully priced" with exactly what is missing.
 
+**Ready to quote checklist.** Every assessment opens with a checklist of what must be entered and
+approved for the price to stand. For each item it shows ✓ or ✗, what's missing, and where to fix it:
+- approved, current supplier prices for every hardware line;
+- an approved recording profile with a design bitrate for each camera;
+- storage sized from it and meeting the retention target;
+- the exact installation package, with every value entered and approved;
+- the hardware markup decided by Chris (the assessment's markup override, or an approved rule);
+- the camera tier approved;
+- products verified or approved;
+- the sizing rules the quote relies on (storage headroom, usable drive capacity, price freshness,
+  junction-box surfaces) approved.
+
+A Business Brain quote that is **Not fully priced cannot be approved**. Neither can one with stale
+prices. The quote's approval panel lists any input that is still provisional.
+
 **Supplier logins** typed under Suppliers are stored encrypted with `ENCRYPTION_KEY`, are never shown again
 and are not available to any agent: only the supplier price-sync process or an approver can read them. Price
 sources: manual entry, CSV import, price on application, and the **IT Plus trade-login connector**

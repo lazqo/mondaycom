@@ -13,6 +13,7 @@ import { priceCatalogue } from "./pricing";
 import { networkPlan } from "./network";
 import { channelsNeeded, isNvr, selectNvr } from "./nvr";
 import { cameraPlan, missingInformation, requirementsSummary } from "./requirements";
+import { quoteReadiness } from "./readiness";
 import { salesRead } from "./sales";
 import { siteVisitDecision } from "./site-visit";
 import { requiredStorageGb, storagePlan } from "./storage";
@@ -325,6 +326,19 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
     .filter(([, v]) => !TRUSTED_STATUSES.includes(v.status))
     .map(([key, v]) => ({ key, status: v.status, value: v.value }));
 
+  const readiness = quoteReadiness({
+    cameras: chosen,
+    nvr,
+    drive: b.storage.drives?.product ?? null,
+    profile: b.profile,
+    designs: b.designs,
+    storage: b.storage,
+    labour: b.labour,
+    costing: b.costing,
+    policies,
+    commercial: !!commercial,
+  });
+
   const partial = {
     cameras: b.cameras,
     nvr: { selected: nvr, channelsNeeded: b.cameras.length ? b.sizing.channels : null, expansionChannels: b.sizing.expansion, evaluated: b.nvrPick.evaluated, notes: [...b.sizing.notes, ...b.nvrPick.notes] },
@@ -387,6 +401,7 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
     nextAction,
     approvals,
     provisionalPolicies,
+    readiness,
   };
 }
 

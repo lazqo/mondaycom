@@ -648,4 +648,6 @@ export type DecisionPacket = {
   approvals: Approval[];
   /** Policies relied on that are not yet approved, with their status. */
   provisionalPolicies: { key: string; status: KnowledgeStatus; value: unknown }[];
+  /** Everything Get Secure must have entered and approved for this to be a real quote. */
+  readiness: { ready: boolean; items: { key: string; label: string; ok: boolean; detail: string; fix: string | null }[] };
 };

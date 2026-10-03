@@ -185,11 +185,34 @@ describe("first genuinely priced 4-camera residential quote", () => {
     expect(after.assessmentId).not.toBe(before.assessmentId);
   });
 
-  it("is Not fully priced again as soon as a required input is removed", async () => {
+  it("is Not fully priced again as soon as a required input is removed, and then cannot be approved", async () => {
     await fillPackage({ materialCostExGst: null });
     const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), staff);
     expect(a.packet.costing.complete).toBe(false);
     expect(a.packet.costing.unpriced).toContain("RES_CCTV_SINGLE_4: standard material cost not set");
+    expect(a.packet.readiness.ready).toBe(false);
+    expect(a.packet.readiness.items.find((i) => i.key === "installation_package")).toMatchObject({ ok: false, detail: expect.stringMatching(/standard material cost not set/) });
+    const { quoteId } = await brain.prepareFromAssessment(a.id, { quote: true }, staff);
+    quoteIds.push(quoteId!);
+    await expect(quoting.approveQuote(quoteId!, chris)).rejects.toThrow(/Not fully priced: .*standard material cost not set/);
+  });
+
+  it("lists every input still to enter or approve before the first real quote", async () => {
+    await fillPackage({ status: "requires_review" });
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), staff);
+    const r = a.packet.readiness;
+    const item = (k: string) => r.items.find((i) => i.key === k)!;
+    expect(a.packet.costing.complete).toBe(true); // every value is entered…
+    expect(r.ready).toBe(false); // …but not everything is approved
+    expect(item("supplier_prices").ok).toBe(true);
+    expect(item("recording_profile").ok).toBe(true);
+    expect(item("storage").ok).toBe(true);
+    expect(item("installation_package")).toMatchObject({ ok: false, detail: expect.stringMatching(/RES_CCTV_SINGLE_4: requires review/) });
+    expect(item("markup")).toMatchObject({ ok: false, detail: "25% is the provisional suggestion.", fix: expect.stringMatching(/Markup override/) });
+    expect(item("rules")).toMatchObject({ ok: false, detail: expect.stringMatching(/storageHeadroomPct = 10/) });
+    // Chris's exact markup for this quote settles the markup item.
+    const b = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), chris, { markupOverride: 30 });
+    expect(b.packet.readiness.items.find((i) => i.key === "markup")).toMatchObject({ ok: true, detail: "30% entered for this quote." });
   });
 });
 

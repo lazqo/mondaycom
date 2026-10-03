@@ -517,6 +517,7 @@ export function commercialSnapshot(packet: DecisionPacket): Record<string, unkno
     complete: c.complete,
     unpriced: c.unpriced,
     refreshRequired: c.refreshRequired ?? [],
+    readiness: packet.readiness ?? null,
     kit: c.kit ?? null,
     lines: c.lines.map((l) => ({
       key: l.key,

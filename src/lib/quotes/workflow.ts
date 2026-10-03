@@ -91,12 +91,13 @@ export async function approveQuote(id: string, actor: Actor): Promise<void> {
   const q = await load(id);
   if (!["ai_prepared", "needs_review"].includes(q.status)) throw new QuoteWorkflowError(`A quote that is ${q.status.replace(/_/g, " ")} cannot be approved.`);
   if (!q.lineItems.length) throw new QuoteWorkflowError("The quote has no lines.");
+  // A Business Brain quote with stale prices, or that is not fully priced, cannot be approved.
+  const problems: string[] = [];
   const stale = staleSupplierPrices(q.internalCosting);
-  if (stale.length) {
-    throw new QuoteWorkflowError(
-      `Refresh supplier price before final quote approval: ${stale.join("; ")}. Then re-run the assessment and prepare the quote again, so the new price is in it.`,
-    );
-  }
+  if (stale.length) problems.push(`Refresh supplier price before final quote approval: ${stale.join("; ")}.`);
+  const snap = q.internalCosting as { complete?: boolean; unpriced?: string[] } | null;
+  if (snap && snap.complete === false) problems.push(`Not fully priced: ${(snap.unpriced ?? []).join("; ") || "some inputs are missing"}.`);
+  if (problems.length) throw new QuoteWorkflowError(`${problems.join(" ")} Fix that, re-run the assessment and prepare the quote again.`);
   await db
     .update(quotes)
     .set({ status: "approved", approvedById: actor.userId, approvedAt: new Date(), approvalHash: quoteFingerprint(q), updatedAt: new Date() })
