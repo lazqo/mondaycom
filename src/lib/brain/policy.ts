@@ -61,6 +61,15 @@ export const DEFAULT_POLICIES: Policies = {
   priceAgingDays: p(14, "getsecure_provisional", "Engine default", "A supplier price older than this is Aging: still used, shown as such."),
   priceStaleDays: p(30, "getsecure_provisional", "Engine default", "A supplier price older than this is Stale: refresh it before the quote is approved."),
   priceChangeReviewPct: p(5, "getsecure_provisional", BRIEF, "A supplier cost moving more than this is held for review instead of changing quote pricing. Threshold not yet set by Get Secure."),
+  residentialHddDefaults: p(
+    [
+      { minCameras: 2, maxCameras: 4, capacityTb: 2 },
+      { minCameras: 5, maxCameras: 10, capacityTb: 4 },
+    ],
+    "getsecure_approved",
+    "Get Secure residential HDD rule (Chris)",
+    "Residential CCTV default drive: 2-4 cameras 2 TB, 5-10 cameras 4 TB, 11+ cameras chosen manually. Chris can override per assessment. Bitrates estimate retention; they no longer pick the drive size.",
+  ),
   upgradeUnconfirmedCabling: p(
     null,
     "requires_review",
@@ -117,6 +126,7 @@ export const POLICY_DESCRIPTIONS: Record<keyof Policies, string> = {
   priceStaleDays: "Days before a supplier price is Stale",
   priceChangeReviewPct: "Supplier price change that needs review (%)",
   upgradeUnconfirmedCabling: "Upgrade with unconfirmed cabling: conservative assumption",
+  residentialHddDefaults: "Residential default HDD by camera count",
   defaultResidentialTier: "Default residential tier",
   tiers: "Residential tiers and brand families",
   commercialSiteVisitMandatory: "Commercial CCTV needs a site visit",

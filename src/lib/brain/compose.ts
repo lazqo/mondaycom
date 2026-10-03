@@ -47,8 +47,10 @@ export function composeEmail(packet: DecisionPacket, ctx: { firstName: string | 
   const cams = packet.cameras.filter((x) => x.product);
   if (cams.length && packet.nvr.selected) {
     const first = cams[0].product!;
-    const drive = st.installedTb ? ` and a ${st.installedTb} TB drive, which keeps about ${st.expectedRetentionDays} days of 24/7 recording` : "";
+    // Residential retention is an estimate: no number of days is promised to the customer.
+    const drive = st.installedTb ? (st.advisory ? ` and a ${st.installedTb} TB drive` : ` and a ${st.installedTb} TB drive, which keeps about ${st.expectedRetentionDays} days of 24/7 recording`) : "";
     lines.push(`I'd suggest ${first.resolutionMp} MP ${first.manufacturer} cameras with a ${packet.nvr.selected.channels}-channel recorder${drive}.`);
+    if (st.advisory && st.installedTb) lines.push("Recording duration varies depending on camera settings, activity and recording configuration.");
     const why = packet.cameras.find((x) => x.requirement.purpose === "entrance_identification")
       ? "At the front door I've allowed for a camera close enough to see faces clearly, not just movement."
       : null;

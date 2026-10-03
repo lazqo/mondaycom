@@ -17,7 +17,7 @@ import { cameraPlan, missingInformation, requirementsSummary } from "./requireme
 import { quoteReadiness } from "./readiness";
 import { salesRead } from "./sales";
 import { siteVisitDecision } from "./site-visit";
-import { requiredStorageGb, storagePlan } from "./storage";
+import { requiredStorageGb, residentialHddChoice, residentialStoragePlan, storagePlan } from "./storage";
 import type {
   Approval,
   CameraChoice,
@@ -65,7 +65,11 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
     : noDesign.length
       ? `Recording profile "${profile.name}" has no design bitrate for ${noDesign.join(", ")}: approved recording profile required before storage can be calculated.`
       : undefined;
-  const requiredGb = totalMbps != null ? requiredStorageGb(totalMbps, rec.target, policies).requiredGb : null;
+  // Residential: the drive is the Get Secure default for the camera count (or Chris's choice), and
+  // storage no longer drives the recorder choice. Commercial: sized from bitrate and retention.
+  const residential = input.propertyType !== "commercial";
+  const hddChoice = residential ? residentialHddChoice({ cameraCount: cameras.length, override: input.hddOverride, products: catalogue.products, policies }) : null;
+  const requiredGb = !residential && totalMbps != null ? requiredStorageGb(totalMbps, rec.target, policies).requiredGb : null;
 
   const sizing = channelsNeeded(cameras.length, input.propertyType, input.commercial?.futureCameras, policies);
   const small = policies.residentialSmallRecorderChannels.value;
@@ -75,6 +79,7 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
         cameras: chosen,
         channelsNeeded: sizing.channels,
         requiredGb,
+        residentialHdd: hddChoice ? { capacityTb: hddChoice.capacityTb, source: hddChoice.source } : null,
         requiredFeatures: input.analytics.filter((a) => a !== "audio"),
         audio: input.audioRequested && (input.propertyType !== "commercial" || !!input.commercial?.audioJustification),
         alarmIo: false,
@@ -88,7 +93,9 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
       })
     : { selected: null, evaluated: [], storageShortfall: false, notes: ["Cameras not all chosen, so no recorder was evaluated."] };
 
-  const storage = storagePlan({ totalMbps, retention: rec, nvr: nvrPick.selected, products: catalogue.products, policies, links, missingNote });
+  const storage = hddChoice
+    ? residentialStoragePlan({ choice: hddChoice, totalMbps, designs: perCamera, retention: rec, nvr: nvrPick.selected, products: catalogue.products, policies, links, missingNote })
+    : storagePlan({ totalMbps, retention: rec, nvr: nvrPick.selected, products: catalogue.products, policies, links, missingNote });
   const network = networkPlan(input);
   const upgrade = upgradePlan(input, cameras.length, policies);
   const labour = labourPlan({ enquiry: input, cameraCount: cameras.length, packages: catalogue.packages, policies, upgrade });
@@ -153,7 +160,8 @@ function chooseTier(input: EnquiryInput, policies: Policies, builds: Map<Tier, B
 function confidenceFor(b: Build, siteVisit: ReturnType<typeof siteVisitDecision>, policies: Policies, now: Date): Confidence {
   const reasons: string[] = [];
   let technical: Level = "high";
-  if (b.cameras.some((c) => !c.product) || !b.nvrPick.selected || b.storage.status === "below_minimum" || b.storage.status === "cannot_calculate") {
+  const storageUnsettled = b.storage.advisory ? !b.storage.drives : b.storage.status === "below_minimum" || b.storage.status === "cannot_calculate";
+  if (b.cameras.some((c) => !c.product) || !b.nvrPick.selected || storageUnsettled) {
     technical = "low";
     reasons.push("Technical: system incomplete (camera, recorder or storage not settled).");
   } else {
@@ -161,7 +169,7 @@ function confidenceFor(b: Build, siteVisit: ReturnType<typeof siteVisitDecision>
       technical = "medium";
       reasons.push("Technical: camera distances not known, pixel density not validated.");
     }
-    if (b.storage.status === "below_target" || b.nvrPick.storageShortfall) {
+    if ((!b.storage.advisory && b.storage.status === "below_target") || b.nvrPick.storageShortfall) {
       technical = "medium";
       reasons.push("Technical: retention below the target.");
     }
@@ -275,11 +283,19 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
   if (b.cameras.some((c) => c.pixelDensity == null)) assumptions.push("Camera positions at typical residential distances");
   if (b.network.method === "wired_extension") assumptions.push("A cable route exists from the recorder to the router");
   if (b.network.method === "direct_lan") assumptions.push("The recorder sits next to the router");
-  assumptions.push(`${b.mode === "continuous" ? "24/7 continuous" : "Motion"} recording, ${b.storage.retentionTargetDays} days target`);
+  assumptions.push(
+    b.storage.advisory
+      ? `${b.mode === "continuous" ? "24/7 continuous" : "Motion"} recording; recording duration varies depending on camera settings, activity and recording configuration`
+      : `${b.mode === "continuous" ? "24/7 continuous" : "Motion"} recording, ${b.storage.retentionTargetDays} days target`,
+  );
   exclusions.push("Monitor/TV unless listed", "Electrical work beyond standard installation", "Internet connection and data costs");
   if (b.network.method === "cellular_option") exclusions.push("4G/5G router and data plan (offered as an option)");
-  if (b.storage.status === "below_target") risks.push(`Only about ${b.storage.expectedRetentionDays} days of recording achievable against a ${b.storage.retentionTargetDays}-day target.`);
-  if (b.storage.status === "below_minimum") risks.push(`Only about ${b.storage.expectedRetentionDays} days achievable: below the ${policies.retentionMinimumDays.value}-day minimum.`);
+  if (b.storage.advisory) {
+    if (b.storage.warning) risks.push(`${b.storage.warning} (about ${b.storage.expectedRetentionDays} days with ${b.storage.installedTb} TB, against the ${b.storage.retentionTargetDays}-day reference target.)`);
+  } else {
+    if (b.storage.status === "below_target") risks.push(`Only about ${b.storage.expectedRetentionDays} days of recording achievable against a ${b.storage.retentionTargetDays}-day target.`);
+    if (b.storage.status === "below_minimum") risks.push(`Only about ${b.storage.expectedRetentionDays} days achievable: below the ${policies.retentionMinimumDays.value}-day minimum.`);
+  }
   if (b.installation.junctionBoxRecommended) risks.push(b.installation.junctionBoxReason!);
   for (const c of unverifiedChecks) risks.push(`Recorder ${c.name}: ${c.detail}.`);
   if (b.installation.doubleStorey) assumptions.push(...(b.labour.package?.assumptions ?? []).filter((a) => !assumptions.includes(a)));
@@ -319,7 +335,8 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
   if (b.labour.customInstallation) approvals.push({ key: "custom_installation", description: b.labour.notes[0] ?? "Custom installation: labour needs an explicit calculation." });
   if (b.upgrade) for (const d of b.upgrade.decisions) approvals.push({ key: "upgrade_decision", description: d });
   if (b.upgrade?.unresolved) unresolved.push(b.upgrade.unresolved);
-  if (b.storage.status === "below_target" || b.storage.status === "below_minimum") approvals.push({ key: "retention", description: "Accept or change the reduced retention before quoting." });
+  if (!b.storage.advisory && (b.storage.status === "below_target" || b.storage.status === "below_minimum")) approvals.push({ key: "retention", description: "Accept or change the reduced retention before quoting." });
+  if (b.storage.selection === "manual_required") approvals.push({ key: "hdd", description: "Choose the HDD on the assessment (no default for this camera count)." });
   if (b.network.customerDecisions.length) approvals.push({ key: "connectivity", description: "4G/5G option and its ongoing data cost to be offered as a separate decision." });
   if (interoperability.length && input.analytics.length) approvals.push({ key: "interoperability", description: "Verify cross-brand analytics." });
   if (privacy?.flags.length) approvals.push({ key: "audio", description: "Audio recording requested: review the purpose; it stays off unless approved." });

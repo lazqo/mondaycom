@@ -215,20 +215,23 @@ describe("Scenario A: 4-camera VIGI good/value residential system", () => {
     expect(e.checks.map((c) => c.name)).toEqual(expect.arrayContaining(["channels", "bandwidth", "max_bandwidth", "poe", "storage", "recording", "decoding", "features", "compatibility"]));
     expect(e.pass).toBe(true);
   });
-  it("sizes storage from the design bitrate in the recording profile", () => {
+  it("estimates retention from the design bitrate on the default drive (advisory)", () => {
     expect(p.recording.profile?.key).toBe("RES_STANDARD");
     expect(p.recording.designs.every((d) => d.designBitrateMbps != null && d.bitrateApproved)).toBe(true);
-    expect(p.recording.storage.status).toBe("meets_target");
+    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 2 });
     expect(p.recording.storage.totalMbps).toBe(p.recording.designBandwidthMbps);
-    expect(p.recording.storage.notes.join(" ")).toMatch(/design bitrate/);
+    expect(p.recording.storage.expectedRetentionDays).toBeGreaterThan(0);
+    expect(p.recording.storage.basis).toMatch(/design bitrate/);
   });
   it("without design bitrates it still picks the system, but says an approved recording profile is required", () => {
     const q = run(house({ requestedTier: "good" }));
     expect(q.nvr.selected?.family).toBe("TP-Link VIGI");
     expect(q.recording.storage.status).toBe("cannot_calculate");
+    expect(q.recording.storage.installedTb).toBe(2); // the default drive does not depend on the bitrate
+    expect(q.recording.storage.expectedRetentionDays).toBeNull();
     expect(q.recording.storage.notes.join(" ")).toMatch(/approved recording profile required/);
     expect(q.approvals.find((a) => a.key === "recording_profile")?.description).toMatch(/Approved recording profile required/);
-    expect(q.costing.unpriced.join(" ")).toMatch(/Hard drive: none selected/);
+    expect(q.readiness.items.find((i) => i.key === "recording_profile")?.ok).toBe(false);
   });
   it("is honest about what is not priced yet", () => {
     expect(p.costing.complete).toBe(false);
@@ -272,7 +275,8 @@ describe("Scenario B: 4-camera HiLook better residential system", () => {
     expect(check(p, "features")).toMatchObject({ pass: true });
     expect(check(p, "compatibility")).toMatchObject({ pass: true, unverified: false });
     expect(check(p, "compatibility").detail).toMatch(/same family/);
-    expect(p.recording.storage.status).toBe("meets_target");
+    expect(check(p, "storage").detail).toMatch(/takes the default 2 TB drive/);
+    expect(p.recording.storage.installedTb).toBe(2);
   });
   it("a product-specific design bitrate beats the family rule, which beats the resolution band", () => {
     const cam = referenceProducts().find((x) => x.model === "IPC-T361H-MU(2.8mm)")!;
@@ -505,11 +509,13 @@ describe("installation packages (exact camera counts) and materials", () => {
 });
 
 describe("hard drives", () => {
-  it("chooses capacity from the storage calculation, not the camera count", () => {
+  it("residential: the default capacity comes from the camera count, not the retention asked for", () => {
     const week = run(house({ requestedTier: "good", retentionDays: 7 }), designed());
     const month = run(house({ requestedTier: "good", retentionDays: 30 }), designed());
     expect(week.cameras.length).toBe(month.cameras.length);
-    expect(week.recording.storage.drives!.product.capacityTb).toBeLessThan(month.recording.storage.drives!.product.capacityTb);
+    expect(week.recording.storage.drives!.product.capacityTb).toBe(2);
+    expect(month.recording.storage.drives!.product.capacityTb).toBe(2);
+    expect(week.recording.storage.expectedRetentionDays).toBe(month.recording.storage.expectedRetentionDays);
   });
 });
 
@@ -529,8 +535,7 @@ describe("first genuinely priced 4-camera residential quote (all inputs are TEST
   it("selects the real camera, recorder and calculated drive, with accessories and network", () => {
     expect(p.cameras.every((c) => c.product?.family === "TP-Link VIGI")).toBe(true);
     expect(p.nvr.selected?.family).toBe("TP-Link VIGI");
-    expect(p.recording.storage.status).toBe("meets_target");
-    expect(p.recording.storage.drives).toBeTruthy();
+    expect(p.recording.storage.drives?.product.capacityTb).toBe(2);
     expect(p.installation.accessories?.length).toBeGreaterThan(0);
     expect(p.network.method).toBe("direct_lan");
     expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
@@ -581,11 +586,16 @@ describe("first genuinely priced 4-camera residential quote (all inputs are TEST
   });
   const missing: [string, () => Catalogue, RegExp][] = [
     ["a camera price", () => designed((l) => tradePrices(l).map((x) => (x.family === "TP-Link VIGI" && x.category === "camera" ? ({ ...x, offers: [] } as Product) : x)), { packages: filled("RES_CCTV_SINGLE_4")(seededPackages()) }), /no approved price/],
-    ["the design bitrate", () => complete({ recordingProfiles: [profile()] }), /Hard drive: none selected/],
     ["the labour hours", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { estimatedHours: null })(seededPackages()) }), /labour hours not set/],
     ["the material cost", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { materialCostExGst: null })(seededPackages()) }), /standard material cost not set/],
     ["the sell allowance", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { allowanceExGst: null })(seededPackages()) }), /customer sell allowance not set/],
   ];
+  it("without the design bitrate it is priced but not ready: bandwidth and retention cannot be checked", () => {
+    const q = run(house({ requestedTier: "good" }), complete({ recordingProfiles: [profile()] }));
+    expect(q.recording.storage.installedTb).toBe(2);
+    expect(q.readiness.ready).toBe(false);
+    expect(q.readiness.items.find((i) => i.key === "recording_profile")?.ok).toBe(false);
+  });
   for (const [what, cat, msg] of missing) {
     it(`is Not fully priced, and says why, without ${what}`, () => {
       const q = run(house({ requestedTier: "good" }), cat());

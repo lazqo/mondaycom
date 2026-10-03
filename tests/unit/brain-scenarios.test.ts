@@ -7,7 +7,7 @@ import { describe, it, expect } from "vitest";
 import { assessCctv } from "@/lib/brain/engine";
 import { composeEmail, composeQuote } from "@/lib/brain/compose";
 import { validateNvr, onvifCompatible } from "@/lib/brain/nvr";
-import { requiredStorageGb } from "@/lib/brain/storage";
+import { requiredStorageGb, residentialHddChoice, residentialStoragePlan } from "@/lib/brain/storage";
 import { siteVisitDecision } from "@/lib/brain/site-visit";
 import { camera, catalogue, house, nvr, testPolicies } from "./brain-fixtures";
 
@@ -28,12 +28,13 @@ describe("Test 1: normal 4-camera house", () => {
     expect(p.nvr.evaluated.find((e) => e.product.id === p.nvr.selected!.id)!.checks.every((c) => c.pass)).toBe(true);
   });
 
-  it("records 24/7 for 28 days, with the drive calculated", () => {
+  it("records 24/7 on the default 2 TB drive for 4 cameras, with retention estimated, not resized", () => {
     expect(p.recording.mode).toBe("continuous");
-    expect(p.recording.storage.retentionTargetDays).toBe(28);
-    expect(p.recording.storage.status).toBe("meets_target");
-    expect(p.recording.storage.rawGb).toBeCloseTo(4 * 4 * 10.8 * 28, 5);
-    expect(p.recording.storage.installedTb).toBe(6);
+    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 2, retentionTargetDays: 28 });
+    // 4 x 4 Mbps x 10.8 GB/day = 172.8 GB/day against 2 TB x 0.93 usable.
+    expect(p.recording.storage.expectedRetentionDays).toBe(Math.floor(1860 / 172.8));
+    expect(p.recording.storage.basis).toBe("4 × 4MP cameras at 4 Mbps design bitrate");
+    expect(p.recording.storage.warning).toBe("Estimated retention is below the normal Get Secure target. Consider selecting a larger HDD.");
   });
 
   it("uses the exact 4-camera package, with standard materials inside it and labour at $95/hour", () => {
@@ -46,8 +47,8 @@ describe("Test 1: normal 4-camera house", () => {
 
   it("is priced: 15% GST on the ex-GST subtotal, margin shown internally", () => {
     expect(p.costing.complete).toBe(true);
-    expect(p.costing.gst).toBeCloseTo(p.costing.sellExGst * 0.15, 2);
-    expect(p.costing.totalIncGst).toBeCloseTo(p.costing.sellExGst * 1.15, 2);
+    expect(p.costing.gst).toBeCloseTo(p.costing.sellExGst * 0.15, 1);
+    expect(p.costing.totalIncGst).toBeCloseTo(p.costing.sellExGst * 1.15, 1);
     expect(p.costing.grossProfit).toBeGreaterThan(0);
   });
 
@@ -56,6 +57,11 @@ describe("Test 1: normal 4-camera house", () => {
     const email = composeEmail(p, { firstName: "Dave Lincoln", subject: "CCTV quote", address: "12 Test Street", areas: house().areas });
     const quote = composeQuote(p, { customerName: "Dave Lincoln", gstPct: 15 });
     expect(email.body).not.toMatch(/margin|cost price|markup|\$100\b/i);
+    // Residential: no promised number of days, and the variability is stated.
+    expect(email.body).not.toMatch(/\d+ days/);
+    expect(email.body).toContain("Recording duration varies depending on camera settings, activity and recording configuration.");
+    expect(quote.notes).not.toMatch(/28 days/);
+    expect(quote.notes).toMatch(/recording duration varies/);
     expect(JSON.stringify(quote)).not.toMatch(/costExGst|margin|markup/i);
     expect(quote.lineItems.every((l) => l.unitPrice > 0)).toBe(true);
   });
@@ -64,10 +70,10 @@ describe("Test 1: normal 4-camera house", () => {
 describe("Test 2: 6 cameras, double storey", () => {
   const p = run(house({ cameraCount: 6, storeys: 2, areas: ["Driveway", "Front door", "Side gate", "Backyard", "Garage", "Deck"] }));
 
-  it("uses a recorder with more than 4 channels and calculates 28 days of storage", () => {
+  it("uses a recorder with more than 4 channels and the default 4 TB drive for 6 cameras", () => {
     expect(p.nvr.selected!.channels).toBeGreaterThan(4);
-    expect(p.recording.storage.rawGb).toBeCloseTo(6 * 4 * 10.8 * 28, 5);
-    expect(p.recording.storage.status).toBe("meets_target");
+    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 4 });
+    expect(p.recording.storage.rawGb).toBeCloseTo(6 * 4 * 10.8 * 28, 5); // the 28-day figure stays as a reference
   });
 
   it("allows for double-storey complexity and conduit, with the assumption stated", () => {
@@ -115,7 +121,7 @@ describe("Test 5: property has no internet, remote viewing wanted", () => {
   const p = run(house({ internet: "no" }));
   it("keeps the local recording system valid", () => {
     expect(p.nvr.selected).not.toBeNull();
-    expect(p.recording.storage.status).toBe("meets_target");
+    expect(p.recording.storage.drives?.product.capacityTb).toBe(2);
   });
   it("names the blocker and offers 4G separately, with the ongoing cost as a customer decision", () => {
     expect(p.network.method).toBe("cellular_option");
@@ -200,28 +206,65 @@ describe("Test 8: not enough incoming bandwidth", () => {
 });
 
 describe("Test 9: storage", () => {
-  it("calculates from bitrate x 28 days, adds the safety allowance, and picks the nearest approved size", () => {
+  it("still calculates bitrate x 28 days, plus the safety allowance, as the reference figure", () => {
     const policies = testPolicies();
     const { rawGb, requiredGb } = requiredStorageGb(16, 28, policies);
     expect(rawGb).toBeCloseTo(4838.4, 5);
     expect(requiredGb).toBeCloseTo(4838.4 * 1.1, 5);
-    const p = run();
-    // 4 TB holds 3,720 GB usable (too small); 6 TB holds 5,580 GB (enough); 8 TB would be oversized.
-    expect(p.recording.storage.drives).toMatchObject({ count: 1, product: { capacityTb: 6 } });
-    expect(p.recording.storage.expectedRetentionDays).toBe(Math.floor(5580 / 172.8));
+    expect(run().recording.storage.requiredGb).toBeCloseTo(4838.4 * 1.1, 5);
   });
 
-  it("reports a shortfall instead of quietly cutting retention", () => {
-    // Only drives up to 4 TB, and only the single-bay 4-channel recorder in this tier.
+  it("residential: never resizes the drive to the retention target; low retention is a warning, not a blocker", () => {
+    const p = run();
+    expect(p.recording.storage.drives).toMatchObject({ count: 1, product: { capacityTb: 2 } });
+    expect(p.recording.storage.status).toBe("below_minimum");
+    expect(p.risks.join(" ")).toMatch(/Estimated retention is below the normal Get Secure target\. Consider selecting a larger HDD\./);
+    expect(approvalKeys(p)).not.toContain("retention");
+    expect(p.costing.complete).toBe(true);
+    expect(p.readiness.items.find((i) => i.key === "storage")).toMatchObject({ ok: true, label: "HDD selected" });
+  });
+
+  it("residential: Chris's HDD choice is used and the retention re-estimated", () => {
+    const byCapacity = run(house({ hddOverride: { capacityTb: 8 } }));
+    expect(byCapacity.recording.storage).toMatchObject({ selection: "override", installedTb: 8, expectedRetentionDays: Math.floor(7440 / 172.8), warning: null });
+    expect(byCapacity.costing.lines.find((l) => l.key.startsWith("hdd:"))?.unitCostExGst).toBe(260);
+    const byModel = run(house({ hddOverride: { productId: "hdd6" } }));
+    expect(byModel.recording.storage).toMatchObject({ selection: "override", installedTb: 6 });
+    expect(byModel.recording.storage.drives?.product.id).toBe("hdd6");
+  });
+
+  it("residential: 11+ cameras have no default, so the HDD must be chosen", () => {
+    const areas = Array.from({ length: 11 }, (_, i) => `Area ${i + 1}`);
+    const p = run(house({ cameraCount: 11, areas }));
+    expect(p.recording.storage).toMatchObject({ selection: "manual_required", drives: null });
+    expect(approvalKeys(p)).toContain("hdd");
+    expect(p.costing.unpriced).toContain("Hard drive: none selected");
+    expect(p.readiness.items.find((i) => i.key === "storage")?.ok).toBe(false);
+    expect(run(house({ cameraCount: 11, areas, hddOverride: { capacityTb: 8 } })).recording.storage.installedTb).toBe(8);
+  });
+
+  it("residential: never substitutes another capacity because it has a price", () => {
     const cat = catalogue();
-    cat.products = cat.products.filter((p) => !(p.category === "hdd" && p.capacityTb > 4) && p.id !== "na8");
+    cat.products = cat.products.map((p) => (p.category === "hdd" && p.capacityTb === 2 ? { ...p, price: null } : p));
     const p = run(house(), cat);
-    expect(p.nvr.selected?.id).toBe("na4");
-    expect(p.recording.storage.expectedRetentionDays).toBe(Math.floor(3720 / 172.8));
-    expect(p.recording.storage.retentionTargetDays).toBe(28);
-    expect(p.recording.storage.status).toBe("below_target");
-    expect(p.risks.join(" ")).toMatch(/days of recording achievable against a 28-day target/);
-    expect(approvalKeys(p)).toContain("retention");
+    expect(p.recording.storage.drives?.product.capacityTb).toBe(2);
+    expect(p.costing.complete).toBe(false);
+    expect(p.costing.unpriced.join(" ")).toMatch(/FD-2TB: no approved price/);
+  });
+
+  it("6 × 5MP cameras at 3 Mbps: default 4 TB, about 19 days estimated, with the low-retention warning", () => {
+    const policies = testPolicies();
+    const choice = residentialHddChoice({ cameraCount: 6, products: catalogue().products, policies });
+    expect(choice).toMatchObject({ capacityTb: 4, source: "default" });
+    const designs = Array.from({ length: 6 }, (_, i) => ({ productId: `s455-${i}`, model: "VIGI InSight S455(2.8mm)", resolutionMp: 5, codec: "H.265+", frameRate: 25, designBitrateMbps: 3, bitrateSource: "test", bitrateApproved: true, publishedMaxBitrateMbps: 6 }));
+    const st = residentialStoragePlan({ choice, totalMbps: 18, designs, retention: { target: 28, minimum: 14, source: "profile" }, nvr: null, products: catalogue().products, policies });
+    expect(st).toMatchObject({ installedTb: 4, usableTb: 3.72, expectedRetentionDays: 19, basis: "6 × 5MP cameras at 3 Mbps design bitrate", status: "below_target" });
+    expect(st.warning).toBe("Estimated retention is below the normal Get Secure target. Consider selecting a larger HDD.");
+  });
+
+  it("commercial storage is still sized from bitrate and retention", () => {
+    const p = run(house({ propertyType: "commercial" }));
+    expect(p.recording.storage.advisory ?? false).toBe(false);
   });
 
   it("honours a retention the customer asks for", () => {

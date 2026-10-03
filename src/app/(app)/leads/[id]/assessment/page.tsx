@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { leads, recordingProfiles } from "@/db/schema";
+import { leads, products, recordingProfiles } from "@/db/schema";
 import { requireOffice } from "@/lib/auth";
 import { enquiryFromLead, latestAssessment } from "@/lib/brain/store";
 import type { DecisionPacket, EnquiryInput } from "@/lib/brain/types";
@@ -18,7 +18,20 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const lead = await db.query.leads.findFirst({ where: eq(leads.id, id), columns: { id: true, name: true } });
   if (!lead) notFound();
-  const [last, fromLead, profileRows] = await Promise.all([latestAssessment(id), enquiryFromLead(id), db.select().from(recordingProfiles)]);
+  const [last, fromLead, profileRows, driveRows] = await Promise.all([
+    latestAssessment(id),
+    enquiryFromLead(id),
+    db.select().from(recordingProfiles),
+    db
+      .select({ id: products.id, manufacturer: products.manufacturer, model: products.model, specs: products.specs })
+      .from(products)
+      .where(and(eq(products.category, "hdd"), ne(products.status, "deprecated")))
+      .orderBy(asc(products.manufacturer), asc(products.model)),
+  ]);
+  const drives = driveRows
+    .map((d) => ({ id: d.id, label: `${d.manufacturer} ${d.model}`, capacityTb: Number((d.specs as { capacityTb?: number }).capacityTb ?? 0) }))
+    .filter((d) => d.capacityTb > 0)
+    .sort((a, b) => a.capacityTb - b.capacityTb || a.label.localeCompare(b.label));
   const profiles = profileRows
     .filter((p) => p.status !== "deprecated")
     .map((p) => ({ id: p.id, name: p.name, propertyType: p.propertyType, isDefault: p.isDefault, designed: p.rules.some((r) => r.designBitrateMbps != null) }));
@@ -37,7 +50,7 @@ export default async function AssessmentPage({ params }: { params: Promise<{ id:
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
         <div className="xl:col-span-2">
-          <AssessmentForm leadId={id} initial={initial} assessmentId={last?.id ?? null} canApprove={!!user.canApprove} profiles={profiles} />
+          <AssessmentForm leadId={id} initial={initial} assessmentId={last?.id ?? null} canApprove={!!user.canApprove} profiles={profiles} drives={drives} />
         </div>
         <div className="xl:col-span-3">
           {last ? (

@@ -59,6 +59,10 @@ const enquiry = z.object({
   message: z.string().max(20000).nullable(),
   requestedTier: z.enum(["good", "better", "best", "premium"]).nullable().optional(),
   recordingProfileId: z.string().uuid().nullable().optional(),
+  hddOverride: z
+    .object({ capacityTb: z.coerce.number().positive().max(64).nullable().optional(), productId: z.string().uuid().nullable().optional() })
+    .nullable()
+    .optional(),
   existing: z
     .object({
       systemType: z.enum(["ip_poe", "analogue_coax", "mixed", "unknown"]),

@@ -275,10 +275,16 @@ describe("IT Plus connector", () => {
       .set({ estimatedHours: "6.00", labourRate: "95.00", materialCostExGst: "80.00", complexityAllowanceExGst: "0.00", allowanceExGst: "790.00", status: "getsecure_approved" })
       .where(eq(installationPackages.key, "RES_CCTV_SINGLE_4"));
 
-    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId, customerName: "Mere Tane", mountingSurface: "brick" }), staff);
+    // 4 cameras default to a 2 TB drive, which has no IT Plus price here: not fully priced, and never swapped for the priced 4 TB.
+    const d = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId, customerName: "Mere Tane", mountingSurface: "brick" }), staff);
+    expect(d.packet.recording.storage.installedTb).toBe(2);
+    expect(d.packet.costing.complete).toBe(false);
+    // Chris chooses the 4 TB WD43PURZ on the assessment.
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId, customerName: "Mere Tane", mountingSurface: "brick", hddOverride: { productId: ids.hdd } }), staff);
     const pk = a.packet;
     expect(pk.cameras.every((c) => c.product?.id === ids.camera)).toBe(true);
     expect(pk.nvr.selected?.id).toBe(ids.nvr);
+    expect(pk.recording.storage).toMatchObject({ selection: "override", installedTb: 4 });
     expect(pk.recording.storage.drives?.product.id).toBe(ids.hdd);
     // Brick walls: the documented, IT Plus-priced junction box is recommended (not charged until Chris confirms).
     const jb = pk.installation.materials.find((m) => m.key === `junction_box:${ids.jb}`)!;

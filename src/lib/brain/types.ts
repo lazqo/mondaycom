@@ -162,6 +162,8 @@ export type EnquiryInput = {
   recordingProfileId?: string | null;
   /** The existing CCTV system, when the job is an upgrade. */
   existing?: ExistingSystem | null;
+  /** Chris's HDD choice for this assessment (residential): a capacity, or an exact drive model. */
+  hddOverride?: { capacityTb?: number | null; productId?: string | null } | null;
 };
 
 // ---------- catalogue ----------
@@ -443,6 +445,8 @@ export type Policies = {
   priceChangeReviewPct: PolicyValue<number>;
   /** Upgrade with existing cabling not confirmed: null = installation stays unresolved; "new_install" = price the new-install package (conservative). */
   upgradeUnconfirmedCabling: PolicyValue<"new_install" | null>;
+  /** Residential default HDD by camera count; counts outside every band need a manual choice. */
+  residentialHddDefaults: PolicyValue<{ minCameras: number; maxCameras: number; capacityTb: number }[]>;
   defaultResidentialTier: PolicyValue<Tier | null>;
   tiers: PolicyValue<Record<Tier, { targetMp: number | null; brands: string[]; description?: string; ecosystemOnly?: boolean }>>;
   commercialSiteVisitMandatory: PolicyValue<boolean>;
@@ -489,6 +493,14 @@ export type StorageResult = {
   drives: { product: HddProduct; count: number } | null;
   installedTb: number | null;
   expectedRetentionDays: number | null;
+  /** Residential: the drive comes from Get Secure's default for the camera count or Chris's choice, never resized to a retention target. */
+  selection?: "default" | "override" | "manual_required" | "sized";
+  /** Residential: the retention figure is an estimate for Chris, not a requirement. */
+  advisory?: boolean;
+  usableTb?: number | null;
+  /** e.g. "6 × 5MP cameras at 3 Mbps design bitrate". */
+  basis?: string | null;
+  warning?: string | null;
   status: "meets_target" | "below_target" | "below_minimum" | "cannot_calculate";
   notes: string[];
 };

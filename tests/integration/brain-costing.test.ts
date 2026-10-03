@@ -149,8 +149,7 @@ describe("first genuinely priced 4-camera residential quote", () => {
     const p = a.packet;
     expect(p.cameras.every((c) => c.product?.family === "TP-Link VIGI")).toBe(true);
     expect(p.nvr.selected?.family).toBe("TP-Link VIGI");
-    expect(p.recording.storage.status).toBe("meets_target");
-    expect(p.recording.storage.drives).toBeTruthy();
+    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 2 }); // 4 cameras: default 2 TB
     expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
     expect(p.costing.complete).toBe(true);
     expect(p.costing.refreshRequired).toEqual([]);

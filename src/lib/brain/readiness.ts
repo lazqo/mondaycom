@@ -61,16 +61,39 @@ export function quoteReadiness(x: {
     fix: "Settings → Business Brain → Recording profiles: codec, frame rate, a design bitrate rule covering these cameras, then approve.",
   });
 
-  items.push({
-    key: "storage",
-    label: "Storage sized from the design bitrate and meeting the retention target",
-    ok: x.storage.status === "meets_target" && !!x.storage.drives,
-    detail:
-      x.storage.status === "cannot_calculate"
-        ? "Cannot be sized until the recording profile has approved design bitrates."
-        : `${x.storage.requiredGb != null ? `needs ${(x.storage.requiredGb / 1000).toFixed(2)} TB` : ""}${x.storage.drives ? `; selected ${x.storage.drives.count} × ${name(x.storage.drives.product)}` : "; no drive with an approved price is large enough"}${x.storage.expectedRetentionDays != null ? ` (about ${x.storage.expectedRetentionDays} days)` : ""}; ${x.storage.status.replace(/_/g, " ")}`,
-    fix: x.storage.drives ? null : "Price and approve a surveillance drive of the needed capacity (Supplier pricing → Refresh one product).",
-  });
+  const st = x.storage;
+  if (st.advisory) {
+    // Residential: a drive must be selected (default or Chris's); retention is advice, not a blocker.
+    const d = st.drives?.product;
+    items.push({
+      key: "storage",
+      label: "HDD selected",
+      ok: !!d,
+      detail: d
+        ? [
+            `${st.selection === "override" ? "HDD chosen by Chris" : "Default HDD"}: ${st.installedTb} TB (${name(d)})`,
+            st.usableTb != null ? `estimated usable ${st.usableTb} TB` : null,
+            st.expectedRetentionDays != null ? `estimated retention about ${st.expectedRetentionDays} days` : "retention not estimated (no design bitrate)",
+            st.basis ? `based on ${st.basis}` : null,
+            st.warning,
+          ]
+            .filter(Boolean)
+            .join("; ")
+        : st.notes.join(" "),
+      fix: d ? null : "Choose the HDD on the assessment (HDD), then make sure that drive has an approved supplier price.",
+    });
+  } else {
+    items.push({
+      key: "storage",
+      label: "Storage sized from the design bitrate and meeting the retention target",
+      ok: st.status === "meets_target" && !!st.drives,
+      detail:
+        st.status === "cannot_calculate"
+          ? "Cannot be sized until the recording profile has approved design bitrates."
+          : `${st.requiredGb != null ? `needs ${(st.requiredGb / 1000).toFixed(2)} TB` : ""}${st.drives ? `; selected ${st.drives.count} × ${name(st.drives.product)}` : "; no drive with an approved price is large enough"}${st.expectedRetentionDays != null ? ` (about ${st.expectedRetentionDays} days)` : ""}; ${st.status.replace(/_/g, " ")}`,
+      fix: st.drives ? null : "Price and approve a surveillance drive of the needed capacity (Supplier pricing → Refresh one product).",
+    });
+  }
 
   if (x.upgrade) {
     const u = x.upgrade;

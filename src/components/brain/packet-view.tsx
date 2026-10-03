@@ -321,7 +321,7 @@ export function PacketView({
       <Section title="Recording and storage" testid="packet-storage">
         <p>
           {p.recording.mode === "continuous" ? "24/7 continuous" : "Motion"}{" "}
-          recording, target {p.recording.storage.retentionTargetDays} days (
+          recording, {p.recording.storage.advisory ? "reference target" : "target"} {p.recording.storage.retentionTargetDays} days (
           {p.recording.storage.retentionSource === "customer"
             ? "customer's request"
             : "Get Secure standard"}
@@ -370,35 +370,59 @@ export function PacketView({
             {p.recording.maxPossibleBandwidthMbps != null ? `${p.recording.maxPossibleBandwidthMbps.toFixed(1)} Mbps` : "unknown"}
           </p>
         ) : null}
+        {p.recording.storage.advisory ? (
+          <div className="space-y-0.5 rounded border border-gray-100 p-2 text-xs" data-testid="packet-hdd">
+            <p>
+              <span className="text-gray-500">{p.recording.storage.selection === "override" ? "HDD chosen by Chris" : p.recording.storage.selection === "manual_required" ? "HDD" : "Default HDD"}: </span>
+              <strong>
+                {p.recording.storage.drives
+                  ? `${p.recording.storage.installedTb} TB (${p.recording.storage.drives.product.manufacturer} ${p.recording.storage.drives.product.model})`
+                  : "not selected — choose it on the assessment"}
+              </strong>
+            </p>
+            {p.recording.storage.usableTb != null ? <p><span className="text-gray-500">Estimated usable capacity: </span>{p.recording.storage.usableTb} TB</p> : null}
+            <p>
+              <span className="text-gray-500">Estimated recording retention: </span>
+              {p.recording.storage.expectedRetentionDays != null ? `approximately ${p.recording.storage.expectedRetentionDays} days` : "not estimated (no design bitrate)"}
+              <span className="text-gray-500"> · reference target {p.recording.storage.retentionTargetDays} days (advisory)</span>
+            </p>
+            {p.recording.storage.basis ? <p><span className="text-gray-500">Based on: </span>{p.recording.storage.basis}</p> : null}
+            {p.recording.storage.warning ? <p className="font-medium text-amber-700" data-testid="packet-retention-warning">{p.recording.storage.warning}</p> : null}
+            <List items={p.recording.storage.notes} />
+          </div>
+        ) : (
+          <>
         {p.recording.storage.rawGb != null ? (
-          <p className="text-xs text-gray-600" data-testid="packet-storage-calc">
-            Raw storage {(p.recording.storage.rawGb / 1000).toFixed(2)} TB for {p.recording.storage.retentionTargetDays} days · headroom {p.recording.storage.headroomPct}% · required{" "}
-            {p.recording.storage.requiredGb != null ? `${(p.recording.storage.requiredGb / 1000).toFixed(2)} TB` : "—"}
-            {p.recording.storage.installedTb != null ? ` · installed ${p.recording.storage.installedTb} TB` : ""}
+            <p className="text-xs text-gray-600" data-testid="packet-storage-calc">
+              Raw storage {(p.recording.storage.rawGb / 1000).toFixed(2)} TB for {p.recording.storage.retentionTargetDays} days · headroom {p.recording.storage.headroomPct}% · required{" "}
+              {p.recording.storage.requiredGb != null ? `${(p.recording.storage.requiredGb / 1000).toFixed(2)} TB` : "—"}
+              {p.recording.storage.installedTb != null ? ` · installed ${p.recording.storage.installedTb} TB` : ""}
+            </p>
+          ) : null}
+          <List items={p.recording.storage.notes} />
+          <p>
+            Recommended:{" "}
+            <strong>
+              {p.recording.storage.drives
+                ? `${p.recording.storage.drives.count} × ${p.recording.storage.drives.product.capacityTb} TB (${p.recording.storage.drives.product.model})`
+                : "—"}
+            </strong>
+            {p.recording.storage.expectedRetentionDays != null
+              ? ` · about ${p.recording.storage.expectedRetentionDays} days`
+              : ""}{" "}
+            ·{" "}
+            <Badge
+              className={
+                p.recording.storage.status === "meets_target"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-amber-100 text-amber-800"
+              }
+            >
+              {label(p.recording.storage.status)}
+            </Badge>
           </p>
-        ) : null}
-        <List items={p.recording.storage.notes} />
-        <p>
-          Recommended:{" "}
-          <strong>
-            {p.recording.storage.drives
-              ? `${p.recording.storage.drives.count} × ${p.recording.storage.drives.product.capacityTb} TB (${p.recording.storage.drives.product.model})`
-              : "—"}
-          </strong>
-          {p.recording.storage.expectedRetentionDays != null
-            ? ` · about ${p.recording.storage.expectedRetentionDays} days`
-            : ""}{" "}
-          ·{" "}
-          <Badge
-            className={
-              p.recording.storage.status === "meets_target"
-                ? "bg-green-100 text-green-800"
-                : "bg-amber-100 text-amber-800"
-            }
-          >
-            {label(p.recording.storage.status)}
-          </Badge>
-        </p>
+          </>
+        )}
       </Section>
 
       <Section title="Network">

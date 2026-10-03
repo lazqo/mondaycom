@@ -95,11 +95,14 @@ test.describe("CCTV Business Brain", () => {
     await page.getByLabel("Storeys", { exact: true }).fill("1");
     await page.getByLabel("Areas to cover (one per line)").fill("Front door\nDriveway\nBack yard\nSide gate");
     await page.getByLabel("Recording profile").selectOption({ label: PROFILE });
+    // The fixture catalogue has only a 4 TB drive; 4 cameras default to 2 TB, so Chris picks 4 TB.
+    await page.getByLabel("HDD", { exact: true }).selectOption("cap:4");
     await page.getByTestId("run-assessment").click();
     const packet = page.getByTestId("decision-packet");
     await expect(packet).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("packet-nvr")).toContainText("FX-NVR-4");
-    await expect(page.getByTestId("packet-storage")).toContainText(/days/);
+    await expect(page.getByTestId("packet-hdd")).toContainText("HDD chosen by Chris: 4 TB");
+    await expect(page.getByTestId("packet-hdd")).toContainText(/Estimated recording retention: approximately \d+ days/);
     await expect(page.getByTestId("packet-designs")).toContainText("2 Mbps");
     await expect(page.getByTestId("packet-labour")).toContainText("RES_CCTV_SINGLE_4");
     await expect(page.getByTestId("packet-total")).toContainText(/inc GST/); // fully priced

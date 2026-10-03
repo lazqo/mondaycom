@@ -21,6 +21,8 @@ export type NvrContext = {
   cameras: CameraProduct[];
   channelsNeeded: number;
   requiredGb: number | null;
+  /** Residential: the drive capacity chosen by rule or by Chris, which the recorder must take. */
+  residentialHdd?: { capacityTb: number | null; source: string } | null;
   requiredFeatures: string[];
   audio: boolean;
   alarmIo: boolean;
@@ -99,7 +101,15 @@ export function validateNvr(nvr: NvrProduct, ctx: NvrContext): NvrEvaluation {
     checks.push({ name: "poe", pass: true, detail: "Recorder has no PoE ports: an external PoE switch powers the cameras" });
   }
 
-  if (ctx.requiredGb == null) {
+  if (ctx.residentialHdd) {
+    const tb = ctx.residentialHdd.capacityTb;
+    const who = ctx.residentialHdd.source === "override" ? "chosen" : "default";
+    checks.push(
+      tb == null
+        ? { name: "storage", pass: true, unverified: true, detail: "HDD to be chosen manually (no default for this camera count)" }
+        : { name: "storage", pass: nvr.hddBays >= 1 && nvr.maxHddTb >= tb, detail: nvr.maxHddTb >= tb ? `takes the ${who} ${tb} TB drive (up to ${nvr.maxHddTb} TB per drive)` : `takes drives up to ${nvr.maxHddTb} TB, not the ${who} ${tb} TB` },
+    );
+  } else if (ctx.requiredGb == null) {
     checks.push({ name: "storage", pass: true, unverified: true, detail: "Storage not sized: design bitrates from an approved recording profile are needed" });
   } else {
     const drives = chooseDrives(ctx.requiredGb, nvr, ctx.products, ctx.policies, ctx.links);

@@ -640,6 +640,35 @@ profiles:
 They were filled in only because no bitrates had been entered yet; values already in the CRM are
 never overwritten. Drive capacity is calculated from these bitrates, the retention and the headroom.
 
+### Residential HDD rule
+
+For residential CCTV (new installations and upgrades), the drive is chosen by camera count and is
+**not** resized to hit a retention target:
+
+| Cameras | Default HDD |
+|---|---|
+| 2–4 | 2 TB |
+| 5–10 | 4 TB |
+| 1, or 11+ | choose it on the assessment (no default) |
+
+The rule is "Residential default HDD by camera count" under Rules.
+- **HDD override:** on the assessment, the **HDD** field lets Chris pick a capacity (2/4/6/8 TB …)
+  or a specific drive. The quote uses that drive and the retention is re-estimated.
+- **Bitrates:** the Residential Standard bitrates still validate recorder bandwidth. They also give
+  the estimated retention, shown as "Default HDD", "Estimated usable capacity" and "Estimated
+  recording retention: approximately N days", based on e.g. 6 × 5MP cameras at 3 Mbps.
+- **Low retention:** below the 28-day reference target, the assessment warns "Estimated retention is
+  below the normal Get Secure target. Consider selecting a larger HDD." The drive is not changed,
+  and the warning does not block the quote.
+- **Pricing:** the chosen capacity needs an approved, current supplier price. If the default 2 TB or
+  4 TB drive has none, the quote is Not fully priced and the checklist says to refresh/approve that
+  drive. A larger drive is never substituted because it happens to have a price.
+- **Customer wording:** emails and quotes don't promise a number of days. They say "Recording
+  duration varies depending on camera settings, activity and recording configuration." Chris can
+  edit a draft if he has chosen storage to meet a stated retention.
+- **Commercial CCTV:** unchanged. Storage is site-specific and still sized from bitrate and
+  retention.
+
 ### Later: Alarm Brain (notes only, not built)
 
 - AAP / Arrowhead is Get Secure's default wired alarm upgrade/replacement path where existing

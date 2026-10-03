@@ -46,12 +46,15 @@ export function AssessmentForm({
   assessmentId,
   canApprove,
   profiles = [],
+  drives = [],
 }: {
   leadId: string;
   initial: EnquiryInput;
   assessmentId: string | null;
   canApprove: boolean;
   profiles?: { id: string; name: string; propertyType: string; isDefault: boolean; designed: boolean }[];
+  /** Surveillance drives in the catalogue, for Chris's HDD choice. */
+  drives?: { id: string; label: string; capacityTb: number }[];
 }) {
   const router = useRouter();
   const [v, setV] = React.useState<EnquiryInput>(initial);
@@ -181,6 +184,38 @@ export function AssessmentForm({
               ))}
             </Select>
           </Field>
+          {!commercial ? (
+            <Field label="HDD" htmlFor="a-hdd" hint="Default: Get Secure rule by camera count (2–4 → 2 TB, 5–10 → 4 TB, 11+ choose)">
+              <Select
+                id="a-hdd"
+                value={v.hddOverride?.productId ? `id:${v.hddOverride.productId}` : v.hddOverride?.capacityTb ? `cap:${v.hddOverride.capacityTb}` : ""}
+                onChange={(e) => {
+                  const x = e.target.value;
+                  set("hddOverride", x.startsWith("id:") ? { productId: x.slice(3), capacityTb: null } : x.startsWith("cap:") ? { capacityTb: Number(x.slice(4)), productId: null } : null);
+                }}
+              >
+                <option value="">Default for the camera count</option>
+                <optgroup label="Capacity">
+                  {[...new Set([2, 4, 6, 8, ...drives.map((d) => d.capacityTb)])]
+                    .sort((a, b) => a - b)
+                    .map((tb) => (
+                      <option key={tb} value={`cap:${tb}`}>
+                        {tb} TB
+                      </option>
+                    ))}
+                </optgroup>
+                {drives.length ? (
+                  <optgroup label="Specific drive">
+                    {drives.map((d) => (
+                      <option key={d.id} value={`id:${d.id}`}>
+                        {d.label} ({d.capacityTb} TB)
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </Select>
+            </Field>
+          ) : null}
           <Field label="Retention asked for (days)" htmlFor="a-ret">
             <Input id="a-ret" type="number" min={1} value={v.retentionDays ?? ""} onChange={(e) => set("retentionDays", num(e.target.value))} placeholder="28 (standard)" />
           </Field>
