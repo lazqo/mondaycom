@@ -4,8 +4,13 @@
  *
  * Rules this file keeps:
  * - The only cost it ever reads is the price on a product page fetched in a verified logged-in
- *   session. The public product API is used for catalogue metadata (SKU, name, page address) only;
- *   its price fields are dropped as soon as the response is parsed, never compared or stored as cost.
+ *   session. The public product API is used for catalogue metadata (SKU, name, description, page
+ *   address) only; its price fields are dropped as soon as the response is parsed. They are never
+ *   stored, never used as cost, and never decide whether a logged-in price is valid: a trade price
+ *   that happens to equal the public figure is recorded like any other.
+ * - A logged-in price is valid when: the session is verified as logged in, the page's SKU is the
+ *   listing asked for, the price comes from that logged-in page, its GST basis is clear, and there
+ *   is no RRP/retail/"was" ambiguity.
  * - A price is read only when it is unambiguous: exactly one amount (or the sale amount), no
  *   RRP/retail label, a known GST basis (the "+ GST" suffix or the shop's tax display setting),
  *   and the page's SKU matching the one asked for. Anything else is reported and nothing recorded.
@@ -28,6 +33,8 @@ export type ParsedProductPage = {
   /** The visible text of the price, for the run report (e.g. "$173.20 + GST"). */
   priceText: string | null;
   amount: number | null;
+  /** A struck-through earlier price (WooCommerce sale markup), shown so a person can see it was a sale. */
+  wasAmount: number | null;
   /** Basis shown next to the price on this page, if any. */
   suffixBasis: PriceBasis | null;
   /** The shop's tax display setting, where the page carries it. */
@@ -36,7 +43,19 @@ export type ParsedProductPage = {
   reason: string | null;
 };
 
-export type CatalogueEntry = { id: number; sku: string; name: string; url: string; type: string };
+export type CatalogueEntry = {
+  id: number;
+  sku: string;
+  name: string;
+  url: string;
+  type: string;
+  /** The supplier's own short description (e.g. "Supply Only", "Price Including Installation In a Recorder"). */
+  summary?: string | null;
+  /** The "Notes*" section of the supplier's description, where it has one. */
+  notes?: string | null;
+  /** Public stock wording. */
+  stock?: string | null;
+};
 
 // ---------- small HTML helpers (WooCommerce markup is regular enough for these) ----------
 
@@ -200,7 +219,7 @@ export async function login(session: WebSession, credential: { username: string 
 // ---------- product pages ----------
 
 export function parseProductPage(html: string): ParsedProductPage {
-  const out: ParsedProductPage = { loggedIn: loggedInState(html), title: null, sku: null, stock: null, priceText: null, amount: null, suffixBasis: null, siteBasis: siteBasisOf(html), reason: null };
+  const out: ParsedProductPage = { loggedIn: loggedInState(html), title: null, sku: null, stock: null, priceText: null, amount: null, wasAmount: null, suffixBasis: null, siteBasis: siteBasisOf(html), reason: null };
   const summary = elementByClass(html, "div", "summary");
   const region = summary ? summary.inner : html;
   const title = elementByClass(region, "h1", "product_title");
@@ -220,8 +239,21 @@ export function parseProductPage(html: string): ParsedProductPage {
   out.priceText = text.slice(0, 160) || null;
   if (/login to see prices|log ?in to (see|view)/i.test(text)) return { ...out, loggedIn: false, reason: "The price is hidden: the page was not served to a logged-in account." };
   if (/\b(rrp|retail|msrp|recommended)\b/i.test(text)) return { ...out, reason: `The price is labelled as retail/RRP ("${out.priceText}"); not used as trade cost.` };
-  const ins = /<ins\b/i.test(priceHtml) ? (priceHtml.match(/<ins\b[^>]*>([\s\S]*?)<\/ins>/i)?.[1] ?? "") : priceHtml;
-  const amounts = allByClass(ins, "span", "woocommerce-Price-amount").map(amountOf);
+  // A sale is shown as <del>was</del><ins>now</ins>. That is unambiguous only with exactly one of
+  // each; any other "was" wording, or del without ins, is not read.
+  const hasDel = /<del\b/i.test(priceHtml);
+  const hasIns = /<ins\b/i.test(priceHtml);
+  if (hasDel !== hasIns) return { ...out, reason: `The price shows a struck-through or "was" amount without a clear current price ("${out.priceText}"); not recorded.` };
+  if (!hasDel && /\b(was|now|save|previously)\b/i.test(text)) return { ...out, reason: `The price has "was/now" wording without sale markup ("${out.priceText}"); not recorded.` };
+  if (hasDel) {
+    const dels = [...priceHtml.matchAll(/<del\b[^>]*>([\s\S]*?)<\/del>/gi)].flatMap((m) => allByClass(m[1], "span", "woocommerce-Price-amount").map(amountOf));
+    const inss = [...priceHtml.matchAll(/<ins\b[^>]*>([\s\S]*?)<\/ins>/gi)].flatMap((m) => allByClass(m[1], "span", "woocommerce-Price-amount").map(amountOf));
+    const outside = allByClass(priceHtml.replace(/<(del|ins)\b[\s\S]*?<\/\1>/gi, " "), "span", "woocommerce-Price-amount");
+    if (dels.length !== 1 || inss.length !== 1 || outside.length) return { ...out, reason: `The sale price markup is not one "was" and one current amount ("${out.priceText}"); not recorded.` };
+    out.wasAmount = dels[0];
+  }
+  const current = hasIns ? [...priceHtml.matchAll(/<ins\b[^>]*>([\s\S]*?)<\/ins>/gi)].map((m) => m[1]).join(" ") : priceHtml;
+  const amounts = allByClass(current, "span", "woocommerce-Price-amount").map(amountOf);
   if (amounts.length === 0) return { ...out, reason: `No amount could be read from the price ("${out.priceText ?? ""}").` };
   if (amounts.length > 1) return { ...out, reason: `More than one price is shown ("${out.priceText}"); not recorded.` };
   const amount = amounts[0];
@@ -267,7 +299,19 @@ export function parseCatalogueJson(body: string, origin: string): CatalogueEntry
     const url = typeof p.permalink === "string" ? p.permalink : null;
     if (typeof p.id !== "number" || typeof p.sku !== "string" || !p.sku || !url) continue;
     if (new URL(url, origin).origin !== new URL(origin).origin) continue;
-    out.push({ id: p.id, sku: p.sku.trim(), name: decodeEntities(String(p.name ?? "")), url, type: String(p.type ?? "simple") });
+    const description = typeof p.description === "string" ? textOf(p.description) : "";
+    const notesAt = description.search(/\bNotes\s*\*/i);
+    const stock = p.stock_availability && typeof p.stock_availability === "object" ? (p.stock_availability as { text?: string; class?: string }) : null;
+    out.push({
+      id: p.id,
+      sku: p.sku.trim(),
+      name: decodeEntities(String(p.name ?? "")),
+      url,
+      type: String(p.type ?? "simple"),
+      summary: typeof p.short_description === "string" ? textOf(p.short_description).slice(0, 300) || null : null,
+      notes: notesAt >= 0 ? description.slice(notesAt).slice(0, 1200) : null,
+      stock: stock ? stock.text || (stock.class === "in-stock" ? "In stock" : stock.class === "out-of-stock" ? "Out of stock" : (stock.class ?? null)) : null,
+    });
   }
   return out;
 }

@@ -50,7 +50,10 @@ export type SyncItem = {
   stock?: string | null;
   priceText?: string | null;
   reason?: string | null;
-  candidates?: { sku: string; name: string; url: string }[];
+  /** A sale's struck-through earlier price, when the page showed one. */
+  wasAmount?: number | null;
+  /** Close listings for a person to choose between (never chosen automatically). */
+  candidates?: { sku: string; name: string; url: string; summary?: string | null; notes?: string | null; stock?: string | null }[];
 };
 
 export type SyncResult = { runId: string; status: "ok" | "partial" | "failed"; error: string | null; summary: Record<string, number>; items: SyncItem[]; message: string };
@@ -217,7 +220,7 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
     const pages: { t: Target; entry: CatalogueEntry; page: ParsedProductPage }[] = [];
     for (const r of resolved) {
       if (!r.entry) {
-        items.push({ productId: r.t.productId, product: r.t.label, sku: r.t.sku, url: r.t.url, outcome: r.candidates.length ? "ambiguous" : "no_match", reason: r.reason, candidates: r.candidates.map((c) => ({ sku: c.sku, name: c.name, url: c.url })) });
+        items.push({ productId: r.t.productId, product: r.t.label, sku: r.t.sku, url: r.t.url, outcome: r.candidates.length ? "ambiguous" : "no_match", reason: r.reason, candidates: r.candidates.map((c) => ({ sku: c.sku, name: c.name, url: c.url, summary: c.summary ?? null, notes: c.notes ?? null, stock: c.stock ?? null })) });
         continue;
       }
       const res = await session.request(new URL(r.entry.url).pathname + new URL(r.entry.url).search);
@@ -291,6 +294,7 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
           shownAmount: page.amount,
           shownBasis: basis.basis,
           basisFrom: basis.from,
+          wasAmount: page.wasAmount,
         });
       } catch (e) {
         items.push({ ...base, outcome: "error", reason: e instanceof Error ? e.message : "Could not record the price." });
@@ -337,7 +341,7 @@ async function resolveListings(session: WebSession, targets: Target[]): Promise<
         entry: null,
         candidates: m.candidates,
         reason: m.candidates.length
-          ? `IT Plus has ${m.candidates.length} listing(s) close to ${t.model} but none exactly (${m.candidates.map((c) => c.sku).join(", ")}). Choose the right one.`
+          ? `IT Plus has ${m.candidates.length} listing(s) close to ${t.model} but none exactly (${m.candidates.map((c) => c.sku).join(", ")}). Nothing is chosen automatically: choose the listing Get Secure buys.`
           : `IT Plus does not list ${t.model} (searched "${term}").`,
       });
   }

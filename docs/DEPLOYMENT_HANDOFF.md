@@ -609,14 +609,25 @@ routing** and reads Get Secure's trade price from the logged-in product page. Ev
 
 What it will and won't do:
 
-- **Only the logged-in page price is cost.** IT Plus's public product API also carries a price; the
-  connector uses that API only to find SKUs and page addresses and throws its price away.
-- **Nothing ambiguous is recorded**: a page with two prices, a range, an RRP/retail label, a SKU that
-  doesn't match, or no GST indication is reported with the reason. A bundle's "From:" price is read
+- **When a price is recorded**: the session is verified as logged in, the page's SKU is the listing
+  asked for, the price is read from that logged-in page, its GST basis is clear, and there is no
+  RRP/retail/"was" ambiguity. If all of those hold, it is recorded, even when the amount happens to
+  equal a public figure.
+- **The public feed never decides anything about price.** IT Plus's public product API also carries a
+  price; the connector uses that API only to find SKUs, page addresses and listing descriptions, and
+  throws its price away. It is never compared with, or used to accept or reject, the logged-in price.
+- **Nothing ambiguous is recorded**: a page with two prices, a range, an RRP/retail label, "was/now"
+  wording or a struck-through price without exactly one current price, a SKU that doesn't match, or
+  no GST indication is reported with the reason. A normal sale (one struck-through and one current
+  price) records the current price and shows "sale price; was $…". A bundle's "From:" price is read
   only when every bundled extra is optional (then it is the product alone).
 - **GST**: IT Plus shows "+ GST"; prices are stored ex GST (an inc-GST price would be converted).
-- **Matching**: only an exact model/SKU match is automatic. Where IT Plus has several close listings
-  (e.g. drives as `-SUP` supply-only and `-Inst`), the result lists them and you pick one ("Use …").
+- **Matching**: only an exact model/SKU match is automatic. Where IT Plus has several close listings,
+  nothing is chosen: the result shows each one with IT Plus's own description, stock and notes, and
+  you pick the purchasing SKU. For WD Purple drives IT Plus lists `-SUP` ("Supply Only") and `-Inst`
+  ("Price Including Installation In a Recorder"). Their notes say the drive supplied may be a WD
+  Purple or an equivalent Seagate SkyHawk depending on stock, HDD orders can be cancelled and final
+  pricing is IT Plus's decision.
 - **Review**: a new price waits for Chris's approval; any change to an approved cost (even 1c) is
   held as pending, and the quoted cost stays the approved one until it is approved. An unchanged
   price just refreshes the price date. History keeps every change with its stock and run.

@@ -24,6 +24,9 @@ export type MockProduct = {
   priceLabel?: string;
   /** Leave out the "+ GST" suffix and the shop settings. */
   noBasis?: boolean;
+  /** Public short description and description (as IT Plus writes them). */
+  summary?: string;
+  description?: string;
 };
 
 export type MockState = {
@@ -124,6 +127,9 @@ export async function startItPlusMock(state: MockState, port = 0): Promise<{ url
               sku: p.sku,
               type: p.type,
               permalink: `http://${req.headers.host}/products/${p.slug}/`,
+              short_description: p.summary ? `<p>${p.summary}</p>` : "",
+              description: p.description ? `<p>${p.description}</p>` : "",
+              stock_availability: { text: /out/i.test(p.stock) ? "Out of stock" : "", class: /out/i.test(p.stock) ? "out-of-stock" : "in-stock" },
               prices: { price: String(Math.round(p.publicPrice * 100)), regular_price: String(Math.round(p.publicPrice * 100)), currency_code: "NZD", currency_minor_unit: 2 },
             })),
           ),

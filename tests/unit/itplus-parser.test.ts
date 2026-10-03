@@ -48,6 +48,13 @@ describe("IT Plus product pages", () => {
     expect(p.reason).toMatch(/not served to a logged-in account/);
   });
 
+  it("refuses unclear 'was' prices: a struck-through amount without a current one, or was/now wording", () => {
+    expect(parseProductPage(pageWith(`<p class="price"><del>${amt("30.00")}</del> ${amt("27.10")}${SUFFIX}</p>`)).reason).toMatch(/struck-through or "was"/);
+    expect(parseProductPage(pageWith(`<p class="price">Was ${amt("30.00")} Now ${amt("27.10")}${SUFFIX}</p>`)).amount).toBeNull();
+    expect(parseProductPage(pageWith(`<p class="price"><del>${amt("30.00")}</del><ins>${amt("27.10")}</ins>${SUFFIX}</p>`))).toMatchObject({ amount: 27.1, wasAmount: 30 });
+    expect(parseProductPage(pageWith(`<p class="price"><del>${amt("30.00")}</del><ins>${amt("27.10")}</ins> ${amt("25.00")}${SUFFIX}</p>`)).reason).toMatch(/not one "was" and one current/);
+  });
+
   it("refuses an RRP-labelled price, two prices, or a range", () => {
     expect(parseProductPage(pageWith(`<p class="price">RRP ${amt("49.00")}${SUFFIX}</p>`)).reason).toMatch(/retail\/RRP/);
     expect(parseProductPage(pageWith(`<p class="price">${amt("20.00")} ${amt("27.10")}${SUFFIX}</p>`)).reason).toMatch(/More than one price/);
@@ -134,8 +141,15 @@ describe("matching IT Plus listings to catalogue products", () => {
   it("drops every price field from the public catalogue JSON", () => {
     const json = JSON.stringify([{ id: 32701, sku: "VJB-240", name: "TP-Link VIGI VJB-240", type: "simple", permalink: "https://www.itplus.co.nz/products/tp-link-vigi-vjb-240/", prices: { price: "2710" } }]);
     const [entry] = parseCatalogueJson(json, "https://www.itplus.co.nz");
-    expect(entry).toEqual({ id: 32701, sku: "VJB-240", name: "TP-Link VIGI VJB-240", url: "https://www.itplus.co.nz/products/tp-link-vigi-vjb-240/", type: "simple" });
+    expect(entry).toMatchObject({ id: 32701, sku: "VJB-240", name: "TP-Link VIGI VJB-240", url: "https://www.itplus.co.nz/products/tp-link-vigi-vjb-240/", type: "simple" });
+    expect(Object.keys(entry).sort()).toEqual(["id", "name", "notes", "sku", "stock", "summary", "type", "url"]);
     expect(JSON.stringify(entry)).not.toContain("2710");
+    const [wd] = parseCatalogueJson(
+      JSON.stringify([{ id: 27, sku: "WD43PURZ-Inst", name: "Western Digital WD43PURZ-Inst", permalink: "https://www.itplus.co.nz/products/western-digital-wd43purz-inst/", short_description: "<p>4TB &#8211; Price Including Installation In a Recorder</p>", description: "<p>Key Features</p><p>Notes* Supply -&gt; WD Purple or Seagate SkyHawk.</p>", stock_availability: { text: "", class: "in-stock" }, prices: { price: "37000" } }]),
+      "https://www.itplus.co.nz",
+    );
+    expect(wd).toMatchObject({ summary: "4TB – Price Including Installation In a Recorder", notes: "Notes* Supply -> WD Purple or Seagate SkyHawk.", stock: "In stock" });
+    expect(JSON.stringify(wd)).not.toContain("37000");
     expect(parseCatalogueJson(JSON.stringify([{ id: 1, sku: "X", permalink: "https://evil.example/x" }]), "https://www.itplus.co.nz")).toEqual([]);
   });
 });

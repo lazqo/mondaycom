@@ -105,32 +105,49 @@ function RunResult({ supplierId, result, canMap }: { supplierId: string; result:
                     <Badge className={OUTCOME[i.outcome]?.[1]}>{OUTCOME[i.outcome]?.[0] ?? i.outcome}</Badge>
                     {i.reason ? <p className="mt-0.5 max-w-md text-gray-600">{i.reason}</p> : null}
                     {i.candidates?.length && canMap ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <div className="mt-1 space-y-1" data-testid="listing-choices">
                         {i.candidates.map((c) => (
-                          <Button
-                            key={c.sku}
-                            size="sm"
-                            variant="secondary"
-                            disabled={pending}
-                            title={c.name}
-                            onClick={() =>
-                              start(async () => {
-                                setErr(null);
-                                const r = await mapSupplierListingAction(supplierId, i.productId, c.sku, c.url);
-                                if (!r.ok) return setErr(r.error);
-                                router.refresh();
-                              })
-                            }
-                          >
-                            Use {c.sku}
-                          </Button>
+                          <div key={c.sku} className="rounded border border-gray-200 bg-white p-2" data-testid="listing-choice">
+                            <p className="font-medium">
+                              <a className="text-brand-700 underline" href={c.url} target="_blank" rel="noreferrer">
+                                {c.sku}
+                              </a>{" "}
+                              <span className="font-normal text-gray-600">{c.name}</span>
+                              {c.stock ? <span className="font-normal text-gray-500"> · {c.stock}</span> : null}
+                            </p>
+                            {c.summary ? <p className="text-gray-700">{c.summary}</p> : null}
+                            {c.notes ? (
+                              <details className="text-gray-600">
+                                <summary className="cursor-pointer">Supplier notes</summary>
+                                <p className="whitespace-pre-line">{c.notes}</p>
+                              </details>
+                            ) : null}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="mt-1"
+                              disabled={pending}
+                              onClick={() =>
+                                start(async () => {
+                                  setErr(null);
+                                  const r = await mapSupplierListingAction(supplierId, i.productId, c.sku, c.url);
+                                  if (!r.ok) return setErr(r.error);
+                                  router.refresh();
+                                })
+                              }
+                            >
+                              Use {c.sku} as the purchasing SKU
+                            </Button>
+                          </div>
                         ))}
+                        <p className="text-gray-500">Nothing is chosen automatically. After choosing, refresh the product to read its logged-in price.</p>
                       </div>
                     ) : null}
                   </td>
                   <td className="py-1 pr-2 text-gray-700">
                     {i.priceText ?? "—"}
                     {i.shownBasis ? <span className="block text-gray-500">read as {i.shownBasis} GST ({i.basisFrom})</span> : null}
+                    {i.wasAmount != null ? <span className="block text-amber-700">sale price; was {money(i.wasAmount)}</span> : null}
                   </td>
                   <td className="py-1 pr-2 text-right">
                     {i.costExGst != null ? money(i.costExGst) : "—"}

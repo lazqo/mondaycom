@@ -41,8 +41,27 @@ const state: MockState = {
     { sku: "NVR1004H-4P", slug: "tp-link-vigi-nvr1004h-4p", name: "TP-Link VIGI NVR1004H-4P", type: "bundle", trade: 165, publicPrice: 173.2, stock: "8 in stock" },
     { sku: "VJB-240", slug: "tp-link-vigi-vjb-240", name: "TP-Link VIGI VJB-240", type: "simple", trade: 25.8, publicPrice: 27.1, stock: "In stock" },
     { sku: "VJB-240-BLK", slug: "tp-link-vigi-vjb-240-blk", name: "TP-Link VIGI VJB-240-BLK", type: "simple", trade: 25.8, publicPrice: 27.1, stock: "Out of stock" },
-    { sku: "WD43PURZ-SUP", slug: "western-digital-wd43purz-sup", name: "Western Digital WD43PURZ-SUP", type: "simple", trade: 189, publicPrice: 350, stock: "Out of stock" },
-    { sku: "WD43PURZ-Inst", slug: "western-digital-wd43purz-inst", name: "Western Digital WD43PURZ-Inst", type: "simple", trade: 205, publicPrice: 370, stock: "In stock" },
+    {
+      sku: "WD43PURZ-SUP",
+      slug: "western-digital-wd43purz-sup",
+      name: "Western Digital WD43PURZ-SUP",
+      type: "simple",
+      trade: 189,
+      publicPrice: 350,
+      stock: "Out of stock",
+      summary: "Western Digital WD43PURZ-SUP 3.5″ Purple Surveillance SATA Hard Drive – 4TB – Supply Only",
+      description: "Key Features: 4TB. Notes* Supply -> test note.",
+    },
+    {
+      sku: "WD43PURZ-Inst",
+      slug: "western-digital-wd43purz-inst",
+      name: "Western Digital WD43PURZ-Inst",
+      type: "simple",
+      trade: 205,
+      publicPrice: 370,
+      stock: "In stock",
+      summary: "Western Digital WD43PURZ-Inst 3.5″ Purple Surveillance SATA Hard Drive – 4TB – Price Including Installation In a Recorder",
+    },
   ],
 };
 
@@ -179,6 +198,11 @@ describe("IT Plus connector", () => {
     // The drive has two IT Plus listings (supply-only and installer): nothing is recorded until Chris picks one.
     expect(item(ids.hdd)).toMatchObject({ outcome: "ambiguous" });
     expect(item(ids.hdd).candidates!.map((c) => c.sku).sort()).toEqual(["WD43PURZ-Inst", "WD43PURZ-SUP"]);
+    // Each choice says what the listing is, in IT Plus's words, with no price.
+    const sup = item(ids.hdd).candidates!.find((c) => c.sku === "WD43PURZ-SUP")!;
+    expect(sup).toMatchObject({ summary: expect.stringMatching(/Supply Only/), notes: expect.stringMatching(/^Notes\*/), stock: "Out of stock" });
+    expect(item(ids.hdd).candidates!.find((c) => c.sku === "WD43PURZ-Inst")!.summary).toMatch(/Including Installation In a Recorder/);
+    expect(JSON.stringify(item(ids.hdd).candidates)).not.toMatch(/350|370|189|205/);
     expect(await offer(ids.hdd)).toBeUndefined();
     expect(r.status).toBe("partial");
 
@@ -194,6 +218,15 @@ describe("IT Plus connector", () => {
     expect(c.priceBasisSeen).toBe("ex");
     expect(state.log.some((x) => x.path.startsWith("/products/") && !x.loggedIn)).toBe(false);
     await expectNoSecrets(r);
+  });
+
+  it("records a logged-in price that happens to equal the public feed's figure", async () => {
+    const id4 = await pid("TP-Link", "VIGI InSight S455(4mm)");
+    await db.delete(supplierProducts).where(and(eq(supplierProducts.supplierId, itPlusId), eq(supplierProducts.productId, id4)));
+    expect(trade("S455-4").publicPrice).toBe(trade("S455-4").trade);
+    const r = await runSupplierConnector(itPlusId, { kind: "product", productId: id4 }, chris);
+    expect(r.items[0]).toMatchObject({ outcome: "recorded", sku: "S455-4", costExGst: 140.7, stock: "Available on back-order" });
+    await db.delete(supplierProducts).where(and(eq(supplierProducts.supplierId, itPlusId), eq(supplierProducts.productId, id4)));
   });
 
   it("Chris chooses the drive's listing, then Refresh one product prices it", async () => {
