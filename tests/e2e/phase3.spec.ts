@@ -129,9 +129,13 @@ test.describe("Calendar, dispatch, My Day and Today", () => {
     await expect(page.getByTestId("scheduled-summary")).toContainText("Scheduled");
     await page.goto(`/calendar?view=day&date=${ymd(day)}`);
     await expect(page.locator("[data-testid^=col-]", { hasText: "Admin" }).locator("[data-testid^=event-]", { hasText: leadName })).toBeVisible();
-    // The assignee got a notification.
-    await page.getByTestId("notifications-bell").first().click();
-    await expect(page.getByText(/scheduled:/).first()).toBeVisible();
+    // The assignee got a notification. The reschedule action may still be finishing when the page
+    // above loads (its summary already said "Scheduled"), so reload until the bell has it.
+    await expect(async () => {
+      await page.reload();
+      await page.getByTestId("notifications-bell").first().click();
+      await expect(page.getByText(/scheduled:/).first()).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
   });
 
   test("My Day: technician walks the job through En route → On site → Done with a note and a photo", async ({ page }) => {
