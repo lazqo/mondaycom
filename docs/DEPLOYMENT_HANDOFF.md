@@ -178,12 +178,31 @@ This matters in three ways:
 (`scripts/start.sh` calls `scripts/migrate.mjs` before the server boots), and they are idempotent, so
 there is nothing to run by hand.
 
-To deploy a new version:
+**Check what is running:**
+
+```bash
+cd /opt/getsecure && git log -1 --oneline        # the code on the server
+curl -s https://hermes.aucklandsecuritysystems.co.nz/api/health   # "version" = the commit the app was built from
+```
+
+(`version` is empty for builds made before `APP_VERSION` was set at build time; the update script
+below sets it.)
+
+**To deploy a new version** (backs up the database first, then pulls, rebuilds, waits for health
+and prints the deployed commit):
 
 ```bash
 cd /opt/getsecure
-git pull
-docker compose -f docker-compose.prod.yml up -d --build
+./deploy/update.sh
+```
+
+The same by hand:
+
+```bash
+cd /opt/getsecure
+git pull --ff-only
+APP_VERSION=$(git rev-parse --short HEAD) docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml logs web --tail 50   # look for "Migrations complete."
 ```
 
 That rebuilds the app, applies any new migrations and restarts it. The database container is left
