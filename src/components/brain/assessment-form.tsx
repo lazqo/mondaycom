@@ -45,14 +45,12 @@ export function AssessmentForm({
   initial,
   assessmentId,
   canApprove,
-  profiles = [],
   drives = [],
 }: {
   leadId: string;
   initial: EnquiryInput;
   assessmentId: string | null;
   canApprove: boolean;
-  profiles?: { id: string; name: string; propertyType: string; isDefault: boolean; designed: boolean }[];
   /** Surveillance drives in the catalogue, for Chris's HDD choice. */
   drives?: { id: string; label: string; capacityTb: number }[];
 }) {
@@ -173,51 +171,38 @@ export function AssessmentForm({
           <TriSelect id="a-internet" label="Internet at property" value={v.internet} onChange={(x) => set("internet", x)} />
           <TriSelect id="a-router" label="Recorder next to router" value={v.recorderNearRouter} onChange={(x) => set("recorderNearRouter", x)} />
           <TriSelect id="a-wired" label="Cable route to router possible" value={v.wiredRoutePossible} onChange={(x) => set("wiredRoutePossible", x)} />
-          <Field label="Recording profile" htmlFor="a-profile" hint="Sets design bitrates for bandwidth and storage">
-            <Select id="a-profile" value={v.recordingProfileId ?? ""} onChange={(e) => set("recordingProfileId", e.target.value || null)}>
-              <option value="">Default for the property type</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.designed ? "" : " (no design bitrates yet)"}
-                </option>
-              ))}
+          <Field label="HDD" htmlFor="a-hdd" hint="Uses the approved kit's HDD; residential without a kit: 2–4 cameras 2 TB, 5–10 cameras 4 TB">
+            <Select
+              id="a-hdd"
+              value={v.hddOverride?.productId ? `id:${v.hddOverride.productId}` : v.hddOverride?.capacityTb ? `cap:${v.hddOverride.capacityTb}` : ""}
+              onChange={(e) => {
+                const x = e.target.value;
+                set("hddOverride", x.startsWith("id:") ? { productId: x.slice(3), capacityTb: null } : x.startsWith("cap:") ? { capacityTb: Number(x.slice(4)), productId: null } : null);
+              }}
+            >
+              <option value="">Use kit HDD</option>
+              <optgroup label="Capacity">
+                {[...new Set([1, 2, 4, 6, 8, ...drives.map((d) => d.capacityTb)])]
+                  .sort((a, b) => a - b)
+                  .map((tb) => (
+                    <option key={tb} value={`cap:${tb}`}>
+                      {tb} TB
+                    </option>
+                  ))}
+              </optgroup>
+              {drives.length ? (
+                <optgroup label="Specific drive">
+                  {drives.map((d) => (
+                    <option key={d.id} value={`id:${d.id}`}>
+                      {d.label} ({d.capacityTb} TB)
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </Select>
           </Field>
-          {!commercial ? (
-            <Field label="HDD" htmlFor="a-hdd" hint="Default: Get Secure rule by camera count (2–4 → 2 TB, 5–10 → 4 TB, 11+ choose)">
-              <Select
-                id="a-hdd"
-                value={v.hddOverride?.productId ? `id:${v.hddOverride.productId}` : v.hddOverride?.capacityTb ? `cap:${v.hddOverride.capacityTb}` : ""}
-                onChange={(e) => {
-                  const x = e.target.value;
-                  set("hddOverride", x.startsWith("id:") ? { productId: x.slice(3), capacityTb: null } : x.startsWith("cap:") ? { capacityTb: Number(x.slice(4)), productId: null } : null);
-                }}
-              >
-                <option value="">Default for the camera count</option>
-                <optgroup label="Capacity">
-                  {[...new Set([2, 4, 6, 8, ...drives.map((d) => d.capacityTb)])]
-                    .sort((a, b) => a - b)
-                    .map((tb) => (
-                      <option key={tb} value={`cap:${tb}`}>
-                        {tb} TB
-                      </option>
-                    ))}
-                </optgroup>
-                {drives.length ? (
-                  <optgroup label="Specific drive">
-                    {drives.map((d) => (
-                      <option key={d.id} value={`id:${d.id}`}>
-                        {d.label} ({d.capacityTb} TB)
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </Select>
-            </Field>
-          ) : null}
-          <Field label="Retention asked for (days)" htmlFor="a-ret">
-            <Input id="a-ret" type="number" min={1} value={v.retentionDays ?? ""} onChange={(e) => set("retentionDays", num(e.target.value))} placeholder="28 (standard)" />
+          <Field label="Days of recording the customer requires" htmlFor="a-ret" hint="Only if they asked: flagged as a custom requirement, not calculated">
+            <Input id="a-ret" type="number" min={1} value={v.retentionDays ?? ""} onChange={(e) => set("retentionDays", num(e.target.value))} placeholder="Not specified" />
           </Field>
           <Field label="Budget mentioned ($)" htmlFor="a-budget">
             <Input id="a-budget" type="number" min={0} value={v.budget ?? ""} onChange={(e) => set("budget", num(e.target.value))} />

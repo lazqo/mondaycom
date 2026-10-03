@@ -4,10 +4,11 @@
  * The catalogue is fictional; see brain-fixtures.ts.
  */
 import { describe, it, expect } from "vitest";
+import type { CctvKit } from "@/lib/brain/types";
 import { assessCctv } from "@/lib/brain/engine";
 import { composeEmail, composeQuote } from "@/lib/brain/compose";
 import { validateNvr, onvifCompatible } from "@/lib/brain/nvr";
-import { requiredStorageGb, residentialHddChoice, residentialStoragePlan } from "@/lib/brain/storage";
+
 import { siteVisitDecision } from "@/lib/brain/site-visit";
 import { camera, catalogue, house, nvr, testPolicies } from "./brain-fixtures";
 
@@ -28,13 +29,11 @@ describe("Test 1: normal 4-camera house", () => {
     expect(p.nvr.evaluated.find((e) => e.product.id === p.nvr.selected!.id)!.checks.every((c) => c.pass)).toBe(true);
   });
 
-  it("records 24/7 on the default 2 TB drive for 4 cameras, with retention estimated, not resized", () => {
+  it("records 24/7 on the fallback 2 TB drive for 4 cameras (no kit), with no retention calculated", () => {
     expect(p.recording.mode).toBe("continuous");
-    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 2, retentionTargetDays: 28 });
-    // 4 x 4 Mbps x 10.8 GB/day = 172.8 GB/day against 2 TB x 0.93 usable.
-    expect(p.recording.storage.expectedRetentionDays).toBe(Math.floor(1860 / 172.8));
-    expect(p.recording.storage.basis).toBe("4 × 4MP cameras at 4 Mbps design bitrate");
-    expect(p.recording.storage.warning).toBe("Estimated retention is below the normal Get Secure target. Consider selecting a larger HDD.");
+    expect(p.recording.storage).toMatchObject({ selection: "fallback", installedTb: 2, customerRetentionDays: null });
+    expect(p.recording.storage.notes.join(" ")).not.toMatch(/days/i);
+    expect(Object.keys(p.recording.storage).sort()).toEqual(["capacityTb", "customerRetentionDays", "drives", "installedTb", "notes", "selection"]);
   });
 
   it("uses the exact 4-camera package, with standard materials inside it and labour at $95/hour", () => {
@@ -59,9 +58,9 @@ describe("Test 1: normal 4-camera house", () => {
     expect(email.body).not.toMatch(/margin|cost price|markup|\$100\b/i);
     // Residential: no promised number of days, and the variability is stated.
     expect(email.body).not.toMatch(/\d+ days/);
-    expect(email.body).toContain("Recording duration varies depending on camera settings, activity and recording configuration.");
+    expect(email.body).toContain("Recording duration depends on camera settings, recording configuration and scene activity.");
     expect(quote.notes).not.toMatch(/28 days/);
-    expect(quote.notes).toMatch(/recording duration varies/);
+    expect(quote.notes).toMatch(/recording duration depends on camera settings, recording configuration and scene activity/);
     expect(JSON.stringify(quote)).not.toMatch(/costExGst|margin|markup/i);
     expect(quote.lineItems.every((l) => l.unitPrice > 0)).toBe(true);
   });
@@ -72,8 +71,7 @@ describe("Test 2: 6 cameras, double storey", () => {
 
   it("uses a recorder with more than 4 channels and the default 4 TB drive for 6 cameras", () => {
     expect(p.nvr.selected!.channels).toBeGreaterThan(4);
-    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 4 });
-    expect(p.recording.storage.rawGb).toBeCloseTo(6 * 4 * 10.8 * 28, 5); // the 28-day figure stays as a reference
+    expect(p.recording.storage).toMatchObject({ selection: "fallback", installedTb: 4 });
   });
 
   it("allows for double-storey complexity and conduit, with the assumption stated", () => {
@@ -182,7 +180,6 @@ describe("Test 7: not enough PoE on the recorder", () => {
     const e = validateNvr(nvr({ id: "x", model: "X", channels: 4, poePerPortW: 6, poeBudgetW: 100 }), {
       cameras: [camera({ id: "c", model: "C", poeWatts: 12 })],
       channelsNeeded: 4,
-      requiredGb: 100,
       requiredFeatures: [],
       audio: false,
       alarmIo: false,
@@ -193,89 +190,98 @@ describe("Test 7: not enough PoE on the recorder", () => {
   });
 });
 
-describe("Test 8: not enough incoming bandwidth", () => {
-  it("rejects the recorder even though the channel count fits", () => {
+describe("Test 8: incoming bandwidth from published specifications", () => {
+  it("warns when the cameras' published maximum exceeds the recorder's incoming bandwidth", () => {
     const cat = catalogue();
     cat.products = cat.products.map((p) => (p.id === "na4" ? { ...p, incomingMbps: 12 } : p));
     const p = run(house(), cat);
     const e = p.nvr.evaluated.find((x) => x.product.id === "na4")!;
-    expect(e.pass).toBe(false);
     expect(e.checks.find((c) => c.name === "channels")!.pass).toBe(true);
-    expect(e.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: false });
+    expect(e.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: true, warning: true });
+    expect(e.checks.find((c) => c.name === "bandwidth")!.detail).toMatch(/published maximum 16\.0 Mbps exceeds the recorder's 12 Mbps/);
+  });
+  it("reports bandwidth as not verifiable when a camera publishes no maximum", () => {
+    const cat = catalogue();
+    cat.products = cat.products.map((p) => (p.category === "camera" ? { ...p, maxBitrateMbps: null } : p));
+    const p = run(house(), cat);
+    const e = p.nvr.evaluated.find((x) => x.product.id === p.nvr.selected!.id)!;
+    expect(e.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: true, unverified: true });
   });
 });
 
-describe("Test 9: storage", () => {
-  it("still calculates bitrate x 28 days, plus the safety allowance, as the reference figure", () => {
-    const policies = testPolicies();
-    const { rawGb, requiredGb } = requiredStorageGb(16, 28, policies);
-    expect(rawGb).toBeCloseTo(4838.4, 5);
-    expect(requiredGb).toBeCloseTo(4838.4 * 1.1, 5);
-    expect(run().recording.storage.requiredGb).toBeCloseTo(4838.4 * 1.1, 5);
-  });
+describe("Test 9: HDD (no recording profiles, no retention calculation)", () => {
+  const withKit = (over: Partial<CctvKit> = {}) => {
+    const cat = catalogue();
+    cat.kits = [{ id: "k4", key: "FA_GOOD_4", name: "Fixture Good 4", propertyType: "residential", tier: "good", cameraCount: 4, cameraProductId: "ca4", nvrProductId: "na4", defaultHddTb: 4, defaultHddProductId: null, accessories: [], status: "getsecure_approved", version: 1, ...over }];
+    return cat;
+  };
 
-  it("residential: never resizes the drive to the retention target; low retention is a warning, not a blocker", () => {
-    const p = run();
-    expect(p.recording.storage.drives).toMatchObject({ count: 1, product: { capacityTb: 2 } });
-    expect(p.recording.storage.status).toBe("below_minimum");
-    expect(p.risks.join(" ")).toMatch(/Estimated retention is below the normal Get Secure target\. Consider selecting a larger HDD\./);
-    expect(approvalKeys(p)).not.toContain("retention");
+  it("an approved kit fixes the cameras, recorder and default HDD", () => {
+    const p = run(house(), withKit());
+    expect(p.kit).toMatchObject({ id: "k4", name: "Fixture Good 4" });
+    expect(p.cameras.every((c) => c.product?.id === "ca4")).toBe(true);
+    expect(p.nvr.selected?.id).toBe("na4");
+    expect(p.recording.storage).toMatchObject({ selection: "kit", installedTb: 4 });
     expect(p.costing.complete).toBe(true);
-    expect(p.readiness.items.find((i) => i.key === "storage")).toMatchObject({ ok: true, label: "HDD selected" });
   });
 
-  it("residential: Chris's HDD choice is used and the retention re-estimated", () => {
-    const byCapacity = run(house({ hddOverride: { capacityTb: 8 } }));
-    expect(byCapacity.recording.storage).toMatchObject({ selection: "override", installedTb: 8, expectedRetentionDays: Math.floor(7440 / 172.8), warning: null });
-    expect(byCapacity.costing.lines.find((l) => l.key.startsWith("hdd:"))?.unitCostExGst).toBe(260);
-    const byModel = run(house({ hddOverride: { productId: "hdd6" } }));
+  it("the kit HDD is never resized or replaced by the camera-count fallback", () => {
+    const p = run(house({ retentionDays: 90 }), withKit({ defaultHddTb: 2 }));
+    expect(p.recording.storage).toMatchObject({ selection: "kit", installedTb: 2, customerRetentionDays: 90 });
+    expect(approvalKeys(p)).toContain("custom_retention");
+    expect(p.costing.complete).toBe(true); // a retention request is an exception for Chris, not a blocker
+  });
+
+  it("Chris's override beats the kit, by capacity or exact drive", () => {
+    expect(run(house({ hddOverride: { capacityTb: 8 } }), withKit()).recording.storage).toMatchObject({ selection: "override", installedTb: 8 });
+    const byModel = run(house({ hddOverride: { productId: "hdd6" } }), withKit());
     expect(byModel.recording.storage).toMatchObject({ selection: "override", installedTb: 6 });
-    expect(byModel.recording.storage.drives?.product.id).toBe("hdd6");
+    expect(byModel.costing.lines.find((l) => l.key.startsWith("hdd:"))?.unitCostExGst).toBe(200);
   });
 
-  it("residential: 11+ cameras have no default, so the HDD must be chosen", () => {
+  it("a kit without a default HDD uses the residential fallback; an unapproved kit is not used", () => {
+    expect(run(house(), withKit({ defaultHddTb: null })).recording.storage).toMatchObject({ selection: "fallback", installedTb: 2 });
+    const draft = run(house(), withKit({ status: "requires_review" }));
+    expect(draft.kit).toBeNull();
+    expect(draft.recording.storage.selection).toBe("fallback");
+  });
+
+  it("kit accessories are charged with the kit", () => {
+    const p = run(house({ mountingSurface: "brick" }), withKit({ accessories: [{ productId: "jb", quantity: 1, perCamera: true }] }));
+    expect(p.costing.lines.find((l) => l.key === "accessory:jb")).toMatchObject({ quantity: 4, unitCostExGst: 15, priced: true });
+    expect(p.installation.materials.some((m) => m.product?.id === "jb")).toBe(false); // not recommended a second time
+  });
+
+  it("no kit and no fallback (11+ cameras): the HDD must be chosen", () => {
     const areas = Array.from({ length: 11 }, (_, i) => `Area ${i + 1}`);
     const p = run(house({ cameraCount: 11, areas }));
-    expect(p.recording.storage).toMatchObject({ selection: "manual_required", drives: null });
+    expect(p.recording.storage).toMatchObject({ selection: "required", drives: null });
     expect(approvalKeys(p)).toContain("hdd");
     expect(p.costing.unpriced).toContain("Hard drive: none selected");
     expect(p.readiness.items.find((i) => i.key === "storage")?.ok).toBe(false);
     expect(run(house({ cameraCount: 11, areas, hddOverride: { capacityTb: 8 } })).recording.storage.installedTb).toBe(8);
   });
 
-  it("residential: never substitutes another capacity because it has a price", () => {
-    const cat = catalogue();
-    cat.products = cat.products.map((p) => (p.category === "hdd" && p.capacityTb === 2 ? { ...p, price: null } : p));
+  it("never substitutes another capacity because it has a price", () => {
+    const cat = withKit();
+    cat.products = cat.products.map((p) => (p.category === "hdd" && p.capacityTb === 4 ? { ...p, price: null } : p));
     const p = run(house(), cat);
-    expect(p.recording.storage.drives?.product.capacityTb).toBe(2);
+    expect(p.recording.storage.drives?.product.capacityTb).toBe(4);
     expect(p.costing.complete).toBe(false);
-    expect(p.costing.unpriced.join(" ")).toMatch(/FD-2TB: no approved price/);
+    expect(p.costing.unpriced.join(" ")).toMatch(/FD-4TB: no approved price/);
   });
 
-  it("6 × 5MP cameras at 3 Mbps: default 4 TB, about 19 days estimated, with the low-retention warning", () => {
-    const policies = testPolicies();
-    const choice = residentialHddChoice({ cameraCount: 6, products: catalogue().products, policies });
-    expect(choice).toMatchObject({ capacityTb: 4, source: "default" });
-    const designs = Array.from({ length: 6 }, (_, i) => ({ productId: `s455-${i}`, model: "VIGI InSight S455(2.8mm)", resolutionMp: 5, codec: "H.265+", frameRate: 25, designBitrateMbps: 3, bitrateSource: "test", bitrateApproved: true, publishedMaxBitrateMbps: 6 }));
-    const st = residentialStoragePlan({ choice, totalMbps: 18, designs, retention: { target: 28, minimum: 14, source: "profile" }, nvr: null, products: catalogue().products, policies });
-    expect(st).toMatchObject({ installedTb: 4, usableTb: 3.72, expectedRetentionDays: 19, basis: "6 × 5MP cameras at 3 Mbps design bitrate", status: "below_target" });
-    expect(st.warning).toBe("Estimated retention is below the normal Get Secure target. Consider selecting a larger HDD.");
-  });
-
-  it("commercial storage is still sized from bitrate and retention", () => {
+  it("commercial: same principle, no fallback by camera count", () => {
     const p = run(house({ propertyType: "commercial" }));
-    expect(p.recording.storage.advisory ?? false).toBe(false);
-  });
-
-  it("honours a retention the customer asks for", () => {
-    const p = run(house({ retentionDays: 60 }));
-    expect(p.recording.storage.retentionTargetDays).toBe(60);
-    expect(p.recording.storage.retentionSource).toBe("customer");
+    expect(p.recording.storage.selection).toBe("required");
+    const kit = catalogue();
+    kit.kits = [{ id: "kc", key: null, name: "Fixture commercial 4", propertyType: "commercial", tier: null, cameraCount: 4, cameraProductId: "cx8", nvrProductId: "nx16", defaultHddTb: 8, defaultHddProductId: null, accessories: [], status: "getsecure_approved", version: 1 }];
+    expect(run(house({ propertyType: "commercial" }), kit).recording.storage).toMatchObject({ selection: "kit", installedTb: 8 });
   });
 });
 
 describe("Test 10: mixed-brand camera and recorder", () => {
-  const base = { channelsNeeded: 4, requiredGb: 100, requiredFeatures: [], audio: false, alarmIo: false, products: catalogue().products, policies: testPolicies() };
+  const base = { channelsNeeded: 4, requiredFeatures: [], audio: false, alarmIo: false, products: catalogue().products, policies: testPolicies() };
   it("checks ONVIF and notes that proprietary analytics still need verifying", () => {
     const cam = camera({ id: "b", model: "B", manufacturer: "Other Brand", onvifProfiles: ["S"] });
     const e = validateNvr(nvr({ id: "n", model: "N", channels: 4, onvifProfiles: ["S", "T"] }), { ...base, cameras: [cam] });
@@ -362,7 +368,8 @@ describe("guards that hold everywhere", () => {
 
   it("flags provisional policies it relied on", () => {
     const p = run();
-    expect(p.provisionalPolicies.map((x) => x.key)).toEqual(expect.arrayContaining(["suggestedMarkupPct", "storageHeadroomPct"]));
+    expect(p.provisionalPolicies.map((x) => x.key)).toEqual(expect.arrayContaining(["suggestedMarkupPct", "priceAgingDays"]));
+    expect(p.provisionalPolicies.map((x) => x.key)).not.toContain("storageHeadroomPct");
     expect(approvalKeys(p)).toContain("markup");
   });
 

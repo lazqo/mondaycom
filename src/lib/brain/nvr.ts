@@ -3,9 +3,8 @@
  * check: channels, incoming bandwidth, PoE (per port and in total), storage, recording
  * resolution, simultaneous decoding, features/analytics, and camera compatibility.
  */
-import type { CameraDesign, CameraProduct, Check, CompatibilityLink, NvrEvaluation, NvrProduct, Policies, Product, PropertyType, Tier } from "./types";
+import type { CameraProduct, Check, CompatibilityLink, NvrEvaluation, NvrProduct, Policies, Product, PropertyType, Tier } from "./types";
 import { TRUSTED_STATUSES } from "./types";
-import { chooseDrives } from "./storage";
 import { cameraNvrBasis } from "./compat";
 import { familyOf } from "./pricing";
 
@@ -20,17 +19,14 @@ const norm = (s: string) => s.trim().toLowerCase();
 export type NvrContext = {
   cameras: CameraProduct[];
   channelsNeeded: number;
-  requiredGb: number | null;
-  /** Residential: the drive capacity chosen by rule or by Chris, which the recorder must take. */
-  residentialHdd?: { capacityTb: number | null; source: string } | null;
+  /** The HDD capacity chosen for the job (override, kit or fallback), which the recorder must take. */
+  hdd?: { capacityTb: number | null; source: string } | null;
   requiredFeatures: string[];
   audio: boolean;
   alarmIo: boolean;
   products: Product[];
   policies: Policies;
   links?: CompatibilityLink[];
-  /** Design per camera from the recording profile (design bitrate, published maximum). */
-  designs?: Map<string, CameraDesign>;
 };
 
 /** "1080p" → 2, "4K" → 8, "6" → 6: decoding keys as megapixels. */
@@ -49,32 +45,26 @@ export function validateNvr(nvr: NvrProduct, ctx: NvrContext): NvrEvaluation {
 
   checks.push({ name: "channels", pass: n <= nvr.channels && ctx.channelsNeeded <= nvr.channels, detail: `${n} camera(s), ${ctx.channelsNeeded} channel(s) needed, recorder has ${nvr.channels}` });
 
-  // Design bandwidth (the approved recording profile) decides; the published maximum only warns.
-  const design = ctx.cameras.map((c) => ctx.designs?.get(c.id)?.designBitrateMbps ?? null);
+  // Bandwidth from the products' own specifications: the cameras' published maximum bitrates
+  // against the recorder's incoming limit. Cameras normally run below their maximum, so going over
+  // is a warning to configure them, not a rejection; unpublished figures are reported, not guessed.
   const max = ctx.cameras.map((c) => c.maxBitrateMbps ?? null);
-  const knownIncoming = nvr.incomingMbps > 0;
-  if (design.some((b) => b == null)) {
-    const missing = [...new Set(ctx.cameras.filter((_, i) => design[i] == null).map((c) => c.model))];
-    checks.push({ name: "bandwidth", pass: true, unverified: true, detail: `Design bandwidth not checked: approved recording profile required (no design bitrate for ${missing.join(", ")})` });
-  } else if (!knownIncoming) {
+  if (!(nvr.incomingMbps > 0)) {
     checks.push({ name: "bandwidth", pass: true, unverified: true, detail: "Recorder incoming bandwidth not in the catalogue" });
+  } else if (max.some((b) => b == null)) {
+    const missing = [...new Set(ctx.cameras.filter((_, i) => max[i] == null).map((c) => c.model))];
+    checks.push({ name: "bandwidth", pass: true, unverified: true, detail: `Not verifiable: no published maximum bitrate for ${missing.join(", ")} (recorder accepts ${nvr.incomingMbps} Mbps)` });
   } else {
-    const total = (design as number[]).reduce((s, b) => s + b, 0);
-    checks.push({ name: "bandwidth", pass: total <= nvr.incomingMbps, detail: `Design bandwidth ${total.toFixed(1)} Mbps, recorder accepts ${nvr.incomingMbps} Mbps` });
-  }
-  if (max.every((b) => b != null) && knownIncoming) {
     const total = (max as number[]).reduce((s, b) => s + b, 0);
     checks.push({
-      name: "max_bandwidth",
+      name: "bandwidth",
       pass: true,
       warning: total > nvr.incomingMbps,
       detail:
         total > nvr.incomingMbps
-          ? `Maximum possible configured bandwidth ${total.toFixed(1)} Mbps exceeds the recorder's ${nvr.incomingMbps} Mbps: keep the cameras at the approved recording profile`
-          : `Maximum possible configured bandwidth ${total.toFixed(1)} Mbps is within the recorder's ${nvr.incomingMbps} Mbps`,
+          ? `Cameras' published maximum ${total.toFixed(1)} Mbps exceeds the recorder's ${nvr.incomingMbps} Mbps: set camera bitrates below maximum`
+          : `Cameras' published maximum ${total.toFixed(1)} Mbps is within the recorder's ${nvr.incomingMbps} Mbps`,
     });
-  } else {
-    checks.push({ name: "max_bandwidth", pass: true, unverified: true, detail: "Maximum possible bandwidth unknown (a camera or the recorder does not publish it)" });
   }
 
   if (nvr.poePorts > 0) {
@@ -101,25 +91,12 @@ export function validateNvr(nvr: NvrProduct, ctx: NvrContext): NvrEvaluation {
     checks.push({ name: "poe", pass: true, detail: "Recorder has no PoE ports: an external PoE switch powers the cameras" });
   }
 
-  if (ctx.residentialHdd) {
-    const tb = ctx.residentialHdd.capacityTb;
-    const who = ctx.residentialHdd.source === "override" ? "chosen" : "default";
-    checks.push(
-      tb == null
-        ? { name: "storage", pass: true, unverified: true, detail: "HDD to be chosen manually (no default for this camera count)" }
-        : { name: "storage", pass: nvr.hddBays >= 1 && nvr.maxHddTb >= tb, detail: nvr.maxHddTb >= tb ? `takes the ${who} ${tb} TB drive (up to ${nvr.maxHddTb} TB per drive)` : `takes drives up to ${nvr.maxHddTb} TB, not the ${who} ${tb} TB` },
-    );
-  } else if (ctx.requiredGb == null) {
-    checks.push({ name: "storage", pass: true, unverified: true, detail: "Storage not sized: design bitrates from an approved recording profile are needed" });
+  const tb = ctx.hdd?.capacityTb ?? null;
+  if (tb == null) {
+    checks.push({ name: "storage", pass: true, unverified: true, detail: "HDD to be selected" });
   } else {
-    const drives = chooseDrives(ctx.requiredGb, nvr, ctx.products, ctx.policies, ctx.links);
-    checks.push({
-      name: "storage",
-      pass: !!drives,
-      detail: drives
-        ? `${drives.count} x ${drives.product.capacityTb} TB holds the ${Math.round(ctx.requiredGb)} GB needed`
-        : `cannot hold ${Math.round(ctx.requiredGb)} GB (${nvr.hddBays} bay(s), ${nvr.maxHddTb} TB per drive, ${nvr.maxTotalTb} TB total)`,
-    });
+    const who = ctx.hdd?.source === "override" ? "chosen" : ctx.hdd?.source === "kit" ? "kit" : "default";
+    checks.push({ name: "storage", pass: nvr.hddBays >= 1 && nvr.maxHddTb >= tb, detail: nvr.maxHddTb >= tb ? `takes the ${who} ${tb} TB drive (up to ${nvr.maxHddTb} TB per drive)` : `takes drives up to ${nvr.maxHddTb} TB, not the ${who} ${tb} TB` });
   }
 
   const maxMp = Math.max(0, ...ctx.cameras.map((c) => c.resolutionMp));
@@ -236,14 +213,14 @@ export function selectNvr(
     }
     return { pass: null, tried };
   };
-  // Nothing passes everything: one that fails only on storage is offered with the shortfall flagged.
+  // Nothing passes everything: one that fails only on the HDD capacity is offered with that flagged.
   const storageOnly = (list: NvrEvaluation[]) => list.find((e) => e.checks.filter((c) => !c.pass).every((c) => c.name === "storage"));
 
   const own = tryGroups(sized(same));
   if (own.pass) return { selected: own.pass.product, evaluated, storageShortfall: false, notes };
   const ownShort = storageOnly(own.tried);
   if (ownShort) {
-    notes.push(`${ownShort.product.manufacturer} ${ownShort.product.model} passes everything except storage: offered with the retention shortfall flagged rather than mixing brands.`);
+    notes.push(`${ownShort.product.manufacturer} ${ownShort.product.model} passes everything except the HDD capacity: offered with that flagged rather than mixing brands.`);
     return { selected: ownShort.product, evaluated, storageShortfall: true, notes };
   }
   const cross = tryGroups(sized(other));
@@ -253,7 +230,7 @@ export function selectNvr(
   }
   const crossShort = storageOnly(cross.tried);
   if (crossShort) {
-    notes.push(`${crossShort.product.manufacturer} ${crossShort.product.model} passes everything except storage: offered with the retention shortfall flagged.`);
+    notes.push(`${crossShort.product.manufacturer} ${crossShort.product.model} passes everything except the HDD capacity: offered with that flagged.`);
     return { selected: crossShort.product, evaluated, storageShortfall: true, notes };
   }
   if (!evaluated.length) notes.push("No recorder in the catalogue for this job.");

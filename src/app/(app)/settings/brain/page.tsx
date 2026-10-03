@@ -7,7 +7,7 @@ import {
   materialsPackages,
   productCompatibility,
   products,
-  recordingProfiles,
+  cctvKits,
   productPriceHistory,
   supplierBrandRoutes,
   supplierConnectors,
@@ -18,7 +18,7 @@ import {
   users,
 } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-import { ensurePolicies, loadPolicies, toProfile } from "@/lib/brain/store";
+import { ensurePolicies, loadPolicies } from "@/lib/brain/store";
 import { applyReferenceCatalogue } from "@/lib/brain/reference/apply";
 import { POLICY_DESCRIPTIONS, POLICY_KEYS } from "@/lib/brain/policy";
 import { priceFreshness } from "@/lib/brain/pricing";
@@ -36,7 +36,7 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
   const { tab = "policies" } = await searchParams;
   await ensurePolicies();
   await applyReferenceCatalogue();
-  const [policies, policyRows, productRows, offers, supplierRows, creds, packageRows, materialRows, linkRows, routeRows, profileRows] = await Promise.all([
+  const [policies, policyRows, productRows, offers, supplierRows, creds, packageRows, materialRows, linkRows, routeRows, kitRows] = await Promise.all([
     loadPolicies(),
     db.select({ p: brainPolicies, approver: users.name }).from(brainPolicies).leftJoin(users, eq(brainPolicies.approvedById, users.id)),
     db.select().from(products).orderBy(asc(products.category), asc(products.manufacturer), asc(products.model)),
@@ -47,7 +47,7 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
     db.select().from(materialsPackages).orderBy(asc(materialsPackages.name)),
     db.select().from(productCompatibility),
     db.select({ r: supplierBrandRoutes, supplier: suppliers.name }).from(supplierBrandRoutes).innerJoin(suppliers, eq(supplierBrandRoutes.supplierId, suppliers.id)).orderBy(asc(supplierBrandRoutes.brand), asc(supplierBrandRoutes.rank)),
-    db.select({ p: recordingProfiles, approver: users.name }).from(recordingProfiles).leftJoin(users, eq(recordingProfiles.approvedById, users.id)).orderBy(asc(recordingProfiles.propertyType), asc(recordingProfiles.name)),
+    db.select({ k: cctvKits, approver: users.name }).from(cctvKits).leftJoin(users, eq(cctvKits.approvedById, users.id)).orderBy(asc(cctvKits.propertyType), asc(cctvKits.cameraCount), asc(cctvKits.name)),
   ]);
   const order = new Map(POLICY_KEYS.map((k, i) => [k as string, i]));
   const withCred = new Set(creds.map((c) => c.supplierId));
@@ -156,12 +156,26 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
         status: p.status,
         notes: p.notes,
       }))}
-      profiles={[...profileRows]
-        .sort((a, b) => ["residential", "commercial", "any"].indexOf(a.p.propertyType) - ["residential", "commercial", "any"].indexOf(b.p.propertyType) || Number(b.p.isDefault) - Number(a.p.isDefault))
-        .map(({ p, approver }) => {
-        const v = toProfile(p, approver);
-        return { ...v, approvedBy: approver, notes: p.notes, reviewedAt: p.reviewedAt ? formatDate(p.reviewedAt) : null };
-      })}
+      kits={kitRows.map(({ k, approver }) => ({
+        id: k.id,
+        key: k.key,
+        name: k.name,
+        propertyType: (k.propertyType === "commercial" || k.propertyType === "both" ? k.propertyType : "residential") as "residential" | "commercial" | "both",
+        tier: k.tier,
+        cameraCount: k.cameraCount,
+        cameraProductId: k.cameraProductId,
+        nvrProductId: k.nvrProductId,
+        defaultHddTb: num(k.defaultHddTb),
+        defaultHddProductId: k.defaultHddProductId,
+        accessories: k.accessories,
+        status: k.status,
+        version: k.version,
+        notes: k.notes,
+        approvedBy: approver,
+      }))}
+      kitProducts={productRows
+        .filter((p) => p.status !== "deprecated")
+        .map((p) => ({ id: p.id, label: `${p.manufacturer} ${p.model}`, category: p.category, capacityTb: p.category === "hdd" ? Number((p.specs as { capacityTb?: number }).capacityTb ?? 0) || null : null }))}
       materials={materialRows.map((m) => ({
         id: m.id,
         name: m.name,

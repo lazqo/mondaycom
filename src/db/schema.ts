@@ -766,6 +766,35 @@ export const supplierProducts = pgTable(
 );
 
 /**
+ * Approved CCTV kits: Get Secure's standard system configurations. A kit is the cameras, the
+ * recorder, the default HDD and any accessories for an exact camera count (and tier/market). The
+ * installation package stays separate. Only an approved kit is used automatically.
+ */
+export const cctvKits = pgTable("cctv_kits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  key: text("key").unique(),
+  name: text("name").notNull(),
+  /** residential | commercial | both */
+  propertyType: text("property_type").notNull().default("residential"),
+  /** good | better | best | premium; null for commercial or any tier. */
+  tier: text("tier"),
+  cameraCount: integer("camera_count").notNull(),
+  cameraProductId: uuid("camera_product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "restrict" }),
+  nvrProductId: uuid("nvr_product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "restrict" }),
+  /** The kit's default HDD capacity (TB). The drive model is the approved one of that capacity, unless a model is set. */
+  defaultHddTb: numeric("default_hdd_tb", { precision: 6, scale: 2 }),
+  defaultHddProductId: uuid("default_hdd_product_id").references(() => products.id, { onDelete: "set null" }),
+  /** Accessories in the kit, charged as hardware: a fixed quantity, or one per camera. */
+  accessories: jsonb("accessories").$type<{ productId: string; quantity: number; perCamera: boolean }[]>().notNull().default([]),
+  version: integer("version").notNull().default(1),
+  ...provenance(),
+});
+
+/**
  * Documented relationships between products: which recorder, junction box or bracket goes with a
  * camera, which drives a recorder takes, what a kit contains.
  */
@@ -875,9 +904,8 @@ export const installationPackages = pgTable("installation_packages", {
 });
 
 /**
- * How cameras are configured to record, which sets the design bitrate used for recorder bandwidth,
- * storage and retention. Rules resolve most specific first: product, then manufacturer/family,
- * then resolution band. Values are Get Secure's; none are derived from datasheets.
+ * Retired: recording profiles no longer drive design, storage or quoting (the HDD comes from the
+ * approved kit or Chris's choice). The table is kept so historical rows survive; nothing reads it.
  */
 export const recordingProfiles = pgTable("recording_profiles", {
   id: uuid("id").primaryKey().defaultRandom(),

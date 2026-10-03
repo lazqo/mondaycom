@@ -79,11 +79,7 @@ export function salesRead(input: {
         { item: "Recorder", ours: p.nvr.selected ? `${p.nvr.selected.channels}-channel ${p.nvr.selected.manufacturer}` : "to be confirmed" },
         {
           item: "Storage / retention",
-          ours: p.recording.storage.installedTb
-            ? p.recording.storage.advisory
-              ? `${p.recording.storage.installedTb} TB (recording duration varies with camera settings, activity and recording configuration)`
-              : `${p.recording.storage.installedTb} TB, about ${p.recording.storage.expectedRetentionDays} days 24/7`
-            : "to be confirmed",
+          ours: p.recording.storage.installedTb ? `${p.recording.storage.installedTb} TB (recording duration depends on camera settings, recording configuration and scene activity)` : "to be confirmed",
         },
         { item: "Installation", ours: p.labour.package ? "Included (installation allowance)" : "to be confirmed" },
         { item: "Cabling", ours: "Included in the standard materials allowance" },

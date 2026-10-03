@@ -1,11 +1,11 @@
 /**
  * Is this assessment a real quote yet? One checklist of everything Get Secure must have entered
- * and approved for the price to stand: approved current supplier prices, an approved recording
- * profile with design bitrates, storage sized from it, an approved exact installation package with
- * every value, the markup Chris decided, the tier and products approved, and the sizing rules the
- * storage relies on. Each item says where to fix it. Nothing here fills a value in.
+ * and approved for the price to stand: approved current supplier prices, the HDD (from the kit,
+ * Chris's choice or the fallback), the recorder passing its checks, an approved exact installation
+ * package with every value, the markup Chris decided, the tier and products approved, and the rules
+ * the quote relies on. Each item says where to fix it. Nothing here fills a value in.
  */
-import { TRUSTED_STATUSES, type UpgradePlan, type CameraDesign, type Costing, type KnowledgeStatus, type LabourResult, type Policies, type Product, type StorageResult } from "./types";
+import { TRUSTED_STATUSES, type CctvKit, type UpgradePlan, type Costing, type KnowledgeStatus, type LabourResult, type NvrEvaluation, type Policies, type Product, type StorageResult } from "./types";
 
 export type ReadinessItem = { key: string; label: string; ok: boolean; detail: string; fix: string | null };
 export type Readiness = { ready: boolean; items: ReadinessItem[] };
@@ -13,15 +13,15 @@ export type Readiness = { ready: boolean; items: ReadinessItem[] };
 const trusted = (s: KnowledgeStatus | null | undefined) => !!s && TRUSTED_STATUSES.includes(s);
 const name = (p: { manufacturer: string; model: string }) => `${p.manufacturer} ${p.model}`;
 
-/** Rules whose values decide this quote's storage, freshness or accessories. */
-const SIZING_RULES = ["storageHeadroomPct", "hddUsableFraction", "priceAgingDays", "priceStaleDays", "junctionBoxSurfaces", "gstRate"] as const;
+/** Rules whose values decide this quote's freshness, accessories or GST. */
+const QUOTE_RULES = ["priceAgingDays", "priceStaleDays", "junctionBoxSurfaces", "gstRate"] as const;
 
 export function quoteReadiness(x: {
   cameras: Product[];
   nvr: Product | null;
   drive: Product | null;
-  profile: { name: string; status: KnowledgeStatus } | null;
-  designs: CameraDesign[];
+  nvrEvaluation: NvrEvaluation | null;
+  kit: CctvKit | null;
   storage: StorageResult;
   labour: LabourResult;
   costing: Costing;
@@ -47,53 +47,37 @@ export function quoteReadiness(x: {
     fix: "Settings → Business Brain → Supplier pricing: refresh, then approve the price.",
   });
 
-  const noDesign = x.designs.filter((d) => d.designBitrateMbps == null || !d.bitrateApproved).map((d) => `${d.model} (${d.resolutionMp} MP)`);
+  const st = x.storage;
+  const d = st.drives?.product;
+  const from = st.selection === "override" ? "chosen by Chris" : st.selection === "kit" ? "kit default" : st.selection === "fallback" ? "fallback by camera count" : "not selected";
   items.push({
-    key: "recording_profile",
-    label: "Approved recording profile with a design bitrate for each camera",
-    ok: !!x.profile && trusted(x.profile.status) && !noDesign.length && x.designs.length > 0,
-    detail: !x.profile
-      ? "No recording profile for this job."
-      : [
-          `${x.profile.name}: ${trusted(x.profile.status) ? "approved" : x.profile.status.replace(/_/g, " ")}`,
-          ...(noDesign.length ? [`no approved design bitrate for ${[...new Set(noDesign)].join(", ")}`] : x.designs.map((d) => `${d.model} ${d.designBitrateMbps} Mbps`)),
-        ].join("; "),
-    fix: "Settings → Business Brain → Recording profiles: codec, frame rate, a design bitrate rule covering these cameras, then approve.",
+    key: "storage",
+    label: "HDD selected",
+    ok: !!d,
+    detail: d ? `${st.installedTb} TB ${name(d)} (${from})` : st.notes.join(" "),
+    fix: d ? null : "Choose the HDD on the assessment, or set the kit's default HDD (Settings → Business Brain → Kits).",
   });
 
-  const st = x.storage;
-  if (st.advisory) {
-    // Residential: a drive must be selected (default or Chris's); retention is advice, not a blocker.
-    const d = st.drives?.product;
-    items.push({
-      key: "storage",
-      label: "HDD selected",
-      ok: !!d,
-      detail: d
-        ? [
-            `${st.selection === "override" ? "HDD chosen by Chris" : "Default HDD"}: ${st.installedTb} TB (${name(d)})`,
-            st.usableTb != null ? `estimated usable ${st.usableTb} TB` : null,
-            st.expectedRetentionDays != null ? `estimated retention about ${st.expectedRetentionDays} days` : "retention not estimated (no design bitrate)",
-            st.basis ? `based on ${st.basis}` : null,
-            st.warning,
-          ]
-            .filter(Boolean)
-            .join("; ")
-        : st.notes.join(" "),
-      fix: d ? null : "Choose the HDD on the assessment (HDD), then make sure that drive has an approved supplier price.",
-    });
-  } else {
-    items.push({
-      key: "storage",
-      label: "Storage sized from the design bitrate and meeting the retention target",
-      ok: st.status === "meets_target" && !!st.drives,
-      detail:
-        st.status === "cannot_calculate"
-          ? "Cannot be sized until the recording profile has approved design bitrates."
-          : `${st.requiredGb != null ? `needs ${(st.requiredGb / 1000).toFixed(2)} TB` : ""}${st.drives ? `; selected ${st.drives.count} × ${name(st.drives.product)}` : "; no drive with an approved price is large enough"}${st.expectedRetentionDays != null ? ` (about ${st.expectedRetentionDays} days)` : ""}; ${st.status.replace(/_/g, " ")}`,
-      fix: st.drives ? null : "Price and approve a surveillance drive of the needed capacity (Supplier pricing → Refresh one product).",
-    });
-  }
+  const ev = x.nvrEvaluation;
+  items.push({
+    key: "recorder",
+    label: "Recorder passes its checks",
+    ok: !!ev && ev.pass,
+    detail: !ev
+      ? "No recorder selected."
+      : ev.pass
+        ? `${name(ev.product)}: ${ev.checks.filter((c) => c.unverified).length ? `passes; not verifiable from specifications: ${ev.checks.filter((c) => c.unverified).map((c) => c.name).join(", ")}` : "passes every check"}`
+        : `${name(ev.product)} fails: ${ev.checks.filter((c) => !c.pass).map((c) => `${c.name} (${c.detail})`).join("; ")}`,
+    fix: ev && !ev.pass ? "Choose another recorder (fix the kit) or change the HDD." : null,
+  });
+
+  items.push({
+    key: "kit",
+    label: "Approved kit",
+    ok: true,
+    detail: x.kit ? `${x.kit.name}${x.kit.key ? ` (${x.kit.key})` : ""}` : "No approved kit for this camera count and tier: products chosen from the catalogue. Add a kit to fix the configuration and its default HDD.",
+    fix: null,
+  });
 
   if (x.upgrade) {
     const u = x.upgrade;
@@ -149,12 +133,12 @@ export function quoteReadiness(x: {
     fix: unapproved.length ? "Settings → Business Brain → Products & prices: review and approve." : null,
   });
 
-  const rules = SIZING_RULES.filter((k) => x.policies[k] && !trusted(x.policies[k].status));
+  const rules = QUOTE_RULES.filter((k) => x.policies[k] && !trusted(x.policies[k].status));
   items.push({
     key: "rules",
     label: "Rules this quote relies on are approved",
     ok: !rules.length,
-    detail: rules.length ? rules.map((k) => `${k} = ${JSON.stringify(x.policies[k].value)} (${x.policies[k].status.replace(/_/g, " ")})`).join("; ") : "Storage headroom, usable drive capacity, price freshness, junction-box and GST rules are approved.",
+    detail: rules.length ? rules.map((k) => `${k} = ${JSON.stringify(x.policies[k].value)} (${x.policies[k].status.replace(/_/g, " ")})`).join("; ") : "Price freshness, junction-box and GST rules are approved.",
     fix: rules.length ? "Settings → Business Brain → Rules: confirm or change each, then approve." : null,
   });
 

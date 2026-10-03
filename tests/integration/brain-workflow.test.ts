@@ -199,11 +199,11 @@ describe("supplier prices", () => {
 describe("policies", () => {
   it("only an approver can mark a rule Get Secure approved; agents cannot change rules", async () => {
     await brain.ensurePolicies();
-    const before = (await db.query.brainPolicies.findFirst({ where: eq(brainPolicies.key, "storageHeadroomPct") }))!;
-    await expect(brain.savePolicy("storageHeadroomPct", 12, "getsecure_approved", null, staff)).rejects.toBeInstanceOf(GuardrailError);
-    await expect(brain.savePolicy("storageHeadroomPct", 12, "getsecure_provisional", null, HERMES)).rejects.toBeInstanceOf(GuardrailError);
+    const before = (await db.query.brainPolicies.findFirst({ where: eq(brainPolicies.key, "priceAgingDays") }))!;
+    await expect(brain.savePolicy("priceAgingDays", 12, "getsecure_approved", null, staff)).rejects.toBeInstanceOf(GuardrailError);
+    await expect(brain.savePolicy("priceAgingDays", 12, "getsecure_provisional", null, HERMES)).rejects.toBeInstanceOf(GuardrailError);
     // Restore whatever was there.
-    await db.update(brainPolicies).set({ value: before.value, status: before.status }).where(eq(brainPolicies.key, "storageHeadroomPct"));
+    await db.update(brainPolicies).set({ value: before.value, status: before.status }).where(eq(brainPolicies.key, "priceAgingDays"));
   });
 });
 

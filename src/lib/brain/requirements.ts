@@ -74,7 +74,7 @@ export function cameraPlan(input: EnquiryInput, policies: Policies): { cameras: 
   return { cameras, notes };
 }
 
-export function requirementsSummary(input: EnquiryInput, retentionDays: number, mode: string): string[] {
+export function requirementsSummary(input: EnquiryInput, mode: string): string[] {
   const out: string[] = [];
   const kind = input.propertyType ? (input.propertyType === "residential" ? "Residential" : "Commercial") : "Property type unknown";
   out.push(`${kind}${input.jobType ? `, ${input.jobType === "new" ? "new system" : input.jobType}` : ""}`);
@@ -82,7 +82,7 @@ export function requirementsSummary(input: EnquiryInput, retentionDays: number, 
   else if (input.areas.length) out.push(`Areas: ${input.areas.join(", ")}`);
   if (input.storeys) out.push(input.storeys === 1 ? "Single-storey" : input.storeys === 2 ? "Double-storey" : `${input.storeys}-storey`);
   if (input.address) out.push(`Site: ${input.address}`);
-  out.push(`Recording: ${mode === "continuous" ? "24/7 continuous" : "motion"}, ${retentionDays} days`);
+  out.push(`Recording: ${mode === "continuous" ? "24/7 continuous" : "motion"}${input.retentionDays ? ` (customer asked for ${input.retentionDays} days: custom requirement)` : ""}`);
   if (input.remoteViewing !== null) out.push(input.remoteViewing ? "Remote viewing on phone/app" : "No remote viewing needed");
   if (input.requestedBrand) out.push(`Brand asked for: ${input.requestedBrand}`);
   if (input.budget) out.push(`Budget mentioned: $${input.budget.toLocaleString("en-NZ")}`);

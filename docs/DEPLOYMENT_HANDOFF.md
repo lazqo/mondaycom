@@ -543,14 +543,10 @@ Chris; it never sends, books or promises anything.
 
 **v0.3 real costing**
 
-- **Recording profiles** (Settings → Business Brain → Recording profiles): Residential standard
-  (default; 24/7, 28-day target, 14-day minimum), Residential high-detail, Commercial standard,
-  Custom. Each holds codec, frame rate, CBR/VBR and **design bitrates** as rules: a product rule
-  beats a manufacturer/family rule, which beats a resolution band. The design bitrate decides
-  recorder bandwidth, drive size and retention. A camera's published maximum bitrate only raises a
-  warning ("maximum possible configured bandwidth exceeds the recorder"), it never rejects a
-  same-brand system. No design bitrates are filled in: until they are, assessments say "approved
-  recording profile required" and the drive is not sized.
+- **Approved kits** (Settings → Business Brain → Kits) replace recording profiles. A kit is Get
+  Secure's standard system for an exact camera count and market (and tier): cameras + recorder +
+  default HDD + relevant accessories. An approved kit is used automatically for a matching job;
+  the installation package stays separate. See "CCTV kits and the HDD" below.
 - **Installation packages** are keyed by an exact camera count: RES_CCTV_SINGLE_2/4/6/8 and
   RES_CCTV_DOUBLE_2/4/6/8. A 3, 5 or 7 camera job is a **custom installation** and is never
   mapped to a package. Each package has labour hours, internal rate ($95/h residential), standard
@@ -570,8 +566,9 @@ Chris; it never sends, books or promises anything.
 
 **What Chris must enter and approve before the first fully priced quote**
 
-1. **Recording profile design bitrates** — on Residential standard (at least per resolution band),
-   plus codec and frame rate; then approve the profile.
+1. **Kits** — for the systems you quote (e.g. VIGI Good, 4 and 6 cameras): camera, recorder and
+   default HDD; then approve. Without a kit, products come from the catalogue and the HDD from the
+   residential fallback (or must be chosen).
 2. **Supplier trade prices** — for the cameras, recorders and drives you quote (CSV import or
    manual entry), then approve them. Stale (>30 days) or undated prices block quote approval.
 3. **Installation packages** — for each of the eight: labour hours, standard material cost,
@@ -586,14 +583,14 @@ Until these are in, assessments still run and show "Not fully priced" with exact
 **Ready to quote checklist.** Every assessment opens with a checklist of what must be entered and
 approved for the price to stand. For each item it shows ✓ or ✗, what's missing, and where to fix it:
 - approved, current supplier prices for every hardware line;
-- an approved recording profile with a design bitrate for each camera;
-- storage sized from it and meeting the retention target;
+- an HDD selected (Chris's choice, the kit default or the fallback), with an approved price;
+- the recorder passing its checks;
+- which approved kit was used (for information);
 - the exact installation package, with every value entered and approved;
 - the hardware markup decided by Chris (the assessment's markup override, or an approved rule);
 - the camera tier approved;
 - products verified or approved;
-- the sizing rules the quote relies on (storage headroom, usable drive capacity, price freshness,
-  junction-box surfaces) approved.
+- the rules the quote relies on (price freshness, junction-box surfaces, GST) approved.
 
 A Business Brain quote that is **Not fully priced cannot be approved**. Neither can one with stale
 prices. The quote's approval panel lists any input that is still provisional.
@@ -632,42 +629,48 @@ The four upgrade packages exist with no values. Labour hours, materials, complex
 customer sell allowance are Get Secure's to enter, then approve, under Installation & materials.
 Camera counts other than 2/4/6/8 are custom installations, as for new installs.
 
-**Residential Standard** now carries the values Chris agreed, awaiting his approval under Recording
-profiles:
-- H.265+, VBR, 25 fps;
-- design bitrate 2MP 1.5, 3MP 2.0, 4MP 2.5, 5MP 3.0, 6MP 3.5, 8MP 4.5 and 12MP 6.5 Mbps.
+### CCTV kits and the HDD
 
-They were filled in only because no bitrates had been entered yet; values already in the CRM are
-never overwritten. Drive capacity is calculated from these bitrates, the retention and the headroom.
+Recording profiles have been removed. No design bitrate, retention target, storage headroom or
+usable-capacity rule is used anywhere: the HDD is **chosen, not calculated**. Old recording-profile
+rows stay in the database as history, but nothing reads them. The retired sizing rules are no longer
+shown under Rules.
 
-### Residential HDD rule
+**Which HDD a quote uses**, in order:
 
-For residential CCTV (new installations and upgrades), the drive is chosen by camera count and is
-**not** resized to hit a retention target:
+1. **Chris's choice on the assessment.** The **HDD** field defaults to "Use kit HDD". Chris can pick
+   a capacity (1/2/4/6/8 TB and any capacity in the catalogue) or a specific drive.
+2. **The approved kit's default HDD**, set per kit in Settings → Kits. This is either a capacity or
+   a specific drive. It is never resized.
+3. **Residential only, with no kit HDD:** the fallback by camera count (Rules → "Residential
+   default HDD by camera count"):
 
-| Cameras | Default HDD |
-|---|---|
-| 2–4 | 2 TB |
-| 5–10 | 4 TB |
-| 1, or 11+ | choose it on the assessment (no default) |
+   | Cameras | Fallback |
+   |---|---|
+   | 2–4 | 2 TB |
+   | 5–10 | 4 TB |
 
-The rule is "Residential default HDD by camera count" under Rules.
-- **HDD override:** on the assessment, the **HDD** field lets Chris pick a capacity (2/4/6/8 TB …)
-  or a specific drive. The quote uses that drive and the retention is re-estimated.
-- **Bitrates:** the Residential Standard bitrates still validate recorder bandwidth. They also give
-  the estimated retention, shown as "Default HDD", "Estimated usable capacity" and "Estimated
-  recording retention: approximately N days", based on e.g. 6 × 5MP cameras at 3 Mbps.
-- **Low retention:** below the 28-day reference target, the assessment warns "Estimated retention is
-  below the normal Get Secure target. Consider selecting a larger HDD." The drive is not changed,
-  and the warning does not block the quote.
-- **Pricing:** the chosen capacity needs an approved, current supplier price. If the default 2 TB or
-  4 TB drive has none, the quote is Not fully priced and the checklist says to refresh/approve that
-  drive. A larger drive is never substituted because it happens to have a price.
-- **Customer wording:** emails and quotes don't promise a number of days. They say "Recording
-  duration varies depending on camera settings, activity and recording configuration." Chris can
-  edit a draft if he has chosen storage to meet a stated retention.
-- **Commercial CCTV:** unchanged. Storage is site-specific and still sized from bitrate and
-  retention.
+   The fallback never replaces a kit's HDD.
+4. **Otherwise: HDD selection required.** The quote is not ready until Chris chooses one.
+
+**Pricing.** The selected drive needs an approved product, an approved supplier SKU and a current
+cost. If any of these is missing, the quote is **Not fully priced**. Another capacity is never
+substituted because it happens to have a price.
+
+**Recorder checks are unchanged.** The engine still checks channels, PoE ports, the PoE budget,
+resolution and decoding, compatibility, the maximum HDD capacity the recorder supports, and
+features. Bandwidth uses the cameras' **published maximum** bitrates:
+- If the total is over the recorder's incoming limit, the assessment shows a warning ("set camera
+  bitrates below maximum"). The recorder is not rejected.
+- If a camera publishes no maximum, bandwidth shows as not verifiable.
+
+**Retention.** It is never calculated or promised. Customer emails and quotes say: "Recording
+duration depends on camera settings, recording configuration and scene activity." A customer who
+asks for a specific number of days is a **custom requirement**. The assessment flags it for Chris,
+who chooses an HDD to suit or designs it.
+
+**Commercial CCTV** follows the same principle: a commercial kit or Chris's HDD choice, with no
+profile system. A site visit is still required.
 
 ### Later: Alarm Brain (notes only, not built)
 

@@ -18,7 +18,7 @@ process.env.AI_PROVIDER = "rules";
 process.env.SUPPLIER_SYNC_DELAY_MS = "0";
 
 const { db } = await import("@/db");
-const { drafts, installationPackages, leads, productPriceHistory, products, quotes, recordingProfiles, supplierConnectors, supplierCredentials, supplierProducts, supplierSyncRuns, suppliers, users } =
+const { drafts, installationPackages, leads, productPriceHistory, products, quotes, cctvKits, supplierConnectors, supplierCredentials, supplierProducts, supplierSyncRuns, suppliers, users } =
   await import("@/db/schema");
 const { encryptSecret } = await import("@/lib/crypto");
 const brain = await import("@/lib/brain/store");
@@ -70,7 +70,7 @@ let itPlusId: string;
 let chris: { kind: "human"; userId: string; name: string; canApprove: true };
 let staff: { kind: "human"; userId: string; name: string; canApprove: false };
 let leadId: string;
-let profileId: string;
+let kitId: string | undefined;
 let savedCred: typeof supplierCredentials.$inferSelect | undefined;
 let savedConn: typeof supplierConnectors.$inferSelect | undefined;
 let pkgBefore: typeof installationPackages.$inferSelect;
@@ -119,7 +119,7 @@ afterAll(async () => {
   await db.delete(leads).where(eq(leads.id, leadId));
   await db.delete(supplierProducts).where(and(eq(supplierProducts.supplierId, itPlusId), inArray(supplierProducts.productId, Object.values(ids))));
   await db.delete(supplierSyncRuns).where(eq(supplierSyncRuns.supplierId, itPlusId));
-  if (profileId) await db.delete(recordingProfiles).where(eq(recordingProfiles.id, profileId));
+  if (kitId) await db.delete(cctvKits).where(eq(cctvKits.id, kitId));
   if (pkgBefore) {
     const { id, ...rest } = pkgBefore;
     await db.update(installationPackages).set(rest).where(eq(installationPackages.id, id));
@@ -250,41 +250,28 @@ describe("IT Plus connector", () => {
   });
 
   it("the 4-camera VIGI quote uses the approved IT Plus prices; a later refresh never changes it and holds changes for Chris", async () => {
-    // TEST VALUES for the inputs Chris owns: a design bitrate profile and the RES_CCTV_SINGLE_4 package.
-    const [p] = await db
-      .insert(recordingProfiles)
-      .values({
-        key: `TEST_${RUN.toUpperCase()}`,
-        name: `Test profile ${RUN}`,
-        propertyType: "residential",
-        codec: "H.265",
-        frameRate: 15,
-        bitrateControl: "VBR",
-        recordingMode: "continuous",
-        retentionTargetDays: 28,
-        retentionMinimumDays: 14,
-        rules: [{ id: "b5", scope: "resolution", minMp: 0, maxMp: 6.5, designBitrateMbps: 2 }],
-        status: "getsecure_approved",
-        approvedById: chris.userId,
-        source: "integration test",
-      })
-      .returning();
-    profileId = p.id;
+    // TEST VALUES for the input Chris owns: the RES_CCTV_SINGLE_4 package.
     await db
       .update(installationPackages)
       .set({ estimatedHours: "6.00", labourRate: "95.00", materialCostExGst: "80.00", complexityAllowanceExGst: "0.00", allowanceExGst: "790.00", status: "getsecure_approved" })
       .where(eq(installationPackages.key, "RES_CCTV_SINGLE_4"));
 
-    // 4 cameras default to a 2 TB drive, which has no IT Plus price here: not fully priced, and never swapped for the priced 4 TB.
-    const d = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId, customerName: "Mere Tane", mountingSurface: "brick" }), staff);
-    expect(d.packet.recording.storage.installedTb).toBe(2);
+    // No kit yet: 4 cameras fall back to a 2 TB drive, which has no IT Plus price here: not fully priced, and never swapped for the priced 4 TB.
+    const d = await brain.runAssessment(leadId, house({ requestedTier: "good", customerName: "Mere Tane", mountingSurface: "brick" }), staff);
+    expect(d.packet.recording.storage).toMatchObject({ selection: "fallback", installedTb: 2 });
     expect(d.packet.costing.complete).toBe(false);
-    // Chris chooses the 4 TB WD43PURZ on the assessment.
-    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId, customerName: "Mere Tane", mountingSurface: "brick", hddOverride: { productId: ids.hdd } }), staff);
+    // Chris approves the kit: 4 x S455, the NVR1004H-4P and the 4 TB WD43PURZ as its default HDD.
+    const [k] = await db
+      .insert(cctvKits)
+      .values({ key: `KIT_${RUN.toUpperCase()}`, name: "VIGI Good 4", propertyType: "residential", tier: "good", cameraCount: 4, cameraProductId: ids.camera, nvrProductId: ids.nvr, defaultHddProductId: ids.hdd, defaultHddTb: "4.00", status: "getsecure_approved", approvedById: chris.userId, source: "integration test" })
+      .returning();
+    kitId = k.id;
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", customerName: "Mere Tane", mountingSurface: "brick" }), staff);
     const pk = a.packet;
     expect(pk.cameras.every((c) => c.product?.id === ids.camera)).toBe(true);
     expect(pk.nvr.selected?.id).toBe(ids.nvr);
-    expect(pk.recording.storage).toMatchObject({ selection: "override", installedTb: 4 });
+    expect(pk.kit?.id).toBe(kitId);
+    expect(pk.recording.storage).toMatchObject({ selection: "kit", installedTb: 4 });
     expect(pk.recording.storage.drives?.product.id).toBe(ids.hdd);
     // Brick walls: the documented, IT Plus-priced junction box is recommended (not charged until Chris confirms).
     const jb = pk.installation.materials.find((m) => m.key === `junction_box:${ids.jb}`)!;

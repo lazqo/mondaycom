@@ -5,36 +5,40 @@
  * specification or a price. What it cannot settle from approved data it reports as missing,
  * unresolved, or needing Chris's approval.
  */
-import { candidateCameras, chooseCameras } from "./cameras";
-import { cameraDesign, profileFor, recordingFor } from "./profiles";
+import { cameraMeets, candidateCameras, chooseCameras } from "./cameras";
 import { costQuote } from "./costing";
 import { installationPlan, labourPlan } from "./installation";
 import { upgradePlan } from "./upgrade";
 import { priceCatalogue } from "./pricing";
 import { networkPlan } from "./network";
-import { channelsNeeded, isNvr, selectNvr } from "./nvr";
+import { channelsNeeded, isNvr, selectNvr, validateNvr } from "./nvr";
 import { cameraPlan, missingInformation, requirementsSummary } from "./requirements";
 import { quoteReadiness } from "./readiness";
 import { salesRead } from "./sales";
 import { siteVisitDecision } from "./site-visit";
-import { requiredStorageGb, residentialHddChoice, residentialStoragePlan, storagePlan } from "./storage";
+import { hddChoice, storagePlan } from "./storage";
 import type {
   Approval,
   CameraChoice,
   CameraProduct,
   Catalogue,
+  CctvKit,
   Confidence,
   DecisionPacket,
   EnquiryInput,
   KnowledgeStatus,
   Level,
+  NvrEvaluation,
+  NvrProduct,
   Policies,
+  Product,
+  PropertyType,
   Tier,
   TierOption,
 } from "./types";
 import { TIERS, TRUSTED_STATUSES } from "./types";
 
-export const ENGINE_VERSION = "cctv-0.3.0";
+export const ENGINE_VERSION = "cctv-1.0.0";
 
 const LEVELS: Level[] = ["low", "medium", "high"];
 const minLevel = (...ls: Level[]) => LEVELS[Math.min(...ls.map((l) => LEVELS.indexOf(l)))];
@@ -47,55 +51,56 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
   const plan = cameraPlan(input, policies);
   const cams = candidateCameras(catalogue.products, input.propertyType, tier);
   const brandOrder = tier && input.propertyType !== "commercial" ? policies.tiers.value[tier]?.brands ?? [] : [];
-  const profile = profileFor(input, catalogue.recordingProfiles ?? []);
-  const cameras = chooseCameras(plan.cameras, cams, policies, brandOrder, (c) => cameraDesign(c, profile).designBitrateMbps);
+  const residential = input.propertyType !== "commercial";
+
+  // An approved kit for this market, tier and exact camera count fixes the cameras, recorder,
+  // default HDD and accessories. Without one, the products are chosen from the catalogue.
+  const kit = kitFor(catalogue.kits ?? [], input.propertyType, tier, plan.cameras.length, catalogue.products);
+  const kitCamera = kit ? (catalogue.products.find((p) => p.id === kit.cameraProductId) as CameraProduct) : null;
+  const kitNvr = kit ? (catalogue.products.find((p) => p.id === kit.nvrProductId) as NvrProduct) : null;
+  const cameras: CameraChoice[] = kitCamera
+    ? plan.cameras.map((req) => {
+        const m = cameraMeets(kitCamera, req, policies);
+        return { requirement: req, product: kitCamera, pixelDensity: m.ppm, reasons: [`From approved kit ${kit!.name}.`, ...(m.ok ? [] : [`Does not meet this position's needs: ${m.reasons.join(", ")}.`])] };
+      })
+    : chooseCameras(plan.cameras, cams, policies, brandOrder);
   const chosen = cameras.map((c) => c.product).filter((p): p is CameraProduct => !!p);
   const allChosen = chosen.length === cameras.length && cameras.length > 0;
 
-  // Design bitrate (recording profile) for bandwidth, storage and retention; published maximum only warns.
-  const rec = recordingFor(input, profile, policies);
-  const mode = rec.mode;
-  const designs = new Map(chosen.map((c) => [c.id, cameraDesign(c, profile)]));
-  const perCamera = chosen.map((c) => designs.get(c.id)!);
-  const totalMbps = allChosen && perCamera.every((d) => d.designBitrateMbps != null) ? perCamera.reduce((s, d) => s + d.designBitrateMbps!, 0) : null;
-  const maxPossibleMbps = allChosen && perCamera.every((d) => d.publishedMaxBitrateMbps != null) ? perCamera.reduce((s, d) => s + d.publishedMaxBitrateMbps!, 0) : null;
-  const noDesign = [...new Set(perCamera.filter((d) => d.designBitrateMbps == null).map((d) => d.model))];
-  const missingNote = !profile
-    ? "No recording profile for this job, so there is no design bitrate: storage cannot be calculated."
-    : noDesign.length
-      ? `Recording profile "${profile.name}" has no design bitrate for ${noDesign.join(", ")}: approved recording profile required before storage can be calculated.`
-      : undefined;
-  // Residential: the drive is the Get Secure default for the camera count (or Chris's choice), and
-  // storage no longer drives the recorder choice. Commercial: sized from bitrate and retention.
-  const residential = input.propertyType !== "commercial";
-  const hddChoice = residential ? residentialHddChoice({ cameraCount: cameras.length, override: input.hddOverride, products: catalogue.products, policies }) : null;
-  const requiredGb = !residential && totalMbps != null ? requiredStorageGb(totalMbps, rec.target, policies).requiredGb : null;
+  // No recording profile: 24/7 continuous unless asked otherwise; bandwidth from published maximums.
+  const mode = input.recordingMode ?? policies.residentialDefaultRecording.value;
+  const maxPossibleMbps = allChosen && chosen.every((c) => c.maxBitrateMbps != null) ? chosen.reduce((s, c) => s + c.maxBitrateMbps!, 0) : null;
+
+  // HDD: Chris's override, then the kit's default, then (residential) the fallback by camera count.
+  const choice = hddChoice({ cameraCount: cameras.length, residential, override: input.hddOverride, kit, products: catalogue.products, policies });
 
   const sizing = channelsNeeded(cameras.length, input.propertyType, input.commercial?.futureCameras, policies);
   const small = policies.residentialSmallRecorderChannels.value;
-  const exact = input.propertyType !== "commercial" && cameras.length <= small.maxCameras ? small.channels : null;
-  const nvrPick = allChosen
-    ? selectNvr(catalogue.products.filter(isNvr), {
-        cameras: chosen,
-        channelsNeeded: sizing.channels,
-        requiredGb,
-        residentialHdd: hddChoice ? { capacityTb: hddChoice.capacityTb, source: hddChoice.source } : null,
-        requiredFeatures: input.analytics.filter((a) => a !== "audio"),
-        audio: input.audioRequested && (input.propertyType !== "commercial" || !!input.commercial?.audioJustification),
-        alarmIo: false,
-        products: catalogue.products,
-        policies,
-        links,
-        designs,
-        propertyType: input.propertyType,
-        tier,
-        exactChannels: exact,
-      })
-    : { selected: null, evaluated: [], storageShortfall: false, notes: ["Cameras not all chosen, so no recorder was evaluated."] };
+  const exact = residential && cameras.length <= small.maxCameras ? small.channels : null;
+  const nvrCtx = {
+    cameras: chosen,
+    channelsNeeded: sizing.channels,
+    hdd: { capacityTb: choice.capacityTb, source: choice.source },
+    requiredFeatures: input.analytics.filter((a) => a !== "audio"),
+    audio: input.audioRequested && (residential || !!input.commercial?.audioJustification),
+    alarmIo: false,
+    products: catalogue.products,
+    policies,
+    links,
+  };
+  let nvrPick: { selected: NvrProduct | null; evaluated: NvrEvaluation[]; storageShortfall: boolean; notes: string[] };
+  if (!allChosen) nvrPick = { selected: null, evaluated: [], storageShortfall: false, notes: ["Cameras not all chosen, so no recorder was evaluated."] };
+  else if (kitNvr) {
+    const e = validateNvr(kitNvr, nvrCtx);
+    nvrPick = { selected: kitNvr, evaluated: [e], storageShortfall: false, notes: [`Recorder from approved kit ${kit!.name}.${e.pass ? "" : ` It fails: ${e.checks.filter((c) => !c.pass).map((c) => c.name).join(", ")}.`}`] };
+  } else nvrPick = selectNvr(catalogue.products.filter(isNvr), { ...nvrCtx, propertyType: input.propertyType, tier, exactChannels: exact });
 
-  const storage = hddChoice
-    ? residentialStoragePlan({ choice: hddChoice, totalMbps, designs: perCamera, retention: rec, nvr: nvrPick.selected, products: catalogue.products, policies, links, missingNote })
-    : storagePlan({ totalMbps, retention: rec, nvr: nvrPick.selected, products: catalogue.products, policies, links, missingNote });
+  const storage = storagePlan({ choice, nvr: nvrPick.selected, products: catalogue.products, links, customerRetentionDays: input.retentionDays ?? null });
+  const kitAccessories = kit
+    ? kit.accessories
+        .map((a) => ({ product: catalogue.products.find((p) => p.id === a.productId) ?? null, quantity: a.perCamera ? a.quantity * cameras.length : a.quantity }))
+        .filter((a): a is { product: Product; quantity: number } => !!a.product && a.quantity > 0)
+    : [];
   const network = networkPlan(input);
   const upgrade = upgradePlan(input, cameras.length, policies);
   const labour = labourPlan({ enquiry: input, cameraCount: cameras.length, packages: catalogue.packages, policies, upgrade });
@@ -110,6 +115,11 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
     installationPackage: labour.package,
     materialsPackages: catalogue.materialsPackages ?? [],
   });
+  // A junction box already in the approved kit is charged with the kit, not recommended again.
+  if (kitAccessories.length) {
+    const inKit = new Set(kitAccessories.map((a) => a.product.id));
+    installation.materials = installation.materials.filter((m) => !(m.product && inKit.has(m.product.id)));
+  }
   const costing = costQuote({
     cameras,
     nvr: nvrPick.selected,
@@ -117,13 +127,32 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
     materials: installation.materials,
     materialsPackage: installation.materialsPackage,
     labour,
-    residential: input.propertyType !== "commercial",
+    kitAccessories,
+    residential,
     policies,
     markupOverride,
     products: catalogue.products,
     links,
   });
-  return { plan, cameras, nvrPick, sizing, storage, network, installation, labour, costing, mode, profile, designs: [...designs.values()], totalMbps, maxPossibleMbps, upgrade };
+  return { plan, cameras, nvrPick, sizing, storage, network, installation, labour, costing, mode, maxPossibleMbps, upgrade, kit };
+}
+
+/** The approved kit for this market, tier and exact camera count, if its products still exist. */
+export function kitFor(kits: CctvKit[], propertyType: PropertyType | null, tier: Tier | null, cameraCount: number, products: Product[]): CctvKit | null {
+  const market = propertyType ?? "residential";
+  const live = (id: string) => products.some((p) => p.id === id && p.status !== "deprecated");
+  const fits = kits.filter(
+    (k) =>
+      TRUSTED_STATUSES.includes(k.status) &&
+      k.cameraCount === cameraCount &&
+      (k.propertyType === "both" || k.propertyType === market) &&
+      (market === "commercial" ? true : k.tier == null || k.tier === tier) &&
+      live(k.cameraProductId) &&
+      live(k.nvrProductId),
+  );
+  // A kit for this exact tier before an any-tier kit; then the newest version.
+  fits.sort((a, b) => Number(b.tier === tier) - Number(a.tier === tier) || b.version - a.version || a.name.localeCompare(b.name));
+  return fits[0] ?? null;
 }
 
 /** Tiers offered automatically. Ecosystem-only tiers (Ajax) only when that ecosystem is asked for. */
@@ -160,8 +189,7 @@ function chooseTier(input: EnquiryInput, policies: Policies, builds: Map<Tier, B
 function confidenceFor(b: Build, siteVisit: ReturnType<typeof siteVisitDecision>, policies: Policies, now: Date): Confidence {
   const reasons: string[] = [];
   let technical: Level = "high";
-  const storageUnsettled = b.storage.advisory ? !b.storage.drives : b.storage.status === "below_minimum" || b.storage.status === "cannot_calculate";
-  if (b.cameras.some((c) => !c.product) || !b.nvrPick.selected || storageUnsettled) {
+  if (b.cameras.some((c) => !c.product) || !b.nvrPick.selected || !b.storage.drives) {
     technical = "low";
     reasons.push("Technical: system incomplete (camera, recorder or storage not settled).");
   } else {
@@ -169,9 +197,9 @@ function confidenceFor(b: Build, siteVisit: ReturnType<typeof siteVisitDecision>
       technical = "medium";
       reasons.push("Technical: camera distances not known, pixel density not validated.");
     }
-    if ((!b.storage.advisory && b.storage.status === "below_target") || b.nvrPick.storageShortfall) {
+    if (b.nvrPick.storageShortfall) {
       technical = "medium";
-      reasons.push("Technical: retention below the target.");
+      reasons.push("Technical: the recorder does not take the selected HDD capacity.");
     }
     if (b.network.method === "unresolved") {
       technical = minLevel(technical, "medium");
@@ -283,19 +311,9 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
   if (b.cameras.some((c) => c.pixelDensity == null)) assumptions.push("Camera positions at typical residential distances");
   if (b.network.method === "wired_extension") assumptions.push("A cable route exists from the recorder to the router");
   if (b.network.method === "direct_lan") assumptions.push("The recorder sits next to the router");
-  assumptions.push(
-    b.storage.advisory
-      ? `${b.mode === "continuous" ? "24/7 continuous" : "Motion"} recording; recording duration varies depending on camera settings, activity and recording configuration`
-      : `${b.mode === "continuous" ? "24/7 continuous" : "Motion"} recording, ${b.storage.retentionTargetDays} days target`,
-  );
+  assumptions.push(`${b.mode === "continuous" ? "24/7 continuous" : "Motion"} recording; recording duration depends on camera settings, recording configuration and scene activity`);
   exclusions.push("Monitor/TV unless listed", "Electrical work beyond standard installation", "Internet connection and data costs");
   if (b.network.method === "cellular_option") exclusions.push("4G/5G router and data plan (offered as an option)");
-  if (b.storage.advisory) {
-    if (b.storage.warning) risks.push(`${b.storage.warning} (about ${b.storage.expectedRetentionDays} days with ${b.storage.installedTb} TB, against the ${b.storage.retentionTargetDays}-day reference target.)`);
-  } else {
-    if (b.storage.status === "below_target") risks.push(`Only about ${b.storage.expectedRetentionDays} days of recording achievable against a ${b.storage.retentionTargetDays}-day target.`);
-    if (b.storage.status === "below_minimum") risks.push(`Only about ${b.storage.expectedRetentionDays} days achievable: below the ${policies.retentionMinimumDays.value}-day minimum.`);
-  }
   if (b.installation.junctionBoxRecommended) risks.push(b.installation.junctionBoxReason!);
   for (const c of unverifiedChecks) risks.push(`Recorder ${c.name}: ${c.detail}.`);
   if (b.installation.doubleStorey) assumptions.push(...(b.labour.package?.assumptions ?? []).filter((a) => !assumptions.includes(a)));
@@ -325,18 +343,14 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
       description: `Refresh supplier price before final quote approval: ${b.costing.refreshRequired.map((r) => `${r.model}${r.supplier ? ` (${r.supplier}, ${r.freshness})` : ""}`).join("; ")}.`,
     });
   }
-  const noDesign = [...new Set(b.designs.filter((d) => d.designBitrateMbps == null).map((d) => d.model))];
-  if (!b.profile) approvals.push({ key: "recording_profile", description: "No recording profile for this job: approved recording profile required." });
-  else if (noDesign.length)
-    approvals.push({ key: "recording_profile", description: `Approved recording profile required: "${b.profile.name}" has no design bitrate for ${noDesign.join(", ")}.` });
-  else if (!TRUSTED_STATUSES.includes(b.profile.status)) approvals.push({ key: "recording_profile", description: `Recording profile "${b.profile.name}" is ${b.profile.status}: approve it before quoting.` });
-  const maxWarn = selectedEval?.checks.find((c) => c.name === "max_bandwidth" && c.warning);
+  const maxWarn = selectedEval?.checks.find((c) => c.name === "bandwidth" && c.warning);
   if (maxWarn) risks.push(`${maxWarn.detail}.`);
   if (b.labour.customInstallation) approvals.push({ key: "custom_installation", description: b.labour.notes[0] ?? "Custom installation: labour needs an explicit calculation." });
   if (b.upgrade) for (const d of b.upgrade.decisions) approvals.push({ key: "upgrade_decision", description: d });
   if (b.upgrade?.unresolved) unresolved.push(b.upgrade.unresolved);
-  if (!b.storage.advisory && (b.storage.status === "below_target" || b.storage.status === "below_minimum")) approvals.push({ key: "retention", description: "Accept or change the reduced retention before quoting." });
-  if (b.storage.selection === "manual_required") approvals.push({ key: "hdd", description: "Choose the HDD on the assessment (no default for this camera count)." });
+  if (b.storage.selection === "required") approvals.push({ key: "hdd", description: "Choose the HDD on the assessment (no approved kit default for this job)." });
+  if (b.storage.customerRetentionDays)
+    approvals.push({ key: "custom_retention", description: `Customer asked for ${b.storage.customerRetentionDays} days of recording: choose an HDD to suit or treat it as a custom design (not calculated).` });
   if (b.network.customerDecisions.length) approvals.push({ key: "connectivity", description: "4G/5G option and its ongoing data cost to be offered as a separate decision." });
   if (interoperability.length && input.analytics.length) approvals.push({ key: "interoperability", description: "Verify cross-brand analytics." });
   if (privacy?.flags.length) approvals.push({ key: "audio", description: "Audio recording requested: review the purpose; it stays off unless approved." });
@@ -351,8 +365,8 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
     cameras: chosen,
     nvr,
     drive: b.storage.drives?.product ?? null,
-    profile: b.profile,
-    designs: b.designs,
+    nvrEvaluation: selectedEval ?? null,
+    kit: b.kit,
     storage: b.storage,
     labour: b.labour,
     costing: b.costing,
@@ -367,11 +381,9 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
     recording: {
       mode: b.mode,
       storage: b.storage,
-      profile: b.profile ? { id: b.profile.id, key: b.profile.key, name: b.profile.name, status: b.profile.status, codec: b.profile.codec, frameRate: b.profile.frameRate, bitrateControl: b.profile.bitrateControl } : null,
-      designs: b.designs,
-      designBandwidthMbps: b.totalMbps,
       maxPossibleBandwidthMbps: b.maxPossibleMbps,
     },
+    kit: b.kit ? { id: b.kit.id, key: b.kit.key, name: b.kit.name } : null,
     costing: b.costing,
     labour: b.labour,
   };
@@ -393,7 +405,7 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
     engineVersion: ENGINE_VERSION,
     customer: input.customerName ?? null,
     propertyType: input.propertyType,
-    requirements: requirementsSummary(input, b.storage.retentionTargetDays, b.mode),
+    requirements: requirementsSummary(input, b.mode),
     missing,
     siteVisit,
     recommendedTier: tierChoice.tier,

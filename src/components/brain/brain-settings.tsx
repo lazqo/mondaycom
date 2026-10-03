@@ -21,7 +21,7 @@ import {
 import { Badge, Button, Card, CardHeader, Field, FormError, Input, Select, Textarea } from "@/components/ui";
 import { COMPATIBILITY_KINDS, KNOWLEDGE_STATUSES, KNOWLEDGE_STATUS_LABELS, TIERS, type KnowledgeStatus, type PriceFreshness } from "@/lib/brain/types";
 import { cn } from "@/lib/utils";
-import { ProfileSettings, type ProfileView } from "./profile-settings";
+import { KitSettings, type KitProductOption, type KitView } from "./kit-settings";
 import { SupplierPricing, type ConnectorView } from "./supplier-pricing";
 
 const STATUS_STYLE: Record<KnowledgeStatus, string> = {
@@ -1042,7 +1042,7 @@ const TABS = [
   { key: "products", label: "Products & prices" },
   { key: "suppliers", label: "Suppliers & routing" },
   { key: "pricing", label: "Supplier pricing" },
-  { key: "profiles", label: "Recording profiles" },
+  { key: "kits", label: "Kits" },
   { key: "packages", label: "Installation & materials" },
 ] as const;
 
@@ -1055,7 +1055,8 @@ export function BrainSettings({
   routes,
   packages,
   materials,
-  profiles,
+  kits,
+  kitProducts,
   connectors,
 }: {
   tab: string;
@@ -1066,7 +1067,8 @@ export function BrainSettings({
   routes: RouteView[];
   packages: PackageView[];
   materials: MaterialsView[];
-  profiles: ProfileView[];
+  kits: KitView[];
+  kitProducts: KitProductOption[];
   connectors: ConnectorView[];
 }) {
   const [adding, setAdding] = React.useState(false);
@@ -1138,13 +1140,7 @@ export function BrainSettings({
 
       {tab === "pricing" ? <SupplierPricing connectors={connectors} canApprove={canApprove} /> : null}
 
-      {tab === "profiles" ? (
-        <ProfileSettings
-          profiles={profiles}
-          canApprove={canApprove}
-          cameras={products.filter((p) => p.category === "camera").map((p) => ({ id: p.id, label: `${p.manufacturer} ${p.model}` }))}
-        />
-      ) : null}
+      {tab === "kits" ? <KitSettings kits={kits} products={kitProducts} canApprove={canApprove} /> : null}
 
       {tab === "packages" ? (
         <>

@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { installationPackages, materialsPackages, productCompatibility, products, recordingProfiles, supplierBrandRoutes, supplierCredentials, suppliers } from "@/db/schema";
+import { cctvKits, installationPackages, materialsPackages, productCompatibility, products, supplierBrandRoutes, supplierCredentials, suppliers } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { assertApprover, humanFromUser, type Actor } from "@/lib/guard/actor";
@@ -289,57 +289,46 @@ export async function savePackageAction(input: unknown): Promise<ActionResult<{ 
   }
 }
 
-// ---------- recording profiles ----------
+// ---------- approved CCTV kits ----------
 
-const ruleInput = z.object({
-  id: z.string().trim().min(1).max(60),
-  scope: z.enum(["product", "family", "resolution"]),
-  productId: z.string().uuid().nullable().optional(),
-  family: z.string().trim().max(100).nullable().optional(),
-  minMp: z.coerce.number().min(0).nullable().optional(),
-  maxMp: z.coerce.number().min(0).nullable().optional(),
-  designBitrateMbps: z.coerce.number().positive().max(100).nullable(),
-  codec: z.string().trim().max(30).nullable().optional(),
-  frameRate: z.coerce.number().int().positive().max(120).nullable().optional(),
-  note: z.string().trim().max(300).nullable().optional(),
-});
-const profileInput = z.object({
+const kitInput = z.object({
   id: z.string().uuid().nullable().optional(),
-  key: z.string().trim().regex(/^[A-Z0-9_]+$/, "Key: capitals, digits and _ only").max(60),
-  name: z.string().trim().min(1).max(100),
-  propertyType: z.enum(["residential", "commercial", "any"]),
-  isDefault: z.boolean().default(false),
-  codec: z.string().trim().max(30).nullable(),
-  frameRate: z.coerce.number().int().positive().max(120).nullable(),
-  bitrateControl: z.enum(["CBR", "VBR"]).nullable(),
-  recordingMode: z.enum(["continuous", "motion"]).nullable(),
-  retentionTargetDays: z.coerce.number().int().positive().max(365).nullable(),
-  retentionMinimumDays: z.coerce.number().int().positive().max(365).nullable(),
-  rules: z.array(ruleInput).default([]),
+  key: z.string().trim().regex(/^[A-Z0-9_]+$/, "Key: capitals, digits and _ only (e.g. VIGI_GOOD_4)").max(60).nullable().optional(),
+  name: z.string().trim().min(1).max(200),
+  propertyType: z.enum(["residential", "commercial", "both"]),
+  tier: z.enum(TIERS).nullable(),
+  cameraCount: z.coerce.number().int().min(1).max(64),
+  cameraProductId: z.string().uuid(),
+  nvrProductId: z.string().uuid(),
+  defaultHddTb: z.coerce.number().positive().max(64).nullable(),
+  defaultHddProductId: z.string().uuid().nullable(),
+  accessories: z.array(z.object({ productId: z.string().uuid(), quantity: z.coerce.number().int().min(1).max(64), perCamera: z.boolean() })).max(20).default([]),
   status,
   notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 /**
- * Save a recording profile. Its design bitrates are Get Secure's values: they decide recorder
- * bandwidth and storage. Only an approver can mark a profile approved.
+ * Save an approved CCTV kit: cameras + recorder + default HDD + accessories for an exact camera
+ * count. Only an approver can mark a kit approved; only approved kits are used automatically.
  */
-export async function saveRecordingProfileAction(input: unknown): Promise<ActionResult<{ id: string }>> {
+export async function saveKitAction(input: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const actor = await admin();
-    const parsed = profileInput.safeParse(input);
+    const parsed = kitInput.safeParse(input);
     if (!parsed.success) return fail(`${parsed.error.issues[0]?.path.join(".")}: ${parsed.error.issues[0]?.message}`);
     const { id: given, ...d } = parsed.data;
-    for (const r of d.rules) {
-      if (r.scope === "product" && !r.productId) return fail("A product rule needs a product.");
-      if (r.scope === "family" && !r.family) return fail("A manufacturer/family rule needs a brand.");
-      if (r.minMp != null && r.maxMp != null && r.minMp > r.maxMp) return fail("A resolution band's from MP is above its to MP.");
-    }
-    const existing = given ? await db.query.recordingProfiles.findFirst({ where: eq(recordingProfiles.id, given) }) : null;
-    if (d.isDefault) await db.update(recordingProfiles).set({ isDefault: false }).where(and(eq(recordingProfiles.propertyType, d.propertyType), eq(recordingProfiles.isDefault, true)));
+    const ids = [d.cameraProductId, d.nvrProductId, ...(d.defaultHddProductId ? [d.defaultHddProductId] : []), ...d.accessories.map((a) => a.productId)];
+    const rows = await db.select({ id: products.id, category: products.category, specs: products.specs }).from(products).where(inArray(products.id, ids));
+    const cat = (id: string) => rows.find((r) => r.id === id)?.category;
+    if (cat(d.cameraProductId) !== "camera") return fail("Choose a camera for the kit.");
+    if (cat(d.nvrProductId) !== "nvr") return fail("Choose a recorder for the kit.");
+    if (d.defaultHddProductId && cat(d.defaultHddProductId) !== "hdd") return fail("The default HDD must be a hard drive.");
+    const hddTb = d.defaultHddProductId ? Number((rows.find((r) => r.id === d.defaultHddProductId)?.specs as { capacityTb?: number } | undefined)?.capacityTb ?? 0) || null : d.defaultHddTb;
+    const existing = given ? await db.query.cctvKits.findFirst({ where: eq(cctvKits.id, given) }) : null;
     const values = {
       ...d,
-      rules: d.rules.map((r) => ({ ...r, productId: r.productId ?? null, family: r.family ?? null, minMp: r.minMp ?? null, maxMp: r.maxMp ?? null, codec: r.codec ?? null, frameRate: r.frameRate ?? null, note: r.note ?? null })),
+      key: d.key || null,
+      defaultHddTb: hddTb != null ? hddTb.toFixed(2) : null,
       notes: d.notes ?? null,
       version: existing ? existing.version + 1 : 1,
       reviewedAt: new Date(),
@@ -347,12 +336,12 @@ export async function saveRecordingProfileAction(input: unknown): Promise<Action
       ...approvalFields(actor, d.status),
     };
     let id = given ?? null;
-    if (id) await db.update(recordingProfiles).set(values).where(eq(recordingProfiles.id, id));
-    else [{ id }] = await db.insert(recordingProfiles).values({ ...values, source: `Entered by ${actor.name}` }).returning({ id: recordingProfiles.id });
+    if (id) await db.update(cctvKits).set(values).where(eq(cctvKits.id, id));
+    else [{ id }] = await db.insert(cctvKits).values({ ...values, source: `Entered by ${actor.name}` }).returning({ id: cctvKits.id });
     revalidatePath("/settings/brain");
     return ok({ id: id! });
   } catch (err) {
-    return fail(err instanceof Error ? (/recording_profiles_key_unique/.test(err.message) ? "A profile with that key already exists." : err.message) : String(err));
+    return fail(err instanceof Error ? (/cctv_kits_key_unique/.test(err.message) ? "A kit with that key already exists." : err.message) : String(err));
   }
 }
 

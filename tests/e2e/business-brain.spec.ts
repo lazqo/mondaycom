@@ -1,7 +1,9 @@
 /**
  * End-to-end: the CCTV Business Brain on a lead, through to Chris's approval.
  *
- *   1. A CCTV assessment runs from the lead and shows the decision packet (recorder, storage).
+ *   0. Chris sets up an approved kit (cameras + recorder + default HDD) in Settings → Kits.
+ *   1. A CCTV assessment runs from the lead and shows the decision packet (recorder, the kit's
+ *      HDD, no retention promise).
  *   2. Preparing a reply and a quote puts both in the approval queue, and does not mark the lead
  *      as Contacted.
  *   3. A prepared email cannot be sent until it is approved.
@@ -22,10 +24,9 @@ const LEAD = `Mere Tawhiri ${RUN}`;
 
 const sql = postgres(process.env.DATABASE_URL ?? "postgres://localhost/getsecure", { max: 1, onnotice: () => {} });
 let leadId = "";
-let profileId = "";
 type PackageValues = { estimated_hours: string | null; labour_rate: string | null; material_cost_ex_gst: string | null; complexity_allowance_ex_gst: string | null; allowance_ex_gst: string | null; status: string };
 let pkgBefore: PackageValues | undefined;
-const PROFILE = `E2E profile ${RUN}`;
+const KIT = `E2E kit ${RUN}`;
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -54,13 +55,6 @@ test.describe("CCTV Business Brain", () => {
     await add("camera", "FX-CAM-4", { resolutionMp: 4, horizontalPixels: 2560, hfovDeg: 100, irRangeM: 30, colourNight: false, wdrDb: 120, codecs: ["H.265"], maxBitrateMbps: 8, poeWatts: 5, analytics: ["human_vehicle"], onvifProfiles: ["S", "T"] }, 100);
     await add("nvr", "FX-NVR-4", { channels: 4, incomingMbps: 40, poePorts: 4, poePerPortW: 25, poeBudgetW: 50, hddBays: 1, maxHddTb: 10, maxTotalTb: 10, features: ["human_vehicle"], onvifProfiles: ["S", "T"] }, 200);
     await add("hdd", "FX-HDD-4TB", { capacityTb: 4, surveillanceRated: true }, 120);
-    // A recording profile with a design bitrate for the test camera (TEST VALUE), approved.
-    const [prof] = await sql`
-      insert into recording_profiles (key, name, property_type, codec, frame_rate, bitrate_control, recording_mode, retention_target_days, retention_minimum_days, rules, status, source)
-      values (${`E2E_${RUN.toUpperCase()}`}, ${PROFILE}, 'residential', 'H.265', 15, 'VBR', 'continuous', 28, 14,
-              ${sql.json([{ id: "p1", scope: "product", productId: ids["FX-CAM-4"], designBitrateMbps: 2 }] as never)}, 'getsecure_approved', 'e2e fixture')
-      returning id`;
-    profileId = prof.id;
     // The exact 4-camera package with every value entered (TEST VALUES); put back afterwards.
     [pkgBefore] = await sql<PackageValues[]>`select estimated_hours, labour_rate, material_cost_ex_gst, complexity_allowance_ex_gst, allowance_ex_gst, status from installation_packages where key = 'RES_CCTV_SINGLE_4'`;
     await sql`update installation_packages set estimated_hours = 6, labour_rate = 95, material_cost_ex_gst = 80, complexity_allowance_ex_gst = 0, allowance_ex_gst = 790, status = 'getsecure_approved' where key = 'RES_CCTV_SINGLE_4'`;
@@ -75,12 +69,33 @@ test.describe("CCTV Business Brain", () => {
   test.afterAll(async () => {
     if (leadId) await sql`delete from quotes where lead_id = ${leadId}`;
     if (leadId) await sql`delete from leads where id = ${leadId}`;
+    await sql`delete from cctv_kits where name = ${KIT}`;
     await sql`delete from products where manufacturer = ${MAKER}`;
-    if (profileId) await sql`delete from recording_profiles where id = ${profileId}`;
     if (pkgBefore)
       await sql`update installation_packages set estimated_hours = ${pkgBefore.estimated_hours}, labour_rate = ${pkgBefore.labour_rate}, material_cost_ex_gst = ${pkgBefore.material_cost_ex_gst},
                 complexity_allowance_ex_gst = ${pkgBefore.complexity_allowance_ex_gst}, allowance_ex_gst = ${pkgBefore.allowance_ex_gst}, status = ${pkgBefore.status} where key = 'RES_CCTV_SINGLE_4'`;
     await sql.end();
+  });
+
+  test("Chris sets up an approved kit with its default HDD in Settings → Kits", async ({ page }) => {
+    await login(page);
+    await page.goto("/settings/brain?tab=kits");
+    await page.getByTestId("add-kit").click();
+    const form = page.getByTestId("kit-form");
+    await form.getByLabel("Key").fill(`E2E_${RUN.toUpperCase()}`);
+    await form.getByLabel("Name").fill(KIT);
+    await form.getByLabel("Status").selectOption("getsecure_approved");
+    await form.getByLabel("Market").selectOption("residential");
+    await form.getByLabel("Tier").selectOption("good");
+    await form.getByLabel("Exact camera count").fill("4");
+    await form.getByLabel("Camera", { exact: true }).selectOption({ label: `${MAKER} FX-CAM-4` });
+    await form.getByLabel("Recorder").selectOption({ label: `${MAKER} FX-NVR-4` });
+    await form.getByLabel("Default HDD").selectOption({ label: `${MAKER} FX-HDD-4TB` });
+    await form.getByTestId("save-kit").click();
+    const row = page.getByTestId("kit-row").filter({ hasText: KIT });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("FX-HDD-4TB");
+    await expect(row).toContainText("Get Secure approved");
   });
 
   test("assessment, prepared drafts and the approval gate", async ({ page }) => {
@@ -94,16 +109,16 @@ test.describe("CCTV Business Brain", () => {
     await page.getByLabel("Cameras", { exact: true }).fill("4");
     await page.getByLabel("Storeys", { exact: true }).fill("1");
     await page.getByLabel("Areas to cover (one per line)").fill("Front door\nDriveway\nBack yard\nSide gate");
-    await page.getByLabel("Recording profile").selectOption({ label: PROFILE });
-    // The fixture catalogue has only a 4 TB drive; 4 cameras default to 2 TB, so Chris picks 4 TB.
-    await page.getByLabel("HDD", { exact: true }).selectOption("cap:4");
+    // No recording profile and no HDD choice: the approved kit brings its 4 TB default HDD.
+    await expect(page.getByLabel("Recording profile")).toHaveCount(0);
     await page.getByTestId("run-assessment").click();
     const packet = page.getByTestId("decision-packet");
     await expect(packet).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("packet-nvr")).toContainText("FX-NVR-4");
-    await expect(page.getByTestId("packet-hdd")).toContainText("HDD chosen by Chris: 4 TB");
-    await expect(page.getByTestId("packet-hdd")).toContainText(/Estimated recording retention: approximately \d+ days/);
-    await expect(page.getByTestId("packet-designs")).toContainText("2 Mbps");
+    await expect(page.getByTestId("packet-hdd")).toContainText("Kit HDD: 4 TB");
+    await expect(page.getByTestId("packet-hdd")).toContainText(`Kit HDD (${KIT})`);
+    await expect(page.getByTestId("packet-storage")).toContainText("Recording duration depends on camera settings, recording configuration and scene activity");
+    await expect(page.getByTestId("packet-storage")).not.toContainText(/approximately \d+ days/);
     await expect(page.getByTestId("packet-labour")).toContainText("RES_CCTV_SINGLE_4");
     await expect(page.getByTestId("packet-total")).toContainText(/inc GST/); // fully priced
     await expect(page.getByTestId("packet-cameras")).toContainText("FX-CAM-4");
@@ -171,7 +186,6 @@ test.describe("CCTV Business Brain", () => {
     await page.getByLabel("Job", { exact: true }).selectOption("upgrade");
     await page.getByLabel("Cameras", { exact: true }).fill("4");
     await page.getByLabel("Storeys", { exact: true }).fill("1");
-    await page.getByLabel("Recording profile").selectOption({ label: PROFILE });
     const existing = page.getByTestId("existing-system");
     await expect(existing).toBeVisible();
     // Cable type unknown: installation stays unresolved.

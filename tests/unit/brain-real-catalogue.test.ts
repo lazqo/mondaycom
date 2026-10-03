@@ -15,7 +15,7 @@ import { composeEmail, composeQuote } from "@/lib/brain/compose";
 import { chooseOffer, priceFreshness } from "@/lib/brain/pricing";
 import { DEFAULT_POLICIES } from "@/lib/brain/policy";
 import { REFERENCE_CATALOGUE, referenceLinks, referenceProducts } from "@/lib/brain/reference/products";
-import type { BrandRoute, CameraProduct, Catalogue, InstallationPackage, MaterialsPackage, Policies, Product, ProductOffer, RecordingProfile, RecordingRule } from "@/lib/brain/types";
+import type { BrandRoute, CameraProduct, Catalogue, InstallationPackage, MaterialsPackage, Policies, Product, ProductOffer } from "@/lib/brain/types";
 import { house } from "./brain-fixtures";
 
 const NOW = new Date("2026-10-02T09:00:00+13:00");
@@ -118,37 +118,11 @@ function seededPackages(): InstallationPackage[] {
 const filled = (key: string, over: Partial<InstallationPackage> = {}) => (pkgs: InstallationPackage[]) =>
   pkgs.map((k) => (k.key === key ? { ...k, estimatedHours: 6, materialCostExGst: 80, conduitAllowanceExGst: k.conduitIncluded ? 60 : null, complexityAllowanceExGst: 0, allowanceExGst: 790, ...over } : k));
 
-const profile = (over: Partial<RecordingProfile> = {}): RecordingProfile => ({
-  id: "RES_STANDARD",
-  key: "RES_STANDARD",
-  name: "Residential standard",
-  propertyType: "residential",
-  isDefault: true,
-  codec: null,
-  frameRate: null,
-  bitrateControl: null,
-  recordingMode: "continuous",
-  retentionTargetDays: 28,
-  retentionMinimumDays: 14,
-  rules: [],
-  version: 1,
-  status: "requires_review",
-  ...over,
-});
-/** Design bitrates by resolution band (TEST VALUES, not Get Secure's). */
-const BANDS: RecordingRule[] = [
-  { id: "b4", scope: "resolution", minMp: 0, maxMp: 4.5, designBitrateMbps: 4 },
-  { id: "b6", scope: "resolution", minMp: 4.5, maxMp: 6.5, designBitrateMbps: 6 },
-  { id: "b8", scope: "resolution", minMp: 6.5, maxMp: null, designBitrateMbps: 8 },
-];
-const designedProfile = (rules: RecordingRule[] = BANDS) => profile({ codec: "H.265", frameRate: 15, bitrateControl: "VBR", rules, status: "getsecure_approved" });
-
-/** The real catalogue as seeded: products, routes, unpriced packages and a profile with no design bitrates. */
+/** The real catalogue as seeded: products, routes and unpriced packages (no recording profiles: they were removed). */
 function realCatalogue(edit: (products: Product[]) => Product[] = (p) => p, over: Partial<Catalogue> = {}): Catalogue {
-  return { products: edit(referenceProducts()), packages: seededPackages(), materialsPackages: [MATERIALS], compatibility: referenceLinks(), routes: ROUTES, recordingProfiles: [profile()], ...over };
+  return { products: edit(referenceProducts()), packages: seededPackages(), materialsPackages: [MATERIALS], compatibility: referenceLinks(), routes: ROUTES, ...over };
 }
-/** The same with a designed (test) recording profile. */
-const designed = (edit?: (products: Product[]) => Product[], over: Partial<Catalogue> = {}) => realCatalogue(edit, { recordingProfiles: [designedProfile()], ...over });
+const designed = realCatalogue;
 
 const policies = (over: Partial<Policies> = {}): Policies => ({ ...DEFAULT_POLICIES, ...over });
 const run = (input = house(), cat = realCatalogue(), pol = policies()) => assessCctv(input, cat, pol, { now: NOW });
@@ -212,26 +186,13 @@ describe("Scenario A: 4-camera VIGI good/value residential system", () => {
   });
   it("runs every recorder check separately", () => {
     const e = p.nvr.evaluated.find((x) => x.product.id === p.nvr.selected!.id)!;
-    expect(e.checks.map((c) => c.name)).toEqual(expect.arrayContaining(["channels", "bandwidth", "max_bandwidth", "poe", "storage", "recording", "decoding", "features", "compatibility"]));
+    expect(e.checks.map((c) => c.name)).toEqual(expect.arrayContaining(["channels", "bandwidth", "poe", "storage", "recording", "decoding", "features", "compatibility"]));
     expect(e.pass).toBe(true);
   });
-  it("estimates retention from the design bitrate on the default drive (advisory)", () => {
-    expect(p.recording.profile?.key).toBe("RES_STANDARD");
-    expect(p.recording.designs.every((d) => d.designBitrateMbps != null && d.bitrateApproved)).toBe(true);
-    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 2 });
-    expect(p.recording.storage.totalMbps).toBe(p.recording.designBandwidthMbps);
-    expect(p.recording.storage.expectedRetentionDays).toBeGreaterThan(0);
-    expect(p.recording.storage.basis).toMatch(/design bitrate/);
-  });
-  it("without design bitrates it still picks the system, but says an approved recording profile is required", () => {
-    const q = run(house({ requestedTier: "good" }));
-    expect(q.nvr.selected?.family).toBe("TP-Link VIGI");
-    expect(q.recording.storage.status).toBe("cannot_calculate");
-    expect(q.recording.storage.installedTb).toBe(2); // the default drive does not depend on the bitrate
-    expect(q.recording.storage.expectedRetentionDays).toBeNull();
-    expect(q.recording.storage.notes.join(" ")).toMatch(/approved recording profile required/);
-    expect(q.approvals.find((a) => a.key === "recording_profile")?.description).toMatch(/Approved recording profile required/);
-    expect(q.readiness.items.find((i) => i.key === "recording_profile")?.ok).toBe(false);
+  it("needs no recording profile: the HDD is the fallback 2 TB and no retention is calculated", () => {
+    expect(p.recording.storage).toMatchObject({ selection: "fallback", installedTb: 2 });
+    expect(p.approvals.some((a) => a.key === "recording_profile")).toBe(false);
+    expect(p.readiness.items.some((i) => i.key === "recording_profile")).toBe(false);
   });
   it("is honest about what is not priced yet", () => {
     expect(p.costing.complete).toBe(false);
@@ -252,14 +213,13 @@ describe("Scenario B: 4-camera HiLook better residential system", () => {
     expect(p.nvr.selected?.family).toBe("HiLook");
     expect(hardware(p).every((x) => REF_IDS.has(x.id))).toBe(true);
   });
-  it("passes design bandwidth on the 4-channel recorder and warns about maximum possible bandwidth, without rejecting it", () => {
+  it("warns, without rejecting, when the cameras' published maximum bandwidth exceeds the 4-channel recorder", () => {
     const p = run(house({ requestedTier: "better" }), designed());
     expect(p.nvr.selected?.model).toBe("NVR-104MH-K/4P(B)");
-    expect(check(p, "bandwidth")).toMatchObject({ pass: true });
-    expect(check(p, "bandwidth").detail).toMatch(/Design bandwidth 24\.0 Mbps, recorder accepts 40 Mbps/);
-    expect(check(p, "max_bandwidth")).toMatchObject({ pass: true, warning: true });
-    expect(check(p, "max_bandwidth").detail).toMatch(/Maximum possible configured bandwidth 64\.0 Mbps exceeds the recorder's 40 Mbps/);
-    expect(p.risks.join(" ")).toMatch(/keep the cameras at the approved recording profile/);
+    expect(check(p, "bandwidth")).toMatchObject({ pass: true, warning: true });
+    expect(check(p, "bandwidth").detail).toMatch(/published maximum 64\.0 Mbps exceeds the recorder's 40 Mbps/);
+    expect(checks(p).some((c) => c.name === "max_bandwidth")).toBe(false);
+    expect(p.risks.join(" ")).toMatch(/set camera bitrates below maximum/);
     expect(p.recording.maxPossibleBandwidthMbps).toBe(64);
   });
   it("checks channels, bandwidth, PoE, storage, recording, decoding, features and compatibility each on its own", () => {
@@ -277,16 +237,6 @@ describe("Scenario B: 4-camera HiLook better residential system", () => {
     expect(check(p, "compatibility").detail).toMatch(/same family/);
     expect(check(p, "storage").detail).toMatch(/takes the default 2 TB drive/);
     expect(p.recording.storage.installedTb).toBe(2);
-  });
-  it("a product-specific design bitrate beats the family rule, which beats the resolution band", () => {
-    const cam = referenceProducts().find((x) => x.model === "IPC-T361H-MU(2.8mm)")!;
-    const rules: RecordingRule[] = [...BANDS, { id: "fam", scope: "family", family: "HiLook", designBitrateMbps: 5 }, { id: "prod", scope: "product", productId: cam.id, designBitrateMbps: 3 }];
-    const p = run(house({ requestedTier: "better" }), realCatalogue(undefined, { recordingProfiles: [designedProfile(rules)] }));
-    const byModel = new Map(p.recording.designs.map((d) => [d.model, d]));
-    expect(byModel.get("HiLook IPC-T361H-MU(2.8mm)")?.designBitrateMbps ?? 3).toBe(3);
-    const other = p.recording.designs.find((d) => d.model !== "HiLook IPC-T361H-MU(2.8mm)");
-    if (other) expect(other.designBitrateMbps).toBe(5);
-    expect(p.recording.designs.every((d) => d.bitrateSource)).toBe(true);
   });
   it("names the documented junction box for the HiLook cameras without charging it", () => {
     const p = run(house({ requestedTier: "better", mountingSurface: "brick" }));
@@ -312,15 +262,7 @@ describe("Scenario C: 4-camera Hikvision best residential system", () => {
     const p = run(house({ requestedTier: "best" }), designed());
     expect(p.nvr.selected?.model).toBe("DS-7604NI-M1/4P");
     const e = p.nvr.evaluated.find((x) => x.product.model === "DS-7604NI-M1/4P")!;
-    expect(e.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: true });
-    expect(e.checks.find((c) => c.name === "max_bandwidth")).toMatchObject({ pass: true, warning: true });
-  });
-  it("still rejects a recorder whose design bandwidth is exceeded", () => {
-    const heavy = designedProfile([{ id: "hk", scope: "family", family: "Hikvision", designBitrateMbps: 12 }, ...BANDS]);
-    const p = run(house({ requestedTier: "best" }), realCatalogue(undefined, { recordingProfiles: [heavy] }));
-    const four = p.nvr.evaluated.find((x) => x.product.model === "DS-7604NI-M1/4P")!;
-    expect(four.checks.find((c) => c.name === "bandwidth")!.pass).toBe(false);
-    expect(p.nvr.selected?.channels).toBe(8);
+    expect(e.checks.find((c) => c.name === "bandwidth")).toMatchObject({ pass: true, warning: true });
   });
   it("is not chosen just because a camera is 8 MP", () => {
     // Only VIGI/Tiandy/TVT 8 MP alternatives would exist without Hikvision: best stays empty.
@@ -509,13 +451,12 @@ describe("installation packages (exact camera counts) and materials", () => {
 });
 
 describe("hard drives", () => {
-  it("residential: the default capacity comes from the camera count, not the retention asked for", () => {
+  it("residential without a kit: the fallback capacity comes from the camera count, never from the retention asked for", () => {
     const week = run(house({ requestedTier: "good", retentionDays: 7 }), designed());
-    const month = run(house({ requestedTier: "good", retentionDays: 30 }), designed());
-    expect(week.cameras.length).toBe(month.cameras.length);
+    const month = run(house({ requestedTier: "good", retentionDays: 90 }), designed());
     expect(week.recording.storage.drives!.product.capacityTb).toBe(2);
     expect(month.recording.storage.drives!.product.capacityTb).toBe(2);
-    expect(week.recording.storage.expectedRetentionDays).toBe(month.recording.storage.expectedRetentionDays);
+    expect(month.approvals.find((a) => a.key === "custom_retention")?.description).toMatch(/90 days/);
   });
 });
 
@@ -590,12 +531,6 @@ describe("first genuinely priced 4-camera residential quote (all inputs are TEST
     ["the material cost", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { materialCostExGst: null })(seededPackages()) }), /standard material cost not set/],
     ["the sell allowance", () => complete({ packages: filled("RES_CCTV_SINGLE_4", { allowanceExGst: null })(seededPackages()) }), /customer sell allowance not set/],
   ];
-  it("without the design bitrate it is priced but not ready: bandwidth and retention cannot be checked", () => {
-    const q = run(house({ requestedTier: "good" }), complete({ recordingProfiles: [profile()] }));
-    expect(q.recording.storage.installedTb).toBe(2);
-    expect(q.readiness.ready).toBe(false);
-    expect(q.readiness.items.find((i) => i.key === "recording_profile")?.ok).toBe(false);
-  });
   for (const [what, cat, msg] of missing) {
     it(`is Not fully priced, and says why, without ${what}`, () => {
       const q = run(house({ requestedTier: "good" }), cat());

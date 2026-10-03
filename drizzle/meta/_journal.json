@@ -99,6 +99,13 @@
       "when": 1791019223410,
       "tag": "0013_cctv_upgrades",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791059771883,
+      "tag": "0014_cctv_kits",
+      "breakpoints": true
     }
   ]
 }

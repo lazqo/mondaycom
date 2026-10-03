@@ -1,9 +1,9 @@
 /**
- * Business Brain v0.3 real costing against the database: exact installation packages, recording
- * profiles, the first fully priced 4-camera quote end to end, Not fully priced when an input is
- * missing, reprice (back to Needs Review), and trade-only price imports.
+ * Business Brain real costing against the database: exact installation packages, approved CCTV
+ * kits and their default HDD, the first fully priced 4-camera quote end to end, Not fully priced
+ * when an input is missing, reprice (back to Needs Review), and trade-only price imports.
  *
- * Every cost, design bitrate and package value here is a TEST VALUE, entered the way Chris would;
+ * Every cost, kit and package value here is a TEST VALUE, entered the way Chris would;
  * the seeded data has none, and the seeded package is put back afterwards.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -12,7 +12,7 @@ import { and, eq, inArray } from "drizzle-orm";
 process.env.AI_PROVIDER = "rules";
 
 const { db } = await import("@/db");
-const { drafts, installationPackages, leads, products, quotes, recordingProfiles, supplierProducts, suppliers, users } = await import("@/db/schema");
+const { drafts, installationPackages, leads, products, quotes, cctvKits, supplierProducts, suppliers, users } = await import("@/db/schema");
 const brain = await import("@/lib/brain/store");
 const quoting = await import("@/lib/quotes/workflow");
 const { applyReferenceCatalogue, resetReferenceMarker } = await import("@/lib/brain/reference/apply");
@@ -23,7 +23,7 @@ const RUN = `rc${Date.now().toString(36)}`;
 let chris: { kind: "human"; userId: string; name: string; canApprove: true };
 let staff: { kind: "human"; userId: string; name: string; canApprove: false };
 let leadId: string;
-let profileId: string;
+const kitIds: string[] = [];
 let pkgBefore: typeof installationPackages.$inferSelect;
 const offerIds: string[] = [];
 const quoteIds: string[] = [];
@@ -40,30 +40,6 @@ beforeAll(async () => {
   staff = { kind: "human", userId: s.id, name: s.name, canApprove: false };
   const [l] = await db.insert(leads).values({ name: `Tama Whaanga ${RUN}`, email: `tama+${RUN}@example.com`, site: "9 Totara Ave, Mt Albert", service: "CCTV", status: "new", source: "website" }).returning();
   leadId = l.id;
-
-  // A recording profile with design bitrates by resolution band (TEST VALUES), approved by Chris.
-  const [p] = await db
-    .insert(recordingProfiles)
-    .values({
-      key: `TEST_${RUN.toUpperCase()}`,
-      name: `Test profile ${RUN}`,
-      propertyType: "residential",
-      codec: "H.265",
-      frameRate: 15,
-      bitrateControl: "VBR",
-      recordingMode: "continuous",
-      retentionTargetDays: 28,
-      retentionMinimumDays: 14,
-      rules: [
-        { id: "b4", scope: "resolution", minMp: 0, maxMp: 4.5, designBitrateMbps: 4 },
-        { id: "b6", scope: "resolution", minMp: 4.5, maxMp: 6.5, designBitrateMbps: 6 },
-      ],
-      status: "getsecure_approved",
-      approvedById: chris.userId,
-      source: "integration test",
-    })
-    .returning();
-  profileId = p.id;
 
   // Trade prices for the VIGI range and drives (TEST VALUES), entered by Chris so they are approved.
   const it = await supplier("IT Plus");
@@ -82,7 +58,7 @@ afterAll(async () => {
   await db.delete(drafts).where(eq(drafts.leadId, leadId));
   await db.delete(leads).where(eq(leads.id, leadId));
   if (offerIds.length) await db.delete(supplierProducts).where(inArray(supplierProducts.id, offerIds));
-  await db.delete(recordingProfiles).where(eq(recordingProfiles.id, profileId));
+  if (kitIds.length) await db.delete(cctvKits).where(inArray(cctvKits.id, kitIds));
   if (pkgBefore) {
     const { id, ...rest } = pkgBefore;
     await db.update(installationPackages).set(rest).where(eq(installationPackages.id, id));
@@ -111,18 +87,11 @@ describe("seeded v0.3 data", () => {
     const ranges = await db.select().from(installationPackages).where(eq(installationPackages.source, "Get Secure CCTV Business Brain v0.2 (Chris): package structure"));
     expect(ranges.every((r) => r.status === "deprecated")).toBe(true);
   });
-  it("has the recording profiles; Residential Standard carries the values Chris agreed, awaiting his approval", async () => {
-    const rows = await db.select().from(recordingProfiles).where(inArray(recordingProfiles.key, ["RES_STANDARD", "RES_HIGH_DETAIL", "COM_STANDARD", "CUSTOM"]));
-    expect(rows.map((r) => r.key).sort()).toEqual(["COM_STANDARD", "CUSTOM", "RES_HIGH_DETAIL", "RES_STANDARD"]);
-    const std = rows.find((r) => r.key === "RES_STANDARD")!;
-    expect(std).toMatchObject({ isDefault: true, recordingMode: "continuous", retentionTargetDays: 28, retentionMinimumDays: 14, codec: "H.265+", bitrateControl: "VBR", frameRate: 25, status: "getsecure_provisional" });
-    expect(std.approvedById).toBeNull();
-    const profile = brain.toProfile(std);
-    const { cameraDesign } = await import("@/lib/brain/profiles");
-    const at = (mp: number) => cameraDesign({ id: `x${mp}`, manufacturer: "Any", model: `M${mp}`, family: "Any", resolutionMp: mp } as never, profile).designBitrateMbps;
-    expect([2, 3, 4, 5, 6, 8, 12].map(at)).toEqual([1.5, 2.0, 2.5, 3.0, 3.5, 4.5, 6.5]);
-    expect(at(10)).toBeNull(); // no agreed value for 10MP: nothing is invented
-    expect(rows.filter((r) => r.key !== "RES_STANDARD").every((r) => r.rules.length === 0)).toBe(true);
+  it("no longer quotes from recording profiles: the catalogue carries approved kits instead", async () => {
+    const cat = await brain.loadCatalogue();
+    expect(cat).not.toHaveProperty("recordingProfiles");
+    expect(Array.isArray(cat.kits)).toBe(true);
+    expect(Object.keys(await brain.loadPolicies())).not.toEqual(expect.arrayContaining(["retentionTargetDays"]));
   });
 
   it("has the four IP upgrade packages, empty and needing approval", async () => {
@@ -137,7 +106,7 @@ describe("seeded v0.3 data", () => {
 
 describe("first genuinely priced 4-camera residential quote", () => {
   it("is Not fully priced, saying why, while the package values are missing", async () => {
-    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), staff);
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good" }), staff);
     expect(a.packet.costing.complete).toBe(false);
     expect(a.packet.costing.unpriced.join(" ")).toMatch(/RES_CCTV_SINGLE_4: labour hours not set/);
     expect(a.packet.costing.unpriced.join(" ")).toMatch(/customer sell allowance not set/);
@@ -145,11 +114,12 @@ describe("first genuinely priced 4-camera residential quote", () => {
 
   it("with every input entered: real products, BOM, current costs, labour, materials, markup, margin, quote and email drafts, Chris approval", async () => {
     await fillPackage();
-    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId, customerName: "Tama Whaanga" }), staff);
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", customerName: "Tama Whaanga" }), staff);
     const p = a.packet;
     expect(p.cameras.every((c) => c.product?.family === "TP-Link VIGI")).toBe(true);
     expect(p.nvr.selected?.family).toBe("TP-Link VIGI");
-    expect(p.recording.storage).toMatchObject({ advisory: true, selection: "default", installedTb: 2 }); // 4 cameras: default 2 TB
+    expect(p.kit).toBeNull();
+    expect(p.recording.storage).toMatchObject({ selection: "fallback", capacityTb: 2, installedTb: 2 }); // no kit: 4-camera fallback 2 TB
     expect(p.labour.package?.key).toBe("RES_CCTV_SINGLE_4");
     expect(p.costing.complete).toBe(true);
     expect(p.costing.refreshRequired).toEqual([]);
@@ -201,7 +171,7 @@ describe("first genuinely priced 4-camera residential quote", () => {
 
   it("is Not fully priced again as soon as a required input is removed, and then cannot be approved", async () => {
     await fillPackage({ materialCostExGst: null });
-    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), staff);
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good" }), staff);
     expect(a.packet.costing.complete).toBe(false);
     expect(a.packet.costing.unpriced).toContain("RES_CCTV_SINGLE_4: standard material cost not set");
     // The labour that is known still counts in the internal cost (6 h x $95).
@@ -216,20 +186,85 @@ describe("first genuinely priced 4-camera residential quote", () => {
 
   it("lists every input still to enter or approve before the first real quote", async () => {
     await fillPackage({ status: "requires_review" });
-    const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), staff);
+    const a = await brain.runAssessment(leadId, house({ requestedTier: "good" }), staff);
     const r = a.packet.readiness;
     const item = (k: string) => r.items.find((i) => i.key === k)!;
     expect(a.packet.costing.complete).toBe(true); // every value is entered…
     expect(r.ready).toBe(false); // …but not everything is approved
     expect(item("supplier_prices").ok).toBe(true);
-    expect(item("recording_profile").ok).toBe(true);
-    expect(item("storage").ok).toBe(true);
+    expect(r.items.some((i) => i.key === "recording_profile")).toBe(false);
+    expect(item("storage")).toMatchObject({ ok: true, detail: expect.stringMatching(/^2 TB .*fallback by camera count/) });
+    expect(item("recorder").ok).toBe(true);
     expect(item("installation_package")).toMatchObject({ ok: false, detail: expect.stringMatching(/RES_CCTV_SINGLE_4: requires review/) });
     expect(item("markup")).toMatchObject({ ok: false, detail: "25% is the provisional suggestion.", fix: expect.stringMatching(/Markup override/) });
-    expect(item("rules")).toMatchObject({ ok: false, detail: expect.stringMatching(/storageHeadroomPct = 10/) });
+    expect(item("rules")).toMatchObject({ ok: false, detail: expect.stringMatching(/priceAgingDays = 14/) });
     // Chris's exact markup for this quote settles the markup item.
-    const b = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), chris, { markupOverride: 30 });
+    const b = await brain.runAssessment(leadId, house({ requestedTier: "good" }), chris, { markupOverride: 30 });
     expect(b.packet.readiness.items.find((i) => i.key === "markup")).toMatchObject({ ok: true, detail: "30% entered for this quote." });
+  });
+});
+
+describe("approved CCTV kits", () => {
+  const drive = async (tb: number) =>
+    (await db.select().from(products).where(eq(products.category, "hdd"))).find((d) => Number((d.specs as { capacityTb?: number }).capacityTb) === tb && (d.specs as { surveillanceRated?: boolean }).surveillanceRated !== false)!;
+  const addKit = async (over: Partial<typeof cctvKits.$inferInsert>) => {
+    const base = (await brain.runAssessment(leadId, house({ requestedTier: "good" }), staff)).packet;
+    const [k] = await db
+      .insert(cctvKits)
+      .values({
+        key: `KIT_${RUN.toUpperCase()}_${kitIds.length}`,
+        name: `Test kit ${kitIds.length}`,
+        propertyType: "residential",
+        tier: "good",
+        cameraCount: 4,
+        cameraProductId: base.cameras[0].product!.id,
+        nvrProductId: base.nvr.selected!.id,
+        status: "getsecure_approved",
+        approvedById: chris.userId,
+        source: "integration test",
+        ...over,
+      })
+      .returning();
+    kitIds.push(k.id);
+    return k;
+  };
+  afterAll(async () => {
+    if (kitIds.length) await db.delete(cctvKits).where(inArray(cctvKits.id, kitIds));
+    kitIds.length = 0;
+  });
+
+  it("uses the approved kit's default HDD, never resized by the camera-count fallback", async () => {
+    const hdd4 = await drive(4);
+    const k = await addKit({ defaultHddProductId: hdd4.id, defaultHddTb: "4.00" });
+    const p = (await brain.runAssessment(leadId, house({ requestedTier: "good" }), staff)).packet;
+    expect(p.kit).toMatchObject({ id: k.id, name: k.name });
+    expect(p.recording.storage).toMatchObject({ selection: "kit", capacityTb: 4, installedTb: 4 });
+    expect(p.recording.storage.drives?.product.id).toBe(hdd4.id);
+    expect(p.readiness.items.find((i) => i.key === "storage")).toMatchObject({ ok: true, detail: expect.stringMatching(/kit default/) });
+    expect(p.readiness.items.find((i) => i.key === "kit")?.detail).toContain(k.name);
+    await db.delete(cctvKits).where(eq(cctvKits.id, k.id));
+  });
+
+  it("Chris's HDD choice on the assessment beats the kit", async () => {
+    const hdd4 = await drive(4);
+    await addKit({ defaultHddProductId: hdd4.id, defaultHddTb: "4.00" });
+    const p = (await brain.runAssessment(leadId, house({ requestedTier: "good", hddOverride: { capacityTb: 2 } }), staff)).packet;
+    expect(p.recording.storage).toMatchObject({ selection: "override", capacityTb: 2, installedTb: 2 });
+  });
+
+  it("ignores a kit that is not approved", async () => {
+    await db.delete(cctvKits).where(inArray(cctvKits.id, kitIds));
+    await addKit({ status: "requires_review", approvedById: null, defaultHddTb: "8.00" });
+    const p = (await brain.runAssessment(leadId, house({ requestedTier: "good" }), staff)).packet;
+    expect(p.kit).toBeNull();
+    expect(p.recording.storage.selection).toBe("fallback");
+  });
+
+  it("promises no retention: a customer's days are a custom requirement for Chris", async () => {
+    const p = (await brain.runAssessment(leadId, house({ requestedTier: "good", retentionDays: 28 }), staff)).packet;
+    expect(p.recording.storage.customerRetentionDays).toBe(28);
+    expect(p.approvals.map((a) => a.key)).toContain("custom_retention");
+    expect(JSON.stringify(p.sales)).not.toMatch(/28 days|approximately \d+ days/);
   });
 });
 

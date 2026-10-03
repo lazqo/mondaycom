@@ -113,6 +113,8 @@ export function costQuote(input: {
   materials: MaterialLine[];
   materialsPackage?: MaterialsPackage | null;
   labour: LabourResult;
+  /** Accessories from the approved kit (charged as hardware). */
+  kitAccessories?: { product: Product; quantity: number }[];
   residential: boolean;
   policies: Policies;
   markupOverride?: number | null;
@@ -147,6 +149,8 @@ export function costQuote(input: {
   const drives = input.storage.drives;
   if (drives) hardware.push(hardwareLine(`hdd:${drives.product.id}`, `${drives.product.capacityTb} TB surveillance hard drive`, drives.count, drives.product, mk.pct));
   else unpriced.push("Hard drive: none selected");
+
+  for (const a of input.kitAccessories ?? []) hardware.push(hardwareLine(`accessory:${a.product.id}`, `${a.product.manufacturer} ${a.product.model}`, a.quantity, a.product, mk.pct));
 
   const kitResult = input.products ? applyKit(hardware, input.products, input.links ?? [], mk.pct) : { lines: hardware, kit: null, notes: [] };
   hardware = kitResult.lines;

@@ -12,20 +12,16 @@ import type {
   NvrProduct,
   OtherProduct,
   Policies,
-  RecordingProfile,
   SwitchProduct,
 } from "@/lib/brain/types";
 import { DEFAULT_POLICIES } from "@/lib/brain/policy";
 
 const price = (costExGst: number) => ({ supplier: "Test Supplier", supplierSku: null, costExGst, lastChecked: "2026-10-01", confidence: 1, approved: true });
 
-/** Test design bitrates per fixture camera, turned into a fixture recording profile. */
-const DESIGN = new Map<string, number>();
-
-export function camera({ designMbps = 4, ...over }: Partial<CameraProduct> & Pick<CameraProduct, "id" | "model"> & { designMbps?: number | null }): CameraProduct {
-  if (designMbps != null) DESIGN.set(over.id, designMbps);
-  else DESIGN.delete(over.id);
+/** `maxMbps`: the camera's published maximum bitrate (test value), checked against the recorder. */
+export function camera({ maxMbps = 4, ...over }: Partial<CameraProduct> & Pick<CameraProduct, "id" | "model"> & { maxMbps?: number | null }): CameraProduct {
   return {
+    maxBitrateMbps: maxMbps,
     category: "camera",
     manufacturer: "Fixture A",
     residentialAllowed: true,
@@ -77,27 +73,6 @@ const other = (id: string, category: OtherProduct["category"], cost: number): Ot
 
 export const SWITCH: SwitchProduct = { id: "sw8", category: "poe_switch", manufacturer: "Fixture Net", model: "FN-8P", residentialAllowed: true, commercialAllowed: true, tier: null, status: "getsecure_approved", price: price(150), poePorts: 8, poePerPortW: 30, poeBudgetW: 120 };
 
-/** An approved fixture recording profile with a product rule for every fixture camera (test values). */
-export function fixtureProfile(over: Partial<RecordingProfile> = {}): RecordingProfile {
-  return {
-    id: "prof",
-    key: "RES_STANDARD",
-    name: "Residential standard",
-    propertyType: "residential",
-    isDefault: true,
-    codec: "H.265",
-    frameRate: 15,
-    bitrateControl: "VBR",
-    recordingMode: "continuous",
-    retentionTargetDays: 28,
-    retentionMinimumDays: 14,
-    rules: [...DESIGN.entries()].map(([productId, mbps]) => ({ id: `r-${productId}`, scope: "product" as const, productId, designBitrateMbps: mbps })),
-    version: 1,
-    status: "getsecure_approved",
-    ...over,
-  };
-}
-
 /** Exact-count residential packages with every commercial input filled in (test values). */
 export function packages(): InstallationPackage[] {
   const base = { propertyType: "residential" as const, includedMaterials: [], assumptions: [], exclusions: [], version: 1, status: "getsecure_approved" as const, labourRate: 95 };
@@ -133,9 +108,9 @@ export function catalogue(): Catalogue {
   return {
     products: [
       camera({ id: "ca4", model: "FA-CAM-4" }),
-      camera({ id: "cb6", model: "FB-CAM-6", manufacturer: "Fixture B", tier: "better", resolutionMp: 6, horizontalPixels: 3072, designMbps: 6, poeWatts: 6, price: price(160) }),
-      camera({ id: "cc8", model: "FC-CAM-8", manufacturer: "Fixture C", tier: "best", resolutionMp: 8, horizontalPixels: 3840, designMbps: 8, poeWatts: 7, price: price(250) }),
-      camera({ id: "cx8", model: "FX-COM-8", manufacturer: "Fixture X", residentialAllowed: false, commercialAllowed: true, tier: null, resolutionMp: 8, horizontalPixels: 3840, designMbps: 8, poeWatts: 8, price: price(420) }),
+      camera({ id: "cb6", model: "FB-CAM-6", manufacturer: "Fixture B", tier: "better", resolutionMp: 6, horizontalPixels: 3072, maxMbps: 6, poeWatts: 6, price: price(160) }),
+      camera({ id: "cc8", model: "FC-CAM-8", manufacturer: "Fixture C", tier: "best", resolutionMp: 8, horizontalPixels: 3840, maxMbps: 8, poeWatts: 7, price: price(250) }),
+      camera({ id: "cx8", model: "FX-COM-8", manufacturer: "Fixture X", residentialAllowed: false, commercialAllowed: true, tier: null, resolutionMp: 8, horizontalPixels: 3840, maxMbps: 8, poeWatts: 8, price: price(420) }),
       nvr({ id: "na4", model: "FA-NVR-4", channels: 4 }),
       nvr({ id: "na8", model: "FA-NVR-8", channels: 8, hddBays: 2, maxTotalTb: 20, price: price(350) }),
       nvr({ id: "nb4", model: "FB-NVR-4", manufacturer: "Fixture B", tier: "better", channels: 4, price: price(260) }),
@@ -155,7 +130,6 @@ export function catalogue(): Catalogue {
     ],
     packages: packages(),
     materialsPackages: [MATERIALS],
-    recordingProfiles: [fixtureProfile()],
   };
 }
 

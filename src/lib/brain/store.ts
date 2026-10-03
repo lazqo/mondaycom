@@ -18,7 +18,7 @@ import {
   productPriceHistory,
   products,
   quotes,
-  recordingProfiles,
+  cctvKits,
   supplierBrandRoutes,
   supplierProducts,
   suppliers,
@@ -44,10 +44,11 @@ import type {
   PolicyValue,
   Product,
   ProductOffer,
-  RecordingProfile,
+  CctvKit,
+  Tier,
 } from "./types";
 import { applyReferenceCatalogue } from "./reference/apply";
-import { TRUSTED_STATUSES } from "./types";
+import { TIERS, TRUSTED_STATUSES } from "./types";
 
 const actorId = (a: Actor) => (a.kind === "human" ? a.userId : null);
 const num = (v: string | number | null | undefined) => (v == null ? null : Number(v));
@@ -121,7 +122,7 @@ export async function savePolicy(key: keyof Policies, value: unknown, status: Kn
 
 export async function loadCatalogue(): Promise<Catalogue> {
   await applyReferenceCatalogue();
-  const [rows, offers, pkgs, mats, links, routes, profiles] = await Promise.all([
+  const [rows, offers, pkgs, mats, links, routes, kits] = await Promise.all([
     db.select().from(products),
     db
       .select({ o: supplierProducts, supplier: suppliers.name, priority: suppliers.priority, isDefault: suppliers.isDefault, supplierStatus: suppliers.status })
@@ -131,7 +132,7 @@ export async function loadCatalogue(): Promise<Catalogue> {
     db.select().from(materialsPackages),
     db.select().from(productCompatibility),
     db.select({ r: supplierBrandRoutes, supplier: suppliers.name }).from(supplierBrandRoutes).innerJoin(suppliers, eq(supplierBrandRoutes.supplierId, suppliers.id)),
-    db.select({ p: recordingProfiles, approver: users.name }).from(recordingProfiles).leftJoin(users, eq(recordingProfiles.approvedById, users.id)),
+    db.select().from(cctvKits),
   ]);
   const byProduct = new Map<string, ProductOffer[]>();
   for (const o of offers) {
@@ -221,28 +222,25 @@ export async function loadCatalogue(): Promise<Catalogue> {
     materialsPackages: materials,
     compatibility: links.map((l) => ({ kind: l.kind as CompatibilityKind, fromId: l.fromProductId, toId: l.toProductId, quantity: l.quantity, status: l.status })),
     routes: routes.map(({ r, supplier }) => ({ brand: r.brand, supplierId: r.supplierId, supplier, rank: r.rank, market: r.market as BrandRoute["market"], status: r.status })),
-    recordingProfiles: profiles.map(({ p, approver }) => toProfile(p, approver)),
+    kits: kits.map(toKit),
   };
 }
 
-export function toProfile(p: typeof recordingProfiles.$inferSelect, approver: string | null = null): RecordingProfile {
+export function toKit(k: typeof cctvKits.$inferSelect): CctvKit {
   return {
-    id: p.id,
-    key: p.key,
-    name: p.name,
-    propertyType: p.propertyType as RecordingProfile["propertyType"],
-    isDefault: p.isDefault,
-    codec: p.codec,
-    frameRate: p.frameRate,
-    bitrateControl: p.bitrateControl as RecordingProfile["bitrateControl"],
-    recordingMode: p.recordingMode as RecordingProfile["recordingMode"],
-    retentionTargetDays: p.retentionTargetDays,
-    retentionMinimumDays: p.retentionMinimumDays,
-    rules: p.rules,
-    version: p.version,
-    status: p.status,
-    approvedBy: approver,
-    reviewedAt: p.reviewedAt,
+    id: k.id,
+    key: k.key,
+    name: k.name,
+    propertyType: (["residential", "commercial", "both"].includes(k.propertyType) ? k.propertyType : "residential") as CctvKit["propertyType"],
+    tier: (TIERS as readonly string[]).includes(k.tier ?? "") ? (k.tier as Tier) : null,
+    cameraCount: k.cameraCount,
+    cameraProductId: k.cameraProductId,
+    nvrProductId: k.nvrProductId,
+    defaultHddTb: num(k.defaultHddTb),
+    defaultHddProductId: k.defaultHddProductId,
+    accessories: k.accessories,
+    status: k.status,
+    version: k.version,
   };
 }
 
@@ -556,9 +554,8 @@ export function commercialSnapshot(packet: DecisionPacket): Record<string, unkno
       sellAllowance: L.allowanceExGst,
       missing: L.missing,
     },
-    recordingProfile: packet.recording.profile ?? null,
-    designs: packet.recording.designs ?? [],
-    designBandwidthMbps: packet.recording.designBandwidthMbps ?? null,
+    approvedKit: packet.kit ?? null,
+    hdd: { selection: packet.recording.storage.selection, capacityTb: packet.recording.storage.installedTb, model: packet.recording.storage.drives?.product.model ?? null },
     maxPossibleBandwidthMbps: packet.recording.maxPossibleBandwidthMbps ?? null,
     assumptions: packet.assumptions,
     exclusions: packet.exclusions,

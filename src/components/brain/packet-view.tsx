@@ -319,110 +319,36 @@ export function PacketView({
       </Section>
 
       <Section title="Recording and storage" testid="packet-storage">
-        <p>
-          {p.recording.mode === "continuous" ? "24/7 continuous" : "Motion"}{" "}
-          recording, {p.recording.storage.advisory ? "reference target" : "target"} {p.recording.storage.retentionTargetDays} days (
-          {p.recording.storage.retentionSource === "customer"
-            ? "customer's request"
-            : "Get Secure standard"}
-          )
-        </p>
-        {p.recording.profile ? (
-          <p className="text-xs text-gray-600" data-testid="packet-profile">
-            Recording profile: <strong>{p.recording.profile.name}</strong> ({label(p.recording.profile.status)})
-            {p.recording.profile.codec ? ` · ${p.recording.profile.codec}` : ""}
-            {p.recording.profile.frameRate ? ` · ${p.recording.profile.frameRate} fps` : ""}
-            {p.recording.profile.bitrateControl ? ` · ${p.recording.profile.bitrateControl}` : ""}
-          </p>
-        ) : (
-          <p className="text-xs text-red-600">No recording profile: approved recording profile required.</p>
-        )}
-        {p.recording.designs?.length ? (
-          <table className="w-full text-left text-xs" data-testid="packet-designs">
-            <thead className="text-gray-500">
-              <tr>
-                <th className="py-1">Camera</th>
-                <th className="py-1 text-right">Design bitrate</th>
-                <th className="py-1">Source</th>
-                <th className="py-1 text-right">Published max</th>
-              </tr>
-            </thead>
-            <tbody>
-              {p.recording.designs.map((d) => (
-                <tr key={d.productId} className="border-t border-gray-100">
-                  <td className="py-1">
-                    {d.model} ({d.resolutionMp} MP)
-                  </td>
-                  <td className={cn("py-1 text-right", d.designBitrateMbps == null && "text-red-600")}>{d.designBitrateMbps != null ? `${d.designBitrateMbps} Mbps` : "not set"}</td>
-                  <td className="py-1 text-gray-600">
-                    {d.bitrateSource ?? "—"}
-                    {d.designBitrateMbps != null && !d.bitrateApproved ? " (not approved)" : ""}
-                  </td>
-                  <td className="py-1 text-right text-gray-600">{d.publishedMaxBitrateMbps != null ? `${d.publishedMaxBitrateMbps} Mbps` : "not published"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-        {p.recording.designBandwidthMbps != null || p.recording.maxPossibleBandwidthMbps != null ? (
-          <p className="text-xs text-gray-600">
-            Design bandwidth {p.recording.designBandwidthMbps != null ? `${p.recording.designBandwidthMbps.toFixed(1)} Mbps` : "unknown"} · maximum possible configured{" "}
-            {p.recording.maxPossibleBandwidthMbps != null ? `${p.recording.maxPossibleBandwidthMbps.toFixed(1)} Mbps` : "unknown"}
+        <p>{p.recording.mode === "continuous" ? "24/7 continuous" : "Motion"} recording. Recording duration depends on camera settings, recording configuration and scene activity; it is not calculated.</p>
+        {p.kit ? (
+          <p className="text-xs text-gray-600" data-testid="packet-kit">
+            Approved kit: <strong>{p.kit.name}</strong>
+            {p.kit.key ? ` (${p.kit.key})` : ""}
           </p>
         ) : null}
-        {p.recording.storage.advisory ? (
-          <div className="space-y-0.5 rounded border border-gray-100 p-2 text-xs" data-testid="packet-hdd">
-            <p>
-              <span className="text-gray-500">{p.recording.storage.selection === "override" ? "HDD chosen by Chris" : p.recording.storage.selection === "manual_required" ? "HDD" : "Default HDD"}: </span>
-              <strong>
-                {p.recording.storage.drives
-                  ? `${p.recording.storage.installedTb} TB (${p.recording.storage.drives.product.manufacturer} ${p.recording.storage.drives.product.model})`
-                  : "not selected — choose it on the assessment"}
-              </strong>
-            </p>
-            {p.recording.storage.usableTb != null ? <p><span className="text-gray-500">Estimated usable capacity: </span>{p.recording.storage.usableTb} TB</p> : null}
-            <p>
-              <span className="text-gray-500">Estimated recording retention: </span>
-              {p.recording.storage.expectedRetentionDays != null ? `approximately ${p.recording.storage.expectedRetentionDays} days` : "not estimated (no design bitrate)"}
-              <span className="text-gray-500"> · reference target {p.recording.storage.retentionTargetDays} days (advisory)</span>
-            </p>
-            {p.recording.storage.basis ? <p><span className="text-gray-500">Based on: </span>{p.recording.storage.basis}</p> : null}
-            {p.recording.storage.warning ? <p className="font-medium text-amber-700" data-testid="packet-retention-warning">{p.recording.storage.warning}</p> : null}
-            <List items={p.recording.storage.notes} />
-          </div>
-        ) : (
-          <>
-        {p.recording.storage.rawGb != null ? (
-            <p className="text-xs text-gray-600" data-testid="packet-storage-calc">
-              Raw storage {(p.recording.storage.rawGb / 1000).toFixed(2)} TB for {p.recording.storage.retentionTargetDays} days · headroom {p.recording.storage.headroomPct}% · required{" "}
-              {p.recording.storage.requiredGb != null ? `${(p.recording.storage.requiredGb / 1000).toFixed(2)} TB` : "—"}
-              {p.recording.storage.installedTb != null ? ` · installed ${p.recording.storage.installedTb} TB` : ""}
-            </p>
-          ) : null}
-          <List items={p.recording.storage.notes} />
+        <div className="space-y-0.5 rounded border border-gray-100 p-2 text-xs" data-testid="packet-hdd">
           <p>
-            Recommended:{" "}
+            <span className="text-gray-500">
+              {p.recording.storage.selection === "override"
+                ? "HDD chosen by Chris"
+                : p.recording.storage.selection === "kit"
+                  ? "Kit HDD"
+                  : p.recording.storage.selection === "fallback"
+                    ? "HDD (fallback by camera count)"
+                    : "HDD"}
+              :{" "}
+            </span>
             <strong>
               {p.recording.storage.drives
-                ? `${p.recording.storage.drives.count} × ${p.recording.storage.drives.product.capacityTb} TB (${p.recording.storage.drives.product.model})`
-                : "—"}
+                ? `${p.recording.storage.installedTb} TB (${p.recording.storage.drives.product.manufacturer} ${p.recording.storage.drives.product.model})`
+                : "not selected — choose it on the assessment"}
             </strong>
-            {p.recording.storage.expectedRetentionDays != null
-              ? ` · about ${p.recording.storage.expectedRetentionDays} days`
-              : ""}{" "}
-            ·{" "}
-            <Badge
-              className={
-                p.recording.storage.status === "meets_target"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-amber-100 text-amber-800"
-              }
-            >
-              {label(p.recording.storage.status)}
-            </Badge>
           </p>
-          </>
-        )}
+          <List items={p.recording.storage.notes ?? []} />
+        </div>
+        {p.recording.maxPossibleBandwidthMbps != null ? (
+          <p className="text-xs text-gray-600">Cameras&apos; published maximum bitrate total {p.recording.maxPossibleBandwidthMbps.toFixed(1)} Mbps (checked against the recorder above).</p>
+        ) : null}
       </Section>
 
       <Section title="Network">

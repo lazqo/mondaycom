@@ -158,7 +158,7 @@ export type EnquiryInput = {
   customerName?: string | null;
   /** A residential tier asked for (by the customer or Chris). Ignored, with a note, for commercial. */
   requestedTier?: Tier | null;
-  /** Recording profile to design with; the default for the property type when not given. */
+  /** No longer used (recording profiles were removed); kept so older saved assessments still load. */
   recordingProfileId?: string | null;
   /** The existing CCTV system, when the job is an upgrade. */
   existing?: ExistingSystem | null;
@@ -361,59 +361,30 @@ export type MaterialsPackage = {
   status: KnowledgeStatus;
 };
 
-export type RecordingRule = {
-  id: string;
-  scope: "product" | "family" | "resolution";
-  productId?: string | null;
-  family?: string | null;
-  minMp?: number | null;
-  maxMp?: number | null;
-  designBitrateMbps: number | null;
-  codec?: string | null;
-  frameRate?: number | null;
-  note?: string | null;
-};
-
-export type RecordingProfile = {
-  id: string;
-  key: string;
-  name: string;
-  propertyType: PropertyType | "any";
-  isDefault: boolean;
-  codec: string | null;
-  frameRate: number | null;
-  bitrateControl: "CBR" | "VBR" | null;
-  recordingMode: "continuous" | "motion" | null;
-  retentionTargetDays: number | null;
-  retentionMinimumDays: number | null;
-  rules: RecordingRule[];
-  version: number;
-  status: KnowledgeStatus;
-  approvedBy?: string | null;
-  reviewedAt?: Date | string | null;
-};
-
-/** How one chosen camera is designed to record under the profile. */
-export type CameraDesign = {
-  productId: string;
-  model: string;
-  resolutionMp: number;
-  codec: string | null;
-  frameRate: number | null;
-  /** The bitrate used for bandwidth and storage. Null until the profile sets one for this camera. */
-  designBitrateMbps: number | null;
-  bitrateSource: string | null;
-  bitrateApproved: boolean;
-  publishedMaxBitrateMbps: number | null;
-};
-
 export type Catalogue = {
   products: Product[];
   packages: InstallationPackage[];
   materialsPackages?: MaterialsPackage[];
   compatibility?: CompatibilityLink[];
   routes?: BrandRoute[];
-  recordingProfiles?: RecordingProfile[];
+  /** Approved CCTV kits (system configurations). */
+  kits?: CctvKit[];
+};
+
+export type CctvKit = {
+  id: string;
+  key: string | null;
+  name: string;
+  propertyType: "residential" | "commercial" | "both";
+  tier: Tier | null;
+  cameraCount: number;
+  cameraProductId: string;
+  nvrProductId: string;
+  defaultHddTb: number | null;
+  defaultHddProductId: string | null;
+  accessories: { productId: string; quantity: number; perCamera: boolean }[];
+  status: KnowledgeStatus;
+  version: number;
 };
 
 // ---------- policy ----------
@@ -425,12 +396,7 @@ export type Policies = {
   labourRateCommercial: PolicyValue<number>;
   /** Internal cost of an hour of labour, if known; without it labour is not counted as a cost. */
   labourCostRate: PolicyValue<number | null>;
-  retentionTargetDays: PolicyValue<number>;
-  retentionMinimumDays: PolicyValue<number>;
   residentialDefaultRecording: PolicyValue<"continuous">;
-  gbPerMbpsDay: PolicyValue<number>;
-  storageHeadroomPct: PolicyValue<number>;
-  hddUsableFraction: PolicyValue<number>;
   gstRate: PolicyValue<number>;
   suggestedMarkupPct: PolicyValue<number>;
   markupRangePct: PolicyValue<[number, number]>;
@@ -483,25 +449,18 @@ export type Check = { name: string; pass: boolean; detail: string; unverified?: 
 
 export type NvrEvaluation = { product: NvrProduct; pass: boolean; checks: Check[] };
 
+/**
+ * The HDD for the job. Chosen in this order: Chris's override on the assessment, the approved kit's
+ * default, the residential fallback by camera count, else it must be chosen. No retention is
+ * calculated or promised.
+ */
 export type StorageResult = {
-  totalMbps: number | null;
-  retentionTargetDays: number;
-  retentionSource: "customer" | "profile" | "policy";
-  rawGb: number | null;
-  headroomPct: number;
-  requiredGb: number | null;
+  selection: "override" | "kit" | "fallback" | "required";
+  capacityTb: number | null;
   drives: { product: HddProduct; count: number } | null;
   installedTb: number | null;
-  expectedRetentionDays: number | null;
-  /** Residential: the drive comes from Get Secure's default for the camera count or Chris's choice, never resized to a retention target. */
-  selection?: "default" | "override" | "manual_required" | "sized";
-  /** Residential: the retention figure is an estimate for Chris, not a requirement. */
-  advisory?: boolean;
-  usableTb?: number | null;
-  /** e.g. "6 × 5MP cameras at 3 Mbps design bitrate". */
-  basis?: string | null;
-  warning?: string | null;
-  status: "meets_target" | "below_target" | "below_minimum" | "cannot_calculate";
+  /** Days the customer asked for, if any: a custom requirement for Chris; nothing is calculated. */
+  customerRetentionDays: number | null;
   notes: string[];
 };
 
@@ -656,12 +615,11 @@ export type DecisionPacket = {
   recording: {
     mode: "continuous" | "motion";
     storage: StorageResult;
-    profile: { id: string; key: string; name: string; status: KnowledgeStatus; codec: string | null; frameRate: number | null; bitrateControl: string | null } | null;
-    /** Per chosen camera: design bitrate (used) and published maximum (warning only). */
-    designs: CameraDesign[];
-    designBandwidthMbps: number | null;
+    /** Sum of the cameras' published maximum bitrates, where every camera publishes one. */
     maxPossibleBandwidthMbps: number | null;
   };
+  /** The approved kit the hardware came from, if one matched. */
+  kit: { id: string; key: string | null; name: string } | null;
   network: NetworkResult;
   installation: {
     storeys: number | null;

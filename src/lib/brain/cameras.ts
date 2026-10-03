@@ -5,7 +5,7 @@
  * backlight and analytics needs, and, when the distance or scene width is known, deliver the pixel
  * density its purpose calls for (IEC 62676-4). Among the cameras that pass, approved products with
  * an approved price come first, then the tier's brand order (e.g. VIGI first for Good), then
- * cameras the recording profile has a design bitrate for and whose power is published, then the
+ * cameras whose maximum bitrate and power are published (so the recorder can be checked), then the
  * lowest cost, then the model name, so the choice is repeatable.
  */
 import type { CameraChoice, CameraProduct, CameraRequirement, Policies, Product, PropertyType, Tier } from "./types";
@@ -54,16 +54,16 @@ export function cameraMeets(camera: CameraProduct, req: CameraRequirement, polic
   return { ok, reasons, ppm };
 }
 
-function ranker(brandOrder: string[], designMbps: (c: CameraProduct) => number | null) {
+function ranker(brandOrder: string[]) {
   const order = brandOrder.map((b) => b.toLowerCase());
   const brandIdx = (p: CameraProduct) => {
     const i = order.indexOf(familyOf(p).toLowerCase());
     return i < 0 ? order.length : i;
   };
   const trusted = (p: CameraProduct) => (TRUSTED_STATUSES.includes(p.status) && p.price?.approved ? 0 : 1);
-  // A camera with a design bitrate in the recording profile and a published power figure can be
-  // validated end to end; prefer it.
-  const gaps = (p: CameraProduct) => (designMbps(p) == null ? 1 : 0) + (p.poeWatts == null ? 1 : 0);
+  // A camera with a published maximum bitrate and power figure can be validated against the
+  // recorder end to end; prefer it.
+  const gaps = (p: CameraProduct) => (p.maxBitrateMbps == null ? 1 : 0) + (p.poeWatts == null ? 1 : 0);
   return (a: CameraProduct, b: CameraProduct) =>
     trusted(a) - trusted(b) ||
     brandIdx(a) - brandIdx(b) ||
@@ -90,9 +90,8 @@ export function chooseCameras(
   candidates: CameraProduct[],
   policies: Policies,
   brandOrder: string[] = [],
-  designMbps: (c: CameraProduct) => number | null = () => null,
 ): CameraChoice[] {
-  const rank = ranker(brandOrder, designMbps);
+  const rank = ranker(brandOrder);
   return requirements.map((req) => {
     const passing: { c: CameraProduct; ppm: number | null }[] = [];
     const rejected: string[] = [];
