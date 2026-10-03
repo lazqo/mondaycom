@@ -28,6 +28,7 @@ import type {
 } from "./types";
 import { TRUSTED_STATUSES } from "./types";
 import { ACCESSORY_KINDS, relatedProducts } from "./compat";
+import type { UpgradePlan } from "./upgrade";
 
 function pickProduct<T extends Product>(products: Product[], test: (p: Product) => p is T, ok: (p: T) => boolean = () => true): T | null {
   const list = products.filter(test).filter((p) => p.status !== "deprecated" && ok(p));
@@ -230,17 +231,26 @@ export const packageKey = (cameraCount: number, storeys: number | null) => `RES_
  * The installation package for this job: residential only, for exactly this camera count and
  * storey type. No range matching: 3, 5 or 7 cameras find nothing and are a custom installation.
  */
-export function packageFor(enquiry: EnquiryInput, cameraCount: number, packages: InstallationPackage[]): InstallationPackage | null {
+export const upgradePackageKey = (cameraCount: number) => `RES_CCTV_UPGRADE_IP_${cameraCount}`;
+
+/**
+ * The exact package for this job: a new-install package by camera count and storey type, or (when
+ * an upgrade's existing cabling allows it) an IP upgrade package by camera count.
+ */
+export function packageFor(enquiry: EnquiryInput, cameraCount: number, packages: InstallationPackage[], kind: "new" | "upgrade_ip" = "new"): InstallationPackage | null {
   if (enquiry.propertyType === "commercial") return null;
   const storeyType = (enquiry.storeys ?? 1) >= 2 ? "double" : "single";
+  const wantKey = kind === "upgrade_ip" ? upgradePackageKey(cameraCount) : packageKey(cameraCount, enquiry.storeys);
   const matches = packages
-    .filter((p) => p.status !== "deprecated" && p.propertyType === "residential")
+    .filter((p) => p.status !== "deprecated" && p.propertyType === "residential" && (p.installType ?? "new") === kind)
     .filter((p) => {
       const exact = p.cameraCount ?? (p.minCameras === p.maxCameras ? p.minCameras : null);
+      if (exact !== cameraCount) return false;
+      if (kind === "upgrade_ip") return true;
       const type = p.storeyType ?? (p.storeys == null ? null : p.storeys >= 2 ? "double" : "single");
-      return exact === cameraCount && type === storeyType;
+      return type === storeyType;
     })
-    .sort((a, b) => Number(b.key === packageKey(cameraCount, enquiry.storeys)) - Number(a.key === packageKey(cameraCount, enquiry.storeys)) || b.version - a.version || a.name.localeCompare(b.name));
+    .sort((a, b) => Number(b.key === wantKey) - Number(a.key === wantKey) || b.version - a.version || a.name.localeCompare(b.name));
   return matches[0] ?? null;
 }
 
@@ -249,8 +259,9 @@ export function packageFor(enquiry: EnquiryInput, cameraCount: number, packages:
  * allowances and the customer sell allowance are what Get Secure entered, and anything missing is
  * listed so the quote shows as not fully priced.
  */
-export function labourPlan(input: { enquiry: EnquiryInput; cameraCount: number; packages: InstallationPackage[]; policies: Policies }): LabourResult {
+export function labourPlan(input: { enquiry: EnquiryInput; cameraCount: number; packages: InstallationPackage[]; policies: Policies; upgrade?: UpgradePlan | null }): LabourResult {
   const { enquiry, cameraCount, packages, policies } = input;
+  const upgrade = input.upgrade ?? null;
   const commercial = enquiry.propertyType === "commercial";
   const policyRate = commercial ? policies.labourRateCommercial.value : policies.labourRateResidential.value;
   const notes: string[] = [];
@@ -274,14 +285,20 @@ export function labourPlan(input: { enquiry: EnquiryInput; cameraCount: number; 
     return { ...none, missing: ["Commercial installation: estimated after the site visit"] };
   }
   const doubleStorey = (enquiry.storeys ?? 1) >= 2;
-  const pkg = packageFor(enquiry, cameraCount, packages);
+  if (upgrade) notes.push(`Upgrade: ${upgrade.summary}`);
+  if (upgrade && upgrade.packageKind === null) {
+    // The existing installation has to be confirmed or decided first; nothing is assumed.
+    return { ...none, customInstallation: upgrade.path === "mixed", missing: [upgrade.unresolved ?? "Upgrade installation not resolved"] };
+  }
+  const kind = upgrade?.packageKind ?? "new";
+  const pkg = packageFor(enquiry, cameraCount, packages, kind);
   if (!pkg) {
-    const key = packageKey(cameraCount, enquiry.storeys);
+    const key = kind === "upgrade_ip" ? upgradePackageKey(cameraCount) : packageKey(cameraCount, enquiry.storeys);
     const exact = [2, 4, 6, 8].includes(cameraCount);
     notes.push(
       exact
         ? `No ${key} installation package found. Add it in Settings → Business Brain.`
-        : `Custom installation: ${cameraCount} camera(s), ${doubleStorey ? "double" : "single"} storey has no standard package (packages are for exactly 2, 4, 6 or 8 cameras). Labour needs an explicit calculation.`,
+        : `Custom installation: ${cameraCount} camera(s)${kind === "upgrade_ip" ? " IP upgrade" : `, ${doubleStorey ? "double" : "single"} storey`} has no standard package (packages are for exactly 2, 4, 6 or 8 cameras). Labour needs an explicit calculation.`,
     );
     return { ...none, customInstallation: !exact, missing: [exact ? `Installation package ${key} missing` : `Custom installation for ${cameraCount} camera(s): labour not calculated`] };
   }

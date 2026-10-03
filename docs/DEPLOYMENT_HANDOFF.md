@@ -608,6 +608,44 @@ action (sending, confirming, discounting, accepting) that is not done by an appr
 lead is converted). Rolling the code back past it is still safe, but delete any Brain-prepared quotes
 without a customer first: `docker compose -f docker-compose.prod.yml exec db psql -U getsecure -d getsecure -c "delete from quotes where contact_id is null"`.
 
+### CCTV upgrades
+
+When the assessment's **Job** is **Upgrade**, it asks about the existing system:
+- type (IP/PoE, analogue/coax, mixed);
+- recorder, camera count, cable type and condition;
+- whether the existing camera locations suit;
+- existing PoE, local power or baluns;
+- how many cameras reuse an existing position, need a new position and cable, or are still to confirm.
+
+The existing cabling decides the installation package:
+
+| Existing cabling | Installation |
+|---|---|
+| Cat5e/Cat6, **reusable**, cameras in existing positions | `RES_CCTV_UPGRADE_IP_2/4/6/8` (runs kept, subject to testing and re-termination) |
+| Coax | Never assumed reusable for PoE/IP. Chris decides: **replace with Cat6** for the IP system (priced as a new installation) or **keep the coax** with coax-compatible technology (needs its own design; not quoted). Until decided, it is priced as a new installation and the decision is flagged. |
+| Damaged, not reusable, or other cable | Normal new-install package |
+| Type or reusability **unknown / needs testing** | "Existing cabling must be confirmed before upgrade labour savings can be applied." The hardware is still prepared; installation stays unresolved (Not fully priced). The exception is when Chris has approved the rule "Upgrade with unconfirmed cabling" = `"new_install"`: then the new-install package is used as the conservative assumption. |
+| Some positions reused and some new (mixed) | No package yet: installation needs Chris's calculation (shown as a custom installation) |
+| All positions new | Normal new-install package |
+
+The four upgrade packages exist with no values. Labour hours, materials, complexity and the
+customer sell allowance are Get Secure's to enter, then approve, under Installation & materials.
+Camera counts other than 2/4/6/8 are custom installations, as for new installs.
+
+**Residential Standard** now carries the values Chris agreed, awaiting his approval under Recording
+profiles:
+- H.265+, VBR, 25 fps;
+- design bitrate 2MP 1.5, 3MP 2.0, 4MP 2.5, 5MP 3.0, 6MP 3.5, 8MP 4.5 and 12MP 6.5 Mbps.
+
+They were filled in only because no bitrates had been entered yet; values already in the CRM are
+never overwritten. Drive capacity is calculated from these bitrates, the retention and the headroom.
+
+### Later: Alarm Brain (notes only, not built)
+
+- AAP / Arrowhead is Get Secure's default wired alarm upgrade/replacement path where existing
+  cabling can be reused.
+- Preferred suppliers for AAP / Arrowhead: Vesta Electrical and IT Plus.
+
 ## 15. IT Plus authenticated pricing
 
 IT Plus (www.itplus.co.nz) is a WooCommerce shop that hides prices until a trade account logs in.

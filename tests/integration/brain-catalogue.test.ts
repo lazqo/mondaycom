@@ -107,8 +107,9 @@ describe("supplier registry", () => {
 describe("installation and materials packages", () => {
   it("has the eight residential packages, unpriced and unapproved, with the $95 rate", async () => {
     const pkgs = await db.query.installationPackages.findMany({ where: eq(installationPackages.propertyType, "residential") });
-    const seeded = pkgs.filter((p) => p.name.startsWith("Residential "));
+    const seeded = pkgs.filter((p) => p.name.startsWith("Residential ") && p.installType === "new");
     expect(seeded).toHaveLength(8);
+    expect(pkgs.filter((p) => p.installType === "upgrade_ip").map((p) => p.key).sort()).toEqual(["RES_CCTV_UPGRADE_IP_2", "RES_CCTV_UPGRADE_IP_4", "RES_CCTV_UPGRADE_IP_6", "RES_CCTV_UPGRADE_IP_8"]);
     expect(seeded.every((p) => p.estimatedHours == null && p.allowanceExGst == null && p.status === "requires_review" && Number(p.labourRate) === 95)).toBe(true);
     expect(seeded.filter((p) => p.storeys === 2).every((p) => p.conduitIncluded)).toBe(true);
   });

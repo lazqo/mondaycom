@@ -99,6 +99,25 @@ export type CommercialDetails = {
 
 export type CompetitorQuote = { price?: number | null; description?: string | null };
 
+/** What is already on site, for an upgrade. Everything defaults to unknown. */
+export type ExistingSystem = {
+  systemType: "ip_poe" | "analogue_coax" | "mixed" | "unknown";
+  /** Recorder make/model if known. */
+  recorder: string | null;
+  cameraCount: number | null;
+  cableType: "cat5e" | "cat6" | "coax" | "other" | "unknown";
+  cableCondition: "reusable" | "not_reusable" | "needs_testing" | "unknown";
+  locationsSuitable: Tri;
+  /** Existing PoE, local power supplies or baluns, as noted. */
+  power: string | null;
+  /** How the new cameras' positions relate to the existing ones (counts). */
+  positions?: { reuse: number; new: number; confirm: number } | null;
+  /** With coax on site: replace it with Cat6 for the IP system, or keep it (needs a coax-compatible design). */
+  coaxDecision?: "replace_with_cat6" | "retain_coax" | null;
+};
+
+export type UpgradePlan = import("./upgrade").UpgradePlan;
+
 export type EnquiryInput = {
   propertyType: PropertyType | null;
   jobType: JobType | null;
@@ -141,6 +160,8 @@ export type EnquiryInput = {
   requestedTier?: Tier | null;
   /** Recording profile to design with; the default for the property type when not given. */
   recordingProfileId?: string | null;
+  /** The existing CCTV system, when the job is an upgrade. */
+  existing?: ExistingSystem | null;
 };
 
 // ---------- catalogue ----------
@@ -296,6 +317,8 @@ export type InstallationPackage = {
   key?: string | null;
   name: string;
   propertyType: PropertyType;
+  /** new = full new installation (default); upgrade_ip = existing Cat5e/Cat6 runs and positions reused. */
+  installType?: "new" | "upgrade_ip";
   /** The exact camera count the package covers. */
   cameraCount?: number | null;
   storeyType?: "single" | "double" | null;
@@ -418,6 +441,8 @@ export type Policies = {
   priceAgingDays: PolicyValue<number>;
   priceStaleDays: PolicyValue<number>;
   priceChangeReviewPct: PolicyValue<number>;
+  /** Upgrade with existing cabling not confirmed: null = installation stays unresolved; "new_install" = price the new-install package (conservative). */
+  upgradeUnconfirmedCabling: PolicyValue<"new_install" | null>;
   defaultResidentialTier: PolicyValue<Tier | null>;
   tiers: PolicyValue<Record<Tier, { targetMp: number | null; brands: string[]; description?: string; ecosystemOnly?: boolean }>>;
   commercialSiteVisitMandatory: PolicyValue<boolean>;
@@ -636,6 +661,8 @@ export type DecisionPacket = {
     materials: MaterialLine[];
     /** Documented accessories for the chosen cameras (junction boxes, brackets). */
     accessories?: { camera: string; kind: CompatibilityKind; product: string; productId: string }[];
+    /** Upgrade jobs: the existing system and which installation package it allows. */
+    upgrade?: UpgradePlan | null;
   };
   labour: LabourResult;
   costing: Costing;

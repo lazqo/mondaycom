@@ -438,6 +438,20 @@ export function PacketView({
             ))}
           </tbody>
         </table>
+        {p.installation.upgrade ? (
+          <div className="rounded border border-amber-200 bg-amber-50/50 p-2 text-xs" data-testid="packet-upgrade">
+            <p className="font-medium text-gray-800">Upgrade: {p.installation.upgrade.summary}</p>
+            <p className="text-gray-600">
+              Existing: {label(p.installation.upgrade.existing.systemType)}
+              {p.installation.upgrade.existing.cameraCount != null ? `, ${p.installation.upgrade.existing.cameraCount} camera(s)` : ""}
+              {p.installation.upgrade.existing.recorder ? `, recorder ${p.installation.upgrade.existing.recorder}` : ""} · cable {label(p.installation.upgrade.existing.cableType)} (
+              {label(p.installation.upgrade.existing.cableCondition)}) · positions: {p.installation.upgrade.positions.reuse} reused, {p.installation.upgrade.positions.new} new,{" "}
+              {p.installation.upgrade.positions.confirm} to confirm
+            </p>
+            {p.installation.upgrade.unresolved ? <p className="text-red-700">{p.installation.upgrade.unresolved}</p> : null}
+            <List items={[...p.installation.upgrade.decisions.map((d) => `Decision: ${d}`), ...p.installation.upgrade.notes]} />
+          </div>
+        ) : null}
         <p className="text-xs" data-testid="packet-junction-box">
           <span className="text-gray-500">Junction boxes: </span>
           {p.installation.junctionBoxRecommended ? (

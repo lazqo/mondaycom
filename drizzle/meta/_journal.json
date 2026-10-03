@@ -92,6 +92,13 @@
       "when": 1790992610860,
       "tag": "0012_supplier_connectors",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791019223410,
+      "tag": "0013_cctv_upgrades",
+      "breakpoints": true
     }
   ]
 }

@@ -111,12 +111,27 @@ describe("seeded v0.3 data", () => {
     const ranges = await db.select().from(installationPackages).where(eq(installationPackages.source, "Get Secure CCTV Business Brain v0.2 (Chris): package structure"));
     expect(ranges.every((r) => r.status === "deprecated")).toBe(true);
   });
-  it("has the recording profiles with the approved residential retention but no design bitrates", async () => {
+  it("has the recording profiles; Residential Standard carries the values Chris agreed, awaiting his approval", async () => {
     const rows = await db.select().from(recordingProfiles).where(inArray(recordingProfiles.key, ["RES_STANDARD", "RES_HIGH_DETAIL", "COM_STANDARD", "CUSTOM"]));
     expect(rows.map((r) => r.key).sort()).toEqual(["COM_STANDARD", "CUSTOM", "RES_HIGH_DETAIL", "RES_STANDARD"]);
     const std = rows.find((r) => r.key === "RES_STANDARD")!;
-    expect(std).toMatchObject({ isDefault: true, recordingMode: "continuous", retentionTargetDays: 28, retentionMinimumDays: 14, status: "requires_review" });
-    expect(rows.every((r) => r.rules.length === 0)).toBe(true);
+    expect(std).toMatchObject({ isDefault: true, recordingMode: "continuous", retentionTargetDays: 28, retentionMinimumDays: 14, codec: "H.265+", bitrateControl: "VBR", frameRate: 25, status: "getsecure_provisional" });
+    expect(std.approvedById).toBeNull();
+    const profile = brain.toProfile(std);
+    const { cameraDesign } = await import("@/lib/brain/profiles");
+    const at = (mp: number) => cameraDesign({ id: `x${mp}`, manufacturer: "Any", model: `M${mp}`, family: "Any", resolutionMp: mp } as never, profile).designBitrateMbps;
+    expect([2, 3, 4, 5, 6, 8, 12].map(at)).toEqual([1.5, 2.0, 2.5, 3.0, 3.5, 4.5, 6.5]);
+    expect(at(10)).toBeNull(); // no agreed value for 10MP: nothing is invented
+    expect(rows.filter((r) => r.key !== "RES_STANDARD").every((r) => r.rules.length === 0)).toBe(true);
+  });
+
+  it("has the four IP upgrade packages, empty and needing approval", async () => {
+    const rows = await db.select().from(installationPackages).where(inArray(installationPackages.key, ["RES_CCTV_UPGRADE_IP_2", "RES_CCTV_UPGRADE_IP_4", "RES_CCTV_UPGRADE_IP_6", "RES_CCTV_UPGRADE_IP_8"]));
+    expect(rows).toHaveLength(4);
+    for (const r of rows) {
+      expect(r).toMatchObject({ installType: "upgrade_ip", storeyType: null, status: "requires_review", estimatedHours: null, materialCostExGst: null, complexityAllowanceExGst: null, allowanceExGst: null });
+      expect(r.cameraCount).toBe(Number(r.key!.split("_").pop()));
+    }
   });
 });
 

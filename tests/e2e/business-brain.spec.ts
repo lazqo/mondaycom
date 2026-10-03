@@ -160,4 +160,27 @@ test.describe("CCTV Business Brain", () => {
     await expect(page.getByTestId("quote-approval")).toContainText("Waiting for Chris");
     await expect(page.getByRole("button", { name: "Mark as sent" })).toHaveCount(0);
   });
+  test("an upgrade asks about the existing system; unconfirmed cabling gets no upgrade saving", async ({ page }) => {
+    await login(page);
+    await page.goto(`/leads/${leadId}`);
+    await page.getByTestId("open-assessment").click();
+    await page.getByLabel("Property", { exact: true }).selectOption("residential");
+    await page.getByLabel("Job", { exact: true }).selectOption("upgrade");
+    await page.getByLabel("Cameras", { exact: true }).fill("4");
+    await page.getByLabel("Storeys", { exact: true }).fill("1");
+    await page.getByLabel("Recording profile").selectOption({ label: PROFILE });
+    const existing = page.getByTestId("existing-system");
+    await expect(existing).toBeVisible();
+    // Cable type unknown: installation stays unresolved.
+    await page.getByTestId("run-assessment").click();
+    await expect(page.getByTestId("packet-upgrade")).toContainText("Existing cabling must be confirmed before upgrade labour savings can be applied.");
+    await expect(page.getByTestId("packet-readiness")).toContainText("Existing system assessed for the upgrade");
+    // Reusable Cat6 in the existing positions: the IP upgrade package.
+    await existing.getByLabel("Existing cable type").selectOption("cat6");
+    await existing.getByLabel("Existing cable condition").selectOption("reusable");
+    await existing.getByLabel("Existing camera locations suitable").selectOption("yes");
+    await page.getByTestId("run-assessment").click();
+    await expect(page.getByTestId("packet-upgrade")).toContainText("IP upgrade: existing Cat6 runs and camera positions reused");
+    await expect(page.getByTestId("packet-labour")).toContainText("RES_CCTV_UPGRADE_IP_4");
+  });
 });

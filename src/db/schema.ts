@@ -843,6 +843,8 @@ export const installationPackages = pgTable("installation_packages", {
   key: text("key").unique(),
   name: text("name").notNull(),
   propertyType: text("property_type").notNull().default("residential"),
+  /** new = full new installation; upgrade_ip = reusing existing Cat5e/Cat6 runs and camera positions. */
+  installType: text("install_type").notNull().default("new"),
   /** Exact camera count the package is for. */
   cameraCount: integer("camera_count"),
   /** single | double */

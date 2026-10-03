@@ -183,6 +183,7 @@ export async function loadCatalogue(): Promise<Catalogue> {
     key: p.key,
     name: p.name,
     propertyType: p.propertyType as InstallationPackage["propertyType"],
+    installType: (p.installType === "upgrade_ip" ? "upgrade_ip" : "new") as InstallationPackage["installType"],
     cameraCount: p.cameraCount,
     storeyType: p.storeyType as InstallationPackage["storeyType"],
     materialCostExGst: num(p.materialCostExGst),

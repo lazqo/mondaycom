@@ -775,6 +775,7 @@ export type PackageView = {
   key: string | null;
   name: string;
   propertyType: string;
+  installType: "new" | "upgrade_ip";
   cameraCount: number | null;
   storeyType: string | null;
   estimatedHours: number | null;
@@ -813,6 +814,7 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
     name: p?.name ?? "",
     propertyType: p?.propertyType ?? "residential",
     cameraCount: p?.cameraCount != null ? String(p.cameraCount) : "4",
+    installType: p?.installType ?? "new",
     storeyType: p?.storeyType ?? "single",
     estimatedHours: p?.estimatedHours != null ? String(p.estimatedHours) : "",
     labourRate: p?.labourRate != null ? String(p.labourRate) : "",
@@ -864,12 +866,20 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
       <Field label="Exact camera count" htmlFor={`kc-${id}`}>
         <Input id={`kc-${id}`} type="number" value={v.cameraCount} onChange={(e) => set("cameraCount", e.target.value)} />
       </Field>
-      <Field label="Storey type" htmlFor={`kst-${id}`}>
-        <Select id={`kst-${id}`} value={v.storeyType} onChange={(e) => set("storeyType", e.target.value)}>
-          <option value="single">Single storey</option>
-          <option value="double">Double storey</option>
+      <Field label="Installation type" htmlFor={`kit-${id}`}>
+        <Select id={`kit-${id}`} value={v.installType} onChange={(e) => set("installType", e.target.value)}>
+          <option value="new">New installation</option>
+          <option value="upgrade_ip">IP upgrade (existing Cat5e/Cat6 reused)</option>
         </Select>
       </Field>
+      {v.installType === "new" ? (
+        <Field label="Storey type" htmlFor={`kst-${id}`}>
+          <Select id={`kst-${id}`} value={v.storeyType} onChange={(e) => set("storeyType", e.target.value)}>
+            <option value="single">Single storey</option>
+            <option value="double">Double storey</option>
+          </Select>
+        </Field>
+      ) : null}
       <Field label="Expected labour hours" htmlFor={`kh-${id}`}>
         <Input id={`kh-${id}`} type="number" value={v.estimatedHours} onChange={(e) => set("estimatedHours", e.target.value)} placeholder="Not set" />
       </Field>
@@ -928,7 +938,8 @@ function PackageForm({ p, canApprove, materials }: { p: PackageView | null; canA
                   name: v.name,
                   propertyType: v.propertyType,
                   cameraCount: Number(v.cameraCount),
-                  storeyType: v.storeyType,
+                  installType: v.installType,
+                  storeyType: v.installType === "upgrade_ip" ? null : v.storeyType,
                   estimatedHours: n(v.estimatedHours),
                   labourRate: n(v.labourRate),
                   allowanceExGst: n(v.allowanceExGst),

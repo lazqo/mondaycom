@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { prepareDraftsAction, runAssessmentAction } from "@/actions/brain";
 import { Button, Card, CardHeader, Field, FormError, Input, Select, Textarea } from "@/components/ui";
-import type { EnquiryInput, Tri } from "@/lib/brain/types";
+import type { EnquiryInput, ExistingSystem, Tri } from "@/lib/brain/types";
 
 const TRI: { value: Tri; label: string }[] = [
   { value: "unknown", label: "Unknown" },
@@ -156,6 +156,8 @@ export function AssessmentForm({
           </Field>
         </div>
 
+        {v.jobType === "upgrade" ? <ExistingSystemFields value={v.existing ?? null} cameraCount={v.cameraCount} onChange={(x) => set("existing", x)} /> : null}
+
         <fieldset className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-3">
           <legend className="sr-only">Recording and network</legend>
           <Field label="Remote viewing on phone" htmlFor="a-rv">
@@ -265,5 +267,85 @@ export function AssessmentForm({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+const NO_EXISTING: ExistingSystem = { systemType: "unknown", recorder: null, cameraCount: null, cableType: "unknown", cableCondition: "unknown", locationsSuitable: "unknown", power: null, positions: null, coaxDecision: null };
+
+/** The existing CCTV system, for an upgrade: decides which installation package may be used. */
+function ExistingSystemFields({ value, cameraCount, onChange }: { value: ExistingSystem | null; cameraCount: number | null; onChange: (x: ExistingSystem) => void }) {
+  const e = { ...NO_EXISTING, ...(value ?? {}) };
+  const set = <K extends keyof ExistingSystem>(k: K, val: ExistingSystem[K]) => onChange({ ...e, [k]: val });
+  const pos = e.positions ?? { reuse: 0, new: 0, confirm: 0 };
+  const setPos = (k: "reuse" | "new" | "confirm", val: string) => set("positions", { ...pos, [k]: val.trim() === "" ? 0 : Math.max(0, Number(val)) });
+  const n = (s: string) => (s.trim() === "" ? null : Number(s));
+  return (
+    <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-amber-200 bg-amber-50/40 p-3" data-testid="existing-system">
+      <legend className="px-1 text-xs font-semibold text-gray-700">Existing CCTV system (upgrade)</legend>
+      <Field label="Existing system" htmlFor="x-type">
+        <Select id="x-type" value={e.systemType} onChange={(ev) => set("systemType", ev.target.value as ExistingSystem["systemType"])}>
+          <option value="unknown">Unknown</option>
+          <option value="ip_poe">IP / PoE</option>
+          <option value="analogue_coax">Analogue / coax</option>
+          <option value="mixed">Mixed</option>
+        </Select>
+      </Field>
+      <Field label="Existing recorder (make/model)" htmlFor="x-rec">
+        <Input id="x-rec" value={e.recorder ?? ""} onChange={(ev) => set("recorder", ev.target.value || null)} placeholder="If known" />
+      </Field>
+      <Field label="Existing camera count" htmlFor="x-count">
+        <Input id="x-count" type="number" min={0} value={e.cameraCount ?? ""} onChange={(ev) => set("cameraCount", n(ev.target.value))} />
+      </Field>
+      <Field label="Existing cable type" htmlFor="x-cable">
+        <Select id="x-cable" value={e.cableType} onChange={(ev) => set("cableType", ev.target.value as ExistingSystem["cableType"])}>
+          <option value="unknown">Unknown</option>
+          <option value="cat5e">Cat5e</option>
+          <option value="cat6">Cat6</option>
+          <option value="coax">Coax</option>
+          <option value="other">Other</option>
+        </Select>
+      </Field>
+      <Field label="Existing cable condition" htmlFor="x-cond">
+        <Select id="x-cond" value={e.cableCondition} onChange={(ev) => set("cableCondition", ev.target.value as ExistingSystem["cableCondition"])}>
+          <option value="unknown">Unknown</option>
+          <option value="reusable">Reusable</option>
+          <option value="needs_testing">Needs testing</option>
+          <option value="not_reusable">Not reusable</option>
+        </Select>
+      </Field>
+      <Field label="Existing camera locations suitable" htmlFor="x-loc">
+        <Select id="x-loc" value={e.locationsSuitable} onChange={(ev) => set("locationsSuitable", ev.target.value as ExistingSystem["locationsSuitable"])}>
+          <option value="unknown">Unknown</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </Select>
+      </Field>
+      {e.cableType === "coax" ? (
+        <Field label="Coax decision" htmlFor="x-coax" className="col-span-2" hint="Coax is never assumed reusable for PoE/IP">
+          <Select id="x-coax" value={e.coaxDecision ?? ""} onChange={(ev) => set("coaxDecision", (ev.target.value || null) as ExistingSystem["coaxDecision"])}>
+            <option value="">Not decided yet</option>
+            <option value="replace_with_cat6">Replace with Cat6 for the IP system (new installation)</option>
+            <option value="retain_coax">Keep the coax with coax-compatible technology</option>
+          </Select>
+        </Field>
+      ) : null}
+      <Field label="Existing PoE / local power / baluns" htmlFor="x-power" className="col-span-2">
+        <Input id="x-power" value={e.power ?? ""} onChange={(ev) => set("power", ev.target.value || null)} placeholder="e.g. 12V supplies at each camera, baluns at the recorder" />
+      </Field>
+      <div className="col-span-2 grid grid-cols-3 gap-2">
+        <p className="col-span-3 text-xs text-gray-600">
+          Camera positions{cameraCount ? ` (of ${cameraCount})` : ""} — leave all at 0 to follow &quot;locations suitable&quot; above.
+        </p>
+        <Field label="Reuse existing position" htmlFor="x-reuse">
+          <Input id="x-reuse" type="number" min={0} value={pos.reuse || ""} onChange={(ev) => setPos("reuse", ev.target.value)} />
+        </Field>
+        <Field label="New position / new cable" htmlFor="x-new">
+          <Input id="x-new" type="number" min={0} value={pos.new || ""} onChange={(ev) => setPos("new", ev.target.value)} />
+        </Field>
+        <Field label="Position to confirm" htmlFor="x-confirm">
+          <Input id="x-confirm" type="number" min={0} value={pos.confirm || ""} onChange={(ev) => setPos("confirm", ev.target.value)} />
+        </Field>
+      </div>
+    </fieldset>
   );
 }

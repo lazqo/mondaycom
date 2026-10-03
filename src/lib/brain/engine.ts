@@ -8,7 +8,8 @@
 import { candidateCameras, chooseCameras } from "./cameras";
 import { cameraDesign, profileFor, recordingFor } from "./profiles";
 import { costQuote } from "./costing";
-import { installationPlan, labourPlan, packageFor } from "./installation";
+import { installationPlan, labourPlan } from "./installation";
+import { upgradePlan } from "./upgrade";
 import { priceCatalogue } from "./pricing";
 import { networkPlan } from "./network";
 import { channelsNeeded, isNvr, selectNvr } from "./nvr";
@@ -89,7 +90,8 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
 
   const storage = storagePlan({ totalMbps, retention: rec, nvr: nvrPick.selected, products: catalogue.products, policies, links, missingNote });
   const network = networkPlan(input);
-  const labour = labourPlan({ enquiry: input, cameraCount: cameras.length, packages: catalogue.packages, policies });
+  const upgrade = upgradePlan(input, cameras.length, policies);
+  const labour = labourPlan({ enquiry: input, cameraCount: cameras.length, packages: catalogue.packages, policies, upgrade });
   const installation = installationPlan({
     enquiry: input,
     cameras,
@@ -98,7 +100,7 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
     products: catalogue.products,
     policies,
     links,
-    installationPackage: packageFor(input, cameras.length, catalogue.packages),
+    installationPackage: labour.package,
     materialsPackages: catalogue.materialsPackages ?? [],
   });
   const costing = costQuote({
@@ -114,7 +116,7 @@ function buildSystem(input: EnquiryInput, catalogue: Catalogue, policies: Polici
     products: catalogue.products,
     links,
   });
-  return { plan, cameras, nvrPick, sizing, storage, network, installation, labour, costing, mode, profile, designs: [...designs.values()], totalMbps, maxPossibleMbps };
+  return { plan, cameras, nvrPick, sizing, storage, network, installation, labour, costing, mode, profile, designs: [...designs.values()], totalMbps, maxPossibleMbps, upgrade };
 }
 
 /** Tiers offered automatically. Ecosystem-only tiers (Ajax) only when that ecosystem is asked for. */
@@ -315,6 +317,8 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
   const maxWarn = selectedEval?.checks.find((c) => c.name === "max_bandwidth" && c.warning);
   if (maxWarn) risks.push(`${maxWarn.detail}.`);
   if (b.labour.customInstallation) approvals.push({ key: "custom_installation", description: b.labour.notes[0] ?? "Custom installation: labour needs an explicit calculation." });
+  if (b.upgrade) for (const d of b.upgrade.decisions) approvals.push({ key: "upgrade_decision", description: d });
+  if (b.upgrade?.unresolved) unresolved.push(b.upgrade.unresolved);
   if (b.storage.status === "below_target" || b.storage.status === "below_minimum") approvals.push({ key: "retention", description: "Accept or change the reduced retention before quoting." });
   if (b.network.customerDecisions.length) approvals.push({ key: "connectivity", description: "4G/5G option and its ongoing data cost to be offered as a separate decision." });
   if (interoperability.length && input.analytics.length) approvals.push({ key: "interoperability", description: "Verify cross-brand analytics." });
@@ -337,6 +341,7 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
     costing: b.costing,
     policies,
     commercial: !!commercial,
+    upgrade: b.upgrade,
   });
 
   const partial = {
@@ -389,6 +394,7 @@ export function assessCctv(input: EnquiryInput, rawCatalogue: Catalogue, policie
       complexity: b.installation.complexity,
       materials: b.installation.materials,
       accessories: b.installation.accessories,
+      upgrade: b.upgrade,
     },
     privacy,
     interoperability,

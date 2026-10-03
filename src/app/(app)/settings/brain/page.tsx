@@ -138,6 +138,7 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
         key: p.key,
         name: p.name,
         propertyType: p.propertyType,
+        installType: p.installType === "upgrade_ip" ? ("upgrade_ip" as const) : ("new" as const),
         cameraCount: p.cameraCount ?? (p.minCameras === p.maxCameras ? p.minCameras : null),
         storeyType: p.storeyType ?? (p.storeys == null ? null : p.storeys >= 2 ? "double" : "single"),
         materialCostExGst: num(p.materialCostExGst),

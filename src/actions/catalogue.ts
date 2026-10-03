@@ -220,7 +220,9 @@ const packageInput = z.object({
   name: z.string().trim().min(1).max(200),
   propertyType: z.enum(["residential", "commercial"]),
   cameraCount: z.coerce.number().int().min(1).max(64),
-  storeyType: z.enum(["single", "double"]),
+  installType: z.enum(["new", "upgrade_ip"]).default("new"),
+  /** New installations only; an IP upgrade package is by camera count. */
+  storeyType: z.enum(["single", "double"]).nullable(),
   estimatedHours: z.coerce.number().positive().nullable(),
   labourRate: z.coerce.number().positive().nullable(),
   allowanceExGst: optMoney,
@@ -244,17 +246,22 @@ export async function savePackageAction(input: unknown): Promise<ActionResult<{ 
     if (!parsed.success) return fail(`${parsed.error.issues[0]?.path.join(".")}: ${parsed.error.issues[0]?.message}`);
     const { id: given, ...d } = parsed.data;
     const existing = given ? await db.query.installationPackages.findFirst({ where: eq(installationPackages.id, given) }) : null;
-    const key = d.key || (d.propertyType === "residential" ? `RES_CCTV_${d.storeyType.toUpperCase()}_${d.cameraCount}` : null);
+    if (d.installType === "new" && !d.storeyType) return fail("Choose single or double storey.");
+    const storeyType = d.installType === "upgrade_ip" ? null : d.storeyType;
+    const key =
+      d.key ||
+      (d.propertyType === "residential" ? (d.installType === "upgrade_ip" ? `RES_CCTV_UPGRADE_IP_${d.cameraCount}` : `RES_CCTV_${storeyType!.toUpperCase()}_${d.cameraCount}`) : null);
     const m = (v: number | null) => (v != null ? v.toFixed(2) : null);
     const values = {
       key,
       name: d.name,
       propertyType: d.propertyType,
+      installType: d.installType,
       cameraCount: d.cameraCount,
-      storeyType: d.storeyType,
+      storeyType,
       minCameras: d.cameraCount,
       maxCameras: d.cameraCount,
-      storeys: d.storeyType === "double" ? 2 : 1,
+      storeys: storeyType == null ? null : storeyType === "double" ? 2 : 1,
       estimatedHours: m(d.estimatedHours),
       labourRate: m(d.labourRate),
       allowanceExGst: m(d.allowanceExGst),

@@ -61,6 +61,12 @@ export const DEFAULT_POLICIES: Policies = {
   priceAgingDays: p(14, "getsecure_provisional", "Engine default", "A supplier price older than this is Aging: still used, shown as such."),
   priceStaleDays: p(30, "getsecure_provisional", "Engine default", "A supplier price older than this is Stale: refresh it before the quote is approved."),
   priceChangeReviewPct: p(5, "getsecure_provisional", BRIEF, "A supplier cost moving more than this is held for review instead of changing quote pricing. Threshold not yet set by Get Secure."),
+  upgradeUnconfirmedCabling: p(
+    null,
+    "requires_review",
+    "Not set",
+    'CCTV upgrade whose existing cabling is not confirmed (type or reusability unknown). Empty: installation stays unresolved. "new_install" (once approved): priced with the new-install package as a conservative assumption. The cheaper upgrade package is never used until the cabling is confirmed.',
+  ),
   defaultResidentialTier: p(null, "requires_review", "Not set", "No default tier. The packet shows every tier and asks Chris to choose."),
   tiers: p(
     {
@@ -110,6 +116,7 @@ export const POLICY_DESCRIPTIONS: Record<keyof Policies, string> = {
   priceAgingDays: "Days before a supplier price is Aging",
   priceStaleDays: "Days before a supplier price is Stale",
   priceChangeReviewPct: "Supplier price change that needs review (%)",
+  upgradeUnconfirmedCabling: "Upgrade with unconfirmed cabling: conservative assumption",
   defaultResidentialTier: "Default residential tier",
   tiers: "Residential tiers and brand families",
   commercialSiteVisitMandatory: "Commercial CCTV needs a site visit",

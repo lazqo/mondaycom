@@ -5,7 +5,7 @@
  * every value, the markup Chris decided, the tier and products approved, and the sizing rules the
  * storage relies on. Each item says where to fix it. Nothing here fills a value in.
  */
-import { TRUSTED_STATUSES, type CameraDesign, type Costing, type KnowledgeStatus, type LabourResult, type Policies, type Product, type StorageResult } from "./types";
+import { TRUSTED_STATUSES, type UpgradePlan, type CameraDesign, type Costing, type KnowledgeStatus, type LabourResult, type Policies, type Product, type StorageResult } from "./types";
 
 export type ReadinessItem = { key: string; label: string; ok: boolean; detail: string; fix: string | null };
 export type Readiness = { ready: boolean; items: ReadinessItem[] };
@@ -27,6 +27,7 @@ export function quoteReadiness(x: {
   costing: Costing;
   policies: Policies;
   commercial: boolean;
+  upgrade?: UpgradePlan | null;
 }): Readiness {
   const items: ReadinessItem[] = [];
   const c = x.costing;
@@ -70,6 +71,17 @@ export function quoteReadiness(x: {
         : `${x.storage.requiredGb != null ? `needs ${(x.storage.requiredGb / 1000).toFixed(2)} TB` : ""}${x.storage.drives ? `; selected ${x.storage.drives.count} × ${name(x.storage.drives.product)}` : "; no drive with an approved price is large enough"}${x.storage.expectedRetentionDays != null ? ` (about ${x.storage.expectedRetentionDays} days)` : ""}; ${x.storage.status.replace(/_/g, " ")}`,
     fix: x.storage.drives ? null : "Price and approve a surveillance drive of the needed capacity (Supplier pricing → Refresh one product).",
   });
+
+  if (x.upgrade) {
+    const u = x.upgrade;
+    items.push({
+      key: "existing_system",
+      label: "Existing system assessed for the upgrade",
+      ok: !u.unresolved && !u.decisions.length,
+      detail: [u.summary, ...u.decisions.map((d) => `Decision needed: ${d}`)].join(" "),
+      fix: u.unresolved || u.decisions.length ? "On the assessment: existing cable type and condition, camera positions (and the coax decision)." : null,
+    });
+  }
 
   const pkg = x.labour.package;
   items.push({

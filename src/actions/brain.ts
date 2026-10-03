@@ -59,6 +59,23 @@ const enquiry = z.object({
   message: z.string().max(20000).nullable(),
   requestedTier: z.enum(["good", "better", "best", "premium"]).nullable().optional(),
   recordingProfileId: z.string().uuid().nullable().optional(),
+  existing: z
+    .object({
+      systemType: z.enum(["ip_poe", "analogue_coax", "mixed", "unknown"]),
+      recorder: z.string().trim().max(120).nullable(),
+      cameraCount: z.coerce.number().int().min(0).max(256).nullable(),
+      cableType: z.enum(["cat5e", "cat6", "coax", "other", "unknown"]),
+      cableCondition: z.enum(["reusable", "not_reusable", "needs_testing", "unknown"]),
+      locationsSuitable: tri,
+      power: z.string().trim().max(300).nullable(),
+      positions: z
+        .object({ reuse: z.coerce.number().int().min(0).max(256), new: z.coerce.number().int().min(0).max(256), confirm: z.coerce.number().int().min(0).max(256) })
+        .nullable()
+        .optional(),
+      coaxDecision: z.enum(["replace_with_cat6", "retain_coax"]).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export async function runAssessmentAction(leadId: string, input: unknown, markupOverride: number | null): Promise<ActionResult<{ id: string }>> {
