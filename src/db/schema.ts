@@ -631,6 +631,54 @@ export const supplierCredentials = pgTable("supplier_credentials", {
 });
 
 /**
+ * Automated price connectors (e.g. the IT Plus trade login). Status only: no username, password,
+ * cookie or session token is ever stored here, and failure text is a fixed, credential-free reason.
+ */
+export const supplierConnectors = pgTable("supplier_connectors", {
+  supplierId: uuid("supplier_id")
+    .primaryKey()
+    .references(() => suppliers.id, { onDelete: "cascade" }),
+  /** Which connector, e.g. "itplus". */
+  connector: text("connector").notNull(),
+  /** not_tested | connected | auth_failed | blocked | error */
+  status: text("status").notNull().default("not_tested"),
+  statusDetail: text("status_detail"),
+  lastLoginOkAt: timestamp("last_login_ok_at", { withTimezone: true }),
+  lastLoginFailedAt: timestamp("last_login_failed_at", { withTimezone: true }),
+  /** Why the last login failed (credential-free), and whether retrying could lock the account. */
+  lastLoginFailure: text("last_login_failure"),
+  lastLoginFailureCode: text("last_login_failure_code"),
+  lastSyncOkAt: timestamp("last_sync_ok_at", { withTimezone: true }),
+  lastSyncFailedAt: timestamp("last_sync_failed_at", { withTimezone: true }),
+  lastSyncFailure: text("last_sync_failure"),
+  /** Whether the supplier shows prices ex or inc GST, as last seen on its logged-in pages. */
+  priceBasisSeen: text("price_basis_seen"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One connector run (test, one product, selected products, whole catalogue) and what it found. */
+export const supplierSyncRuns = pgTable(
+  "supplier_sync_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    supplierId: uuid("supplier_id")
+      .notNull()
+      .references(() => suppliers.id, { onDelete: "cascade" }),
+    /** test | product | selected | catalogue */
+    kind: text("kind").notNull(),
+    /** running | ok | partial | failed */
+    status: text("status").notNull().default("running"),
+    startedById: uuid("started_by_id").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    summary: jsonb("summary").$type<Record<string, number>>().notNull().default({}),
+    error: text("error"),
+    items: jsonb("items").$type<Record<string, unknown>[]>().notNull().default([]),
+  },
+  (t) => [index("supplier_sync_runs_idx").on(t.supplierId, t.startedAt)],
+);
+
+/**
  * Get Secure's supplier preference per brand: which supplier to buy a brand from, in order. Editable
  * preference data, not a fixed rule; a brand with no route falls back to the default supplier.
  */
@@ -769,6 +817,12 @@ export const productPriceHistory = pgTable(
     newCostExGst: numeric("new_cost_ex_gst", { precision: 12, scale: 2 }).notNull(),
     changedPct: numeric("changed_pct", { precision: 8, scale: 2 }),
     source: text("source").notNull(),
+    /** manual | csv | authenticated_web | … — how this price arrived. */
+    priceSource: text("price_source"),
+    /** Stock / availability the supplier showed with this price. */
+    stock: text("stock"),
+    /** The connector run that saw it, when it came from one. */
+    syncRunId: uuid("sync_run_id"),
     /** approved | not_reviewed | rejected */
     reviewStatus: text("review_status").notNull().default("not_reviewed"),
     reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),

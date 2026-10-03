@@ -264,10 +264,12 @@ export async function recordSupplierPrice(
     priceSource?: string;
     /** The supplier quotes this on application: record the listing without a cost. */
     priceOnApplication?: boolean;
+    /** The connector run that saw this price. */
+    syncRunId?: string | null;
   },
   actor: Actor,
   opts: { bulk?: boolean } = {},
-): Promise<{ offerId: string; held: boolean; changedPct: number | null }> {
+): Promise<{ offerId: string; held: boolean; changedPct: number | null; unchanged: boolean }> {
   if (actor.kind === "agent") throw new GuardrailError("Agents cannot enter supplier prices.");
   const policies = await loadPolicies();
   const gst = policies.gstRate.value;
@@ -280,12 +282,13 @@ export async function recordSupplierPrice(
         set: { priceOnApplication: true, supplierSku: input.supplierSku ?? null, stock: input.stock ?? null, lastCheckedAt: new Date(), priceSource: input.priceSource ?? "manual", updatedAt: new Date() },
       })
       .returning({ id: supplierProducts.id });
-    return { offerId: offer.id, held: false, changedPct: null };
+    return { offerId: offer.id, held: false, changedPct: null, unchanged: false };
   }
   const ex = input.costExGst ?? (input.costIncGst != null ? Math.round((input.costIncGst / (1 + gst)) * 100) / 100 : null);
   if (ex == null || !(ex > 0)) throw new Error("Enter a cost (ex GST or inc GST).");
   // A bulk import or sync is never its own review, even when an approver starts it.
   const approver = actor.kind === "human" && actor.canApprove && !opts.bulk;
+  const automated = !!opts.bulk || actor.kind === "system";
 
   return db.transaction(async (tx) => {
     let offer = await tx.query.supplierProducts.findFirst({ where: and(eq(supplierProducts.productId, input.productId), eq(supplierProducts.supplierId, input.supplierId)) });
@@ -295,9 +298,28 @@ export async function recordSupplierPrice(
     const old = num(offer.costExGst);
     const changedPct = old ? Math.round(((ex - old) / old) * 10000) / 100 : null;
     const significant = changedPct != null && Math.abs(changedPct) > policies.priceChangeReviewPct.value;
-    // An approver typing a price is the review. Anyone/anything else: first price waits for approval,
-    // a big move is held as pending, a small one applies but keeps its approval only if it had one.
-    const hold = !approver && significant;
+    const unchanged = old != null && Math.abs(ex - old) < 0.005;
+    if (unchanged && !approver) {
+      // The supplier still charges the cost already on file: that confirms it (fresh again, any
+      // pending change dropped) without a new history row or any change to its approval.
+      await tx
+        .update(supplierProducts)
+        .set({
+          supplierSku: input.supplierSku ?? offer.supplierSku,
+          sourceUrl: input.sourceUrl ?? offer.sourceUrl,
+          stock: input.stock ?? offer.stock,
+          pendingCostExGst: null,
+          lastCheckedAt: new Date(),
+          priceSource: input.priceSource ?? offer.priceSource ?? "manual",
+          updatedAt: new Date(),
+        })
+        .where(eq(supplierProducts.id, offer.id));
+      return { offerId: offer.id, held: false, changedPct: 0, unchanged: true };
+    }
+    // An approver typing a price is the review. Anyone else: first price waits for approval, a big
+    // move is held as pending, a small one applies but keeps its approval only if it had one. An
+    // import or connector sync never changes an approved cost: any change to one is held for Chris.
+    const hold = !approver && (significant || (automated && old != null && offer.priceApproved));
     const patch = {
       supplierSku: input.supplierSku ?? offer.supplierSku,
       sourceUrl: input.sourceUrl ?? offer.sourceUrl,
@@ -323,11 +345,14 @@ export async function recordSupplierPrice(
       newCostExGst: ex.toFixed(2),
       changedPct: changedPct != null ? changedPct.toFixed(2) : null,
       source: input.source,
+      priceSource: input.priceSource ?? "manual",
+      stock: input.stock ?? null,
+      syncRunId: input.syncRunId ?? null,
       reviewStatus: approver ? "approved" : "not_reviewed",
       reviewedById: approver ? actorId(actor) : null,
       reviewedAt: approver ? new Date() : null,
     });
-    return { offerId: offer.id, held: hold, changedPct };
+    return { offerId: offer.id, held: hold, changedPct, unchanged: false };
   });
 }
 

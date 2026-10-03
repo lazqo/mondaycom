@@ -249,6 +249,7 @@ describe("supplier credentials", () => {
     await db.delete(supplierCredentials).where(eq(supplierCredentials.supplierId, atlas.id));
   });
   it("a supplier without an automated connector says so instead of scraping", async () => {
-    await expect(syncSupplierPrices((await supplier("IT Plus")).id)).rejects.toThrow(/no automated connector yet/);
+    await expect(syncSupplierPrices((await supplier("IT Plus")).id)).rejects.toThrow(/trade-login connector/);
+    await expect(syncSupplierPrices((await supplier("Clear Digital")).id)).rejects.toThrow(/no automated connector yet/);
   });
 });

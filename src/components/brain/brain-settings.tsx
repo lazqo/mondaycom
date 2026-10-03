@@ -22,6 +22,7 @@ import { Badge, Button, Card, CardHeader, Field, FormError, Input, Select, Texta
 import { COMPATIBILITY_KINDS, KNOWLEDGE_STATUSES, KNOWLEDGE_STATUS_LABELS, TIERS, type KnowledgeStatus, type PriceFreshness } from "@/lib/brain/types";
 import { cn } from "@/lib/utils";
 import { ProfileSettings, type ProfileView } from "./profile-settings";
+import { SupplierPricing, type ConnectorView } from "./supplier-pricing";
 
 const STATUS_STYLE: Record<KnowledgeStatus, string> = {
   industry_fact: "bg-sky-100 text-sky-800",
@@ -1029,6 +1030,7 @@ const TABS = [
   { key: "policies", label: "Rules" },
   { key: "products", label: "Products & prices" },
   { key: "suppliers", label: "Suppliers & routing" },
+  { key: "pricing", label: "Supplier pricing" },
   { key: "profiles", label: "Recording profiles" },
   { key: "packages", label: "Installation & materials" },
 ] as const;
@@ -1043,6 +1045,7 @@ export function BrainSettings({
   packages,
   materials,
   profiles,
+  connectors,
 }: {
   tab: string;
   canApprove: boolean;
@@ -1053,6 +1056,7 @@ export function BrainSettings({
   packages: PackageView[];
   materials: MaterialsView[];
   profiles: ProfileView[];
+  connectors: ConnectorView[];
 }) {
   const [adding, setAdding] = React.useState(false);
   return (
@@ -1120,6 +1124,8 @@ export function BrainSettings({
           </Card>
         </>
       ) : null}
+
+      {tab === "pricing" ? <SupplierPricing connectors={connectors} canApprove={canApprove} /> : null}
 
       {tab === "profiles" ? (
         <ProfileSettings

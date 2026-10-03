@@ -85,6 +85,13 @@
       "when": 1790974912025,
       "tag": "0011_real_costing",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790992610860,
+      "tag": "0012_supplier_connectors",
+      "breakpoints": true
     }
   ]
 }

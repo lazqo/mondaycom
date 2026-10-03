@@ -122,7 +122,9 @@ export function installationPlan(input: {
     // One line per exact box model, from the camera's documented junction boxes.
     const byBox = new Map<string, { product: Product | null; qty: number; cams: string[] }>();
     for (const c of hard) {
-      const box = c.product ? (relatedProducts(c.product.id, "camera_junction_box", links, products)[0]?.product ?? null) : null;
+      // Of the documented boxes, one with an approved price first, then any priced one.
+      const boxes = c.product ? relatedProducts(c.product.id, "camera_junction_box", links, products).map((r) => r.product) : [];
+      const box = boxes.find((b) => b.price?.approved) ?? boxes.find((b) => b.price) ?? boxes[0] ?? null;
       const k = box?.id ?? "unknown";
       const e = byBox.get(k) ?? { product: box, qty: 0, cams: [] };
       e.qty += 1;

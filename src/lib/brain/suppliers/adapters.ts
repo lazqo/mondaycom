@@ -4,13 +4,14 @@
  * all of them. Imports and syncs never approve a price themselves and never touch a prepared
  * quote (quotes keep their own price snapshot).
  *
- * Available now: manual entry, CSV import, price on application. Authenticated web catalogues,
- * public-catalogue-plus-trade-login and supplier APIs have their place here for later connectors;
- * until one is written for a supplier, a sync says so instead of scraping.
+ * Available now: manual entry, CSV import, price on application, and the IT Plus trade-login
+ * connector (./connector.ts, run from Settings → Business Brain → Supplier pricing). Other
+ * authenticated catalogues and supplier APIs have their place here for later connectors; until one
+ * is written for a supplier, a sync says so instead of scraping.
  */
 import { and, eq, ilike } from "drizzle-orm";
 import { db } from "@/db";
-import { products, supplierProducts, suppliers } from "@/db/schema";
+import { products, supplierConnectors, supplierProducts, suppliers } from "@/db/schema";
 import type { Actor } from "@/lib/guard/actor";
 import { GuardrailError } from "@/lib/guard/actor";
 import { recordSupplierPrice } from "../store";
@@ -42,7 +43,12 @@ export type SupplierAdapter = {
 export const ADAPTERS: Record<PriceSourceType, SupplierAdapter> = {
   manual: { type: "manual", label: "Manual entry", description: "Prices typed in from the supplier's trade portal or price list.", needsCredential: false },
   csv: { type: "csv", label: "CSV / price-list import", description: "A price list exported from the supplier, imported in Settings.", needsCredential: false },
-  authenticated_web: { type: "authenticated_web", label: "Authenticated web catalogue", description: "Trade prices behind a supplier login. Connector not written yet.", needsCredential: true },
+  authenticated_web: {
+    type: "authenticated_web",
+    label: "Authenticated web catalogue",
+    description: "Trade prices behind a supplier login. Connector written for IT Plus only.",
+    needsCredential: true,
+  },
   public_plus_trade: {
     type: "public_plus_trade",
     label: "Public catalogue + trade price",
@@ -195,6 +201,8 @@ export async function importListings(
 export async function syncSupplierPrices(supplierId: string): Promise<{ recorded: number; held: number; poa: number; unmatched: string[] }> {
   const supplier = await db.query.suppliers.findFirst({ where: eq(suppliers.id, supplierId) });
   if (!supplier) throw new Error("Supplier not found");
+  if (await db.query.supplierConnectors.findFirst({ where: eq(supplierConnectors.supplierId, supplierId), columns: { supplierId: true } }))
+    throw new Error(`${supplier.name} has a trade-login connector: run it from Settings → Business Brain → Supplier pricing, which logs every run.`);
   const adapter = ADAPTERS[(supplier.priceSourceType as PriceSourceType) ?? "manual"] ?? ADAPTERS.manual;
   if (!adapter.fetchListings) throw new Error(`${supplier.name}: ${adapter.label} has no automated connector yet. Enter or import prices instead.`);
   const actor: Actor = { kind: "system", process: SUPPLIER_SYNC_PROCESS };

@@ -584,14 +584,57 @@ Chris; it never sends, books or promises anything.
 Until these are in, assessments still run and show "Not fully priced" with exactly what is missing.
 
 **Supplier logins** typed under Suppliers are stored encrypted with `ENCRYPTION_KEY`, are never shown again
-and are not available to any agent: only a future price-sync job or an approver can read them. Price
-sources supported by the model: manual entry, CSV import and price on application now; authenticated
-web catalogue, public catalogue + trade login and supplier API connectors are not written yet. **Hermes is not connected**; the code refuses any customer-facing
+and are not available to any agent: only the supplier price-sync process or an approver can read them. Price
+sources: manual entry, CSV import, price on application, and the **IT Plus trade-login connector**
+(section 15). Other suppliers' connectors are not written yet. **Hermes is not connected**; the code refuses any customer-facing
 action (sending, confirming, discounting, accepting) that is not done by an approver.
 
 **Rollback note:** this update makes a quote's customer optional (Brain quotes can exist before the
 lead is converted). Rolling the code back past it is still safe, but delete any Brain-prepared quotes
 without a customer first: `docker compose -f docker-compose.prod.yml exec db psql -U getsecure -d getsecure -c "delete from quotes where contact_id is null"`.
+
+## 15. IT Plus authenticated pricing
+
+IT Plus (www.itplus.co.nz) is a WooCommerce shop that hides prices until a trade account logs in.
+The connector logs in with the IT Plus login stored under **Settings → Business Brain → Suppliers &
+routing** and reads Get Secure's trade price from the logged-in product page. Everything is on
+**Settings → Business Brain → Supplier pricing**:
+
+- **Test connection** — logs in and checks one mapped product page shows a price. Records nothing.
+- **Refresh one product** (pick any catalogue product; the connector finds its IT Plus listing),
+  **Refresh selected**, and **Refresh IT Plus priced catalogue** (every product with an IT Plus listing).
+- Status: connector state, last successful / failed login (with the reason), last successful /
+  failed price sync, whether IT Plus shows prices ex or inc GST, recent runs and their results,
+  and each listing's price history.
+
+What it will and won't do:
+
+- **Only the logged-in page price is cost.** IT Plus's public product API also carries a price; the
+  connector uses that API only to find SKUs and page addresses and throws its price away.
+- **Nothing ambiguous is recorded**: a page with two prices, a range, an RRP/retail label, a SKU that
+  doesn't match, or no GST indication is reported with the reason. A bundle's "From:" price is read
+  only when every bundled extra is optional (then it is the product alone).
+- **GST**: IT Plus shows "+ GST"; prices are stored ex GST (an inc-GST price would be converted).
+- **Matching**: only an exact model/SKU match is automatic. Where IT Plus has several close listings
+  (e.g. drives as `-SUP` supply-only and `-Inst`), the result lists them and you pick one ("Use …").
+- **Review**: a new price waits for Chris's approval; any change to an approved cost (even 1c) is
+  held as pending, and the quoted cost stays the approved one until it is approved. An unchanged
+  price just refreshes the price date. History keeps every change with its stock and run.
+- **Quotes**: a refresh never changes a prepared quote (quotes keep their price snapshot); use
+  **Reprice** on the quote to use current approved prices.
+- **Stops, never bypasses**: a CAPTCHA, a two-factor / verification code prompt, a Cloudflare
+  security check, or rate limiting stops the run and is reported. A rejected login is not retried
+  automatically until the stored login is changed (repeated failures can lock the account); Test
+  connection always tries.
+- **Secrets**: the login is decrypted only inside the run; the username, password and IT Plus
+  session cookies are never stored outside the encrypted credential, logged, shown in the UI,
+  written into run results or given to any agent. Login failures are reported as fixed reasons
+  (IT Plus's own message can quote the username, so it is never passed on).
+
+Products for the first real 4-camera VIGI system at IT Plus: **VIGI InSight S455(2.8mm)** (IT Plus
+stocks the InSight S range, not the C340/C350/C445/C455 in the catalogue), **VIGI NVR1004H-4P**, a
+**WD Purple** drive (choose `-SUP` or `-Inst`) and the **VJB-240** junction box (documented for the
+S455; recommended on brick/concrete and not charged until Chris confirms it).
 
 ---
 

@@ -36,7 +36,8 @@ export default defineConfig({
     ? undefined
     : {
         command: `pnpm next start -p ${PORT}`,
-        env: { AI_PROVIDER: "rules" },
+        // The supplier pricing connector logs in to the IT Plus stand-in from global-setup, never the real site.
+        env: { AI_PROVIDER: "rules", ITPLUS_BASE_URL: "http://127.0.0.1:3199", SUPPLIER_SYNC_DELAY_MS: "0" },
         url: `${baseURL}/api/health`,
         reuseExistingServer: !process.env.CI,
         timeout: 60_000,

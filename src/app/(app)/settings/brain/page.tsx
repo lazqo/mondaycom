@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   brainPolicies,
@@ -8,9 +8,12 @@ import {
   productCompatibility,
   products,
   recordingProfiles,
+  productPriceHistory,
   supplierBrandRoutes,
+  supplierConnectors,
   supplierCredentials,
   supplierProducts,
+  supplierSyncRuns,
   suppliers,
   users,
 } from "@/db/schema";
@@ -20,7 +23,9 @@ import { applyReferenceCatalogue } from "@/lib/brain/reference/apply";
 import { POLICY_DESCRIPTIONS, POLICY_KEYS } from "@/lib/brain/policy";
 import { priceFreshness } from "@/lib/brain/pricing";
 import { BrainSettings } from "@/components/brain/brain-settings";
-import { formatDate } from "@/lib/utils";
+import type { ConnectorView } from "@/components/brain/supplier-pricing";
+import type { SyncItem } from "@/lib/brain/suppliers/connector";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Business Brain" };
 
@@ -48,10 +53,12 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
   const withCred = new Set(creds.map((c) => c.supplierId));
   const label = new Map(productRows.map((p) => [p.id, `${p.manufacturer} ${p.model}`]));
   const now = new Date();
+  const connectors = tab === "pricing" ? await loadConnectors(productRows, offers, policies, now) : [];
 
   return (
     <BrainSettings
       tab={tab}
+      connectors={connectors}
       canApprove={!!user.canApprove}
       policies={policyRows
         .filter(({ p }) => order.has(p.key))
@@ -167,4 +174,84 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
       }))}
     />
   );
+}
+
+type ProductRow = typeof products.$inferSelect;
+type OfferRow = { o: typeof supplierProducts.$inferSelect; supplier: string };
+
+/** The supplier pricing tab: connector status, runs, listings and their price history. Never credentials. */
+async function loadConnectors(productRows: ProductRow[], offers: OfferRow[], policies: Awaited<ReturnType<typeof loadPolicies>>, now: Date): Promise<ConnectorView[]> {
+  const rows = await db.select({ c: supplierConnectors, supplier: suppliers.name }).from(supplierConnectors).innerJoin(suppliers, eq(supplierConnectors.supplierId, suppliers.id));
+  const out: ConnectorView[] = [];
+  for (const { c, supplier } of rows) {
+    const [cred, runs] = await Promise.all([
+      db.query.supplierCredentials.findFirst({ where: eq(supplierCredentials.supplierId, c.supplierId), columns: { updatedAt: true } }),
+      db.select({ r: supplierSyncRuns, by: users.name }).from(supplierSyncRuns).leftJoin(users, eq(supplierSyncRuns.startedById, users.id)).where(eq(supplierSyncRuns.supplierId, c.supplierId)).orderBy(desc(supplierSyncRuns.startedAt)).limit(6),
+    ]);
+    const mine = offers.filter((o) => o.o.supplierId === c.supplierId && !o.o.priceOnApplication);
+    const history = mine.length
+      ? await db
+          .select({ h: productPriceHistory, by: users.name })
+          .from(productPriceHistory)
+          .leftJoin(users, eq(productPriceHistory.reviewedById, users.id))
+          .where(inArray(productPriceHistory.supplierProductId, mine.map((o) => o.o.id)))
+          .orderBy(desc(productPriceHistory.recordedAt))
+      : [];
+    const byId = new Map(productRows.map((p) => [p.id, p]));
+    const listed = new Set(mine.map((o) => o.o.productId));
+    out.push({
+      supplierId: c.supplierId,
+      supplier,
+      connector: c.connector,
+      status: c.status,
+      statusDetail: c.statusDetail,
+      hasLogin: !!cred,
+      loginUpdatedAt: cred ? formatDateTime(cred.updatedAt) : null,
+      lastLoginOkAt: c.lastLoginOkAt ? formatDateTime(c.lastLoginOkAt) : null,
+      lastLoginFailedAt: c.lastLoginFailedAt ? formatDateTime(c.lastLoginFailedAt) : null,
+      lastLoginFailure: c.lastLoginFailure,
+      lastSyncOkAt: c.lastSyncOkAt ? formatDateTime(c.lastSyncOkAt) : null,
+      lastSyncFailedAt: c.lastSyncFailedAt ? formatDateTime(c.lastSyncFailedAt) : null,
+      lastSyncFailure: c.lastSyncFailure,
+      priceBasisSeen: c.priceBasisSeen,
+      runs: runs.map(({ r, by }) => ({ id: r.id, kind: r.kind, status: r.status, startedAt: formatDateTime(r.startedAt), startedBy: by, summary: r.summary, error: r.error, items: r.items as unknown as SyncItem[] })),
+      listings: mine
+        .map(({ o }) => {
+          const p = byId.get(o.productId);
+          return {
+            offerId: o.id,
+            productId: o.productId,
+            product: p ? `${p.manufacturer} ${p.model}` : "?",
+            category: p?.category ?? "",
+            sku: o.supplierSku,
+            url: o.sourceUrl,
+            costExGst: num(o.costExGst),
+            pendingCostExGst: num(o.pendingCostExGst),
+            approved: o.priceApproved,
+            freshness: o.costExGst == null ? ("unknown" as const) : priceFreshness(o.lastCheckedAt, policies, now).freshness,
+            lastChecked: o.lastCheckedAt ? formatDateTime(o.lastCheckedAt) : null,
+            stock: o.stock,
+            priceSource: o.priceSource,
+            history: history
+              .filter(({ h }) => h.supplierProductId === o.id)
+              .map(({ h, by }) => ({
+                at: formatDateTime(h.recordedAt),
+                oldCostExGst: num(h.oldCostExGst),
+                newCostExGst: Number(h.newCostExGst),
+                changedPct: num(h.changedPct),
+                source: h.source,
+                priceSource: h.priceSource,
+                stock: h.stock,
+                review: h.reviewStatus,
+                reviewedBy: by,
+              })),
+          };
+        })
+        .sort((a, b) => a.category.localeCompare(b.category) || a.product.localeCompare(b.product)),
+      unlisted: productRows
+        .filter((p) => !listed.has(p.id) && p.status !== "deprecated")
+        .map((p) => ({ id: p.id, label: `${p.manufacturer} ${p.model}`, category: p.category })),
+    });
+  }
+  return out;
 }

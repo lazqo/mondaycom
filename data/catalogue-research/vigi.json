@@ -948,6 +948,147 @@
       "notes": [
         "Kit page links the camera to VIGI C445 (2.8mm) and the NVR to VIGI NVR1008H-8MP; datasheet shows 6x 4MP Full-Colour Turret cameras (8-ch NVR, 2 spare channels) and 2TB HDD preinstalled."
       ]
+    },
+    {
+      "manufacturer": "TP-Link",
+      "family": "TP-Link VIGI",
+      "model": "VIGI InSight S455",
+      "category": "camera",
+      "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-camera/insight-s455/",
+      "datasheetUrl": "https://static.tp-link.com/upload/product-overview/2024/202410/20241018/InSight%20S455%201.0%20Datasheet.pdf",
+      "datasheetUrlV1_20": "https://static.tp-link.com/upload/product-overview/2026/202602/20260227/InSight%20S455(2.8mm)%201.20%20Datasheet.pdf",
+      "verifiedAt": "2026-10-03",
+      "specs": {
+        "formFactor": "turret",
+        "resolutionMp": 5,
+        "horizontalPixels": 2880,
+        "verticalPixels": 1620,
+        "imageSensor": "1/2.7\" Progressive Scan CMOS",
+        "lensOptions": [
+          2.8,
+          4
+        ],
+        "hfovByLensDeg": {
+          "2.8": 111.4,
+          "4": 88
+        },
+        "aperture": "F1.6",
+        "minIllumination": "0.005 Lux; 0 Lux with IR/White light",
+        "doriByLensM": {
+          "2.8": {
+            "detect": 64,
+            "observe": 27,
+            "recognize": 13,
+            "identify": 6
+          },
+          "4": {
+            "detect": 80,
+            "observe": 33,
+            "recognize": 16,
+            "identify": 8
+          }
+        },
+        "wdrDb": 120,
+        "irRangeM": 30,
+        "whiteLightRangeM": 30,
+        "bitrateKbps": [
+          256,
+          6000
+        ],
+        "bitrateText": "Main Stream: 256 Kbps to 6 Mbps",
+        "codecs": [
+          "H.265+",
+          "H.265",
+          "H.264+",
+          "H.264"
+        ],
+        "colourNight": true,
+        "microphone": true,
+        "speaker": true,
+        "activeDeterrence": [
+          "white light flashing",
+          "audible warning"
+        ],
+        "analytics": [
+          "human_vehicle",
+          "intrusion",
+          "line_crossing",
+          "region_entrance",
+          "region_exit",
+          "object_abandoned",
+          "object_removal",
+          "loitering",
+          "scene_change",
+          "audio_exception",
+          "video_tampering",
+          "motion_detection",
+          "smart_search"
+        ],
+        "dcInput": "12 VDC",
+        "dcMaxW": 11,
+        "poeMaxW": 12,
+        "poeStandard": "802.3af",
+        "poeText": "PoE: 802.3af/at, class 0, Max. 12 W",
+        "ingress": [
+          "IP67"
+        ],
+        "operatingTempC": [
+          -30,
+          60
+        ],
+        "operatingHumidity": "≤95%",
+        "onvifProfiles": [
+          "S",
+          "T",
+          "G"
+        ],
+        "ecosystem": [
+          "VIGI App",
+          "VIGI Security Manager",
+          "VIGI VMS",
+          "VIGI Cloud VMS"
+        ],
+        "storage": "microSD up to 512 GB",
+        "material": "metal",
+        "dimensionsMm": "111 x 111 x 83.7",
+        "weightKg": 0.48
+      },
+      "unverified": [
+        "vandal"
+      ],
+      "hardwareVersion": "V1, V1.20",
+      "orderableVariants": [
+        "VIGI InSight S455(2.8mm)",
+        "VIGI InSight S455(4mm)"
+      ],
+      "aliases": [
+        "InSight S455",
+        "InSight S455 (2.8mm)",
+        "InSight S455 (4mm)",
+        "InSight S455 (2.8mm/4mm)",
+        "VIGI InSight S455(2.8mm)",
+        "VIGI InSight S455(4mm)",
+        "S455-2.8",
+        "S455-4"
+      ],
+      "notes": [
+        "Marketed as 'VIGI 5MP Full-Colour Turret Network Camera' (5MP, not 4MP); max resolution 2880x1620. IP67, metal housing, 4x IR LED (850nm) + 4x white LED, 30 m each.",
+        "TP-Link prints the model as 'InSight S455' with lens variants 'InSight S455 (2.8mm/4mm)' (V1 datasheet) and 'InSight S455 (2.8mm)' (V1.20 datasheet); the 'VIGI' prefix is not part of the printed model code. AU V1 page offers '2.8mm Lens' and '4mm Lens' packs; the AU V1.20 page offers only a '2.8mm Lens' pack. orderableVariants use 'VIGI InSight S455(<lens>)' for consistency with the rest of the catalogue.",
+        "IT Plus SKUs S455-2.8 / S455-4 (titles 'TP-Link VIGI InSight S455 2.8MM' / 'S455 4MM') were read from IT Plus's public catalogue (no price); vigi.com/au was reachable, so no distributor fallback was used.",
+        "120 dB WDR (only DWDR when People & Vehicle Analytics is enabled). People & Vehicle Analytics (search/filter by attributes) must be used with VIGI specified software - recorded as smart_search.",
+        "Abnormal Sound Detection is printed on both the AU page and both datasheets - recorded as audio_exception.",
+        "Specs (incl. hfovByLensDeg 111.4/88 and 1/2.7\" sensor) follow the AU product page and the V1 datasheet, which agree. The V1.20 datasheet differs - see conflicts.",
+        "Successor/replacement: no statement found on the AU S455 page (V1/V1.20), either S455 datasheet or the AU VIGI C455 page that S455 replaces any C-series model. Nothing recorded.",
+        "Vandal/IK rating is not printed anywhere.",
+        "Conflicts: Image sensor: AU page (V1 and V1.20) and V1 datasheet print 1/2.7\"; V1.20 datasheet prints 1/2.65\". 2.8mm FOV: AU page and V1 datasheet print H 111.4 / V 58.8 / D 134 deg; V1.20 datasheet (2.8mm only) prints H 108.3 / V 59.9 / D 126.8 deg. The AU V1.20 page still shows the V1 values. Tilt adjustment: AU page prints 0-85 deg; both datasheets print 0-75 deg (not recorded in specs). Clients: AU page and V1 datasheet list VIGI Security Manager; V1.20 datasheet lists VIGI App, Web UI, VIGI VMS, VIGI Cloud VMS, VIGI Config Tool, VIGI PC Client (no Security Manager). 4mm lens: V1 datasheet and AU spec table list 2.8/4 mm; the V1.20 datasheet and AU V1.20 page only cover 2.8mm, so 4mm may be V1 hardware only."
+      ],
+      "conflicts": [
+        "Image sensor: AU page (V1 and V1.20) and V1 datasheet print 1/2.7\"; V1.20 datasheet prints 1/2.65\".",
+        "2.8mm FOV: AU page and V1 datasheet print H 111.4 / V 58.8 / D 134 deg; V1.20 datasheet (2.8mm only) prints H 108.3 / V 59.9 / D 126.8 deg. The AU V1.20 page still shows the V1 values.",
+        "Tilt adjustment: AU page prints 0-85 deg; both datasheets print 0-75 deg (not recorded in specs).",
+        "Clients: AU page and V1 datasheet list VIGI Security Manager; V1.20 datasheet lists VIGI App, Web UI, VIGI VMS, VIGI Cloud VMS, VIGI Config Tool, VIGI PC Client (no Security Manager).",
+        "4mm lens: V1 datasheet and AU spec table list 2.8/4 mm; the V1.20 datasheet and AU V1.20 page only cover 2.8mm, so 4mm may be V1 hardware only."
+      ]
     }
   ],
   "compatibility": [
@@ -1062,6 +1203,22 @@
       "qty": 1,
       "sourceUrl": "https://www.vigi.com/au/business-networking/vigi-network-video-recorder/vigi-nk8mp-t6425-2t/",
       "note": "bundled together by TP-Link in kit VIGI NK8MP-T6425-2T"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI InSight S455",
+      "to": "VJB-240",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list: InSight S455 row filter 'VJB-240; VJB-300' (listed and higher hardware versions compatible)"
+    },
+    {
+      "kind": "camera_junction_box",
+      "from": "VIGI InSight S455",
+      "to": "VJB-300",
+      "qty": 1,
+      "sourceUrl": "https://www.vigi.com/au/vigi-accessories/product-list/",
+      "note": "TP-Link AU 'Device Compatible with VIGI Accessories' list: InSight S455 row filter 'VJB-240; VJB-300' (listed and higher hardware versions compatible)"
     }
   ],
   "notes": [
@@ -1074,6 +1231,7 @@
     "No vandal (IK) rating is printed for any of these cameras.",
     "VJB-305 junction box exists but TP-Link's compatibility list does not include any of the cameras in this file (InSight series only), so it was left out.",
     "Kits ship with a 2TB HDD preinstalled; TP-Link does not state the HDD make/model, so no HDD product was added.",
-    "Both NVR1104H-4P and NVR1004H-4P are current 4-ch PoE+ models on the AU site; NVR1104H-4P is the newer one (side-access HDD bay, built-in speaker). Both NVR1008H-8MP (113 W PoE) and NVR1008H-8P (53 W PoE) are current (hardware V1.20)."
+    "Both NVR1104H-4P and NVR1004H-4P are current 4-ch PoE+ models on the AU site; NVR1104H-4P is the newer one (side-access HDD bay, built-in speaker). Both NVR1008H-8MP (113 W PoE) and NVR1008H-8P (53 W PoE) are current (hardware V1.20).",
+    "VIGI InSight S455 added 2026-10-03 for the IT Plus 4-camera VIGI system: IT Plus stocks the InSight S range, not the C340/C350/C445/C455 (no IT Plus listing). Specs from the AU product page and the V1 datasheet; junction boxes from the AU accessories list."
   ]
 }
