@@ -54,6 +54,13 @@ export async function acceptEmailAsLead(emailId: string, input: unknown): Promis
   for (const [k, v] of Object.entries(rest)) if (v !== undefined) (overrides as Record<string, unknown>)[k] = v;
   try {
     const leadId = await createLeadFromEmail(emailId, { actorId: user.id, overrides, assignedToId: assignedToId ?? null });
+    // Chris accepted it as a lead: the Inspector reads it again with the lead known.
+    try {
+      const { inspect } = await import("@/lib/inspector/inspect");
+      await inspect("email", emailId, { force: true });
+    } catch (err) {
+      console.error(`[inspector] email ${emailId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
     const e = await db.query.emails.findFirst({ where: eq(emails.id, emailId), columns: { threadId: true } });
     revalidateInbox(e?.threadId);
     return ok({ leadId });

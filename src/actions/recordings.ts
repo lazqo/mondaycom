@@ -36,6 +36,7 @@ export async function attachRecordingToContact(recordingId: string, contactId: s
     action: "recording_attached",
     detail: { recordingId: row.id, title: row.title },
   });
+  await reinspect(recordingId);
   revalidatePath("/recordings");
   revalidatePath(`/contacts/${contactId}`);
   return ok(undefined);
@@ -58,9 +59,20 @@ export async function attachRecordingToLead(recordingId: string, leadId: string)
   if (!row) return fail("That recording no longer exists");
 
   await logActivity({ entity: "lead", entityId: leadId, actorId: user.id, action: "recording_attached", detail: { recordingId: row.id, title: row.title } });
+  await reinspect(recordingId);
   revalidatePath("/recordings");
   revalidatePath(`/leads/${leadId}`);
   return ok(undefined);
+}
+
+/** Chris filed it: the Inspector reads it again with the customer known (facts, commitments, actions). */
+async function reinspect(recordingId: string) {
+  try {
+    const { inspect } = await import("@/lib/inspector/inspect");
+    await inspect("recording", recordingId, { force: true });
+  } catch (err) {
+    console.error(`[inspector] recording ${recordingId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /** Not about a customer: a note to self, a mis-fire. Keeps the transcript, clears the queue. */

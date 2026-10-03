@@ -17,8 +17,26 @@ export type ProcessOutcome = {
   detail: string;
 };
 
-/** Classify one stored email and create/link the lead. Safe to re-run: an already classified email is skipped unless `force`. */
+/**
+ * Classify one stored email and create/link the lead, then hand it to the Lead + Conversation
+ * Inspector (facts, commitments, recommended actions). The Inspector never sends anything; if it
+ * fails, the email is still classified and filed as before. Safe to re-run: an already classified
+ * email is skipped unless `force`.
+ */
 export async function processEmail(emailId: string, opts: { force?: boolean } = {}): Promise<ProcessOutcome> {
+  const out = await classifyEmail(emailId, opts);
+  if (out.detail !== "already classified" && ["lead", "existing", "needs_review", "outbound"].includes(out.classification)) {
+    try {
+      const { inspect } = await import("@/lib/inspector/inspect");
+      await inspect("email", emailId, { force: opts.force });
+    } catch (err) {
+      console.error(`[inspector] email ${emailId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return out;
+}
+
+async function classifyEmail(emailId: string, opts: { force?: boolean } = {}): Promise<ProcessOutcome> {
   const email = await db.query.emails.findFirst({
     where: eq(emails.id, emailId),
     with: { thread: true, attachments: { columns: { filename: true, contentType: true, size: true } } },

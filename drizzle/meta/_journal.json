@@ -120,6 +120,13 @@
       "when": 1791067811490,
       "tag": "0016_quote_validity",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791070667830,
+      "tag": "0017_inspector",
+      "breakpoints": true
     }
   ]
 }

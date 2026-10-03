@@ -311,6 +311,8 @@ export const tasks = pgTable(
     // Automation-created tasks: one open task per (rule, entity). Manual tasks have ruleKey null.
     ruleKey: text("rule_key"),
     entityId: uuid("entity_id"),
+    /** task | call | follow_up | service_case (service cases and calls come from the Inspector). */
+    kind: text("kind").notNull().default("task"),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1073,6 +1075,148 @@ export const drafts = pgTable(
   (t) => [index("drafts_status_idx").on(t.status, t.createdAt), index("drafts_lead_idx").on(t.leadId)],
 );
 
+// ---------- Lead + Conversation Inspector ----------
+
+/**
+ * One reading of an email or a Plaud conversation: who it is about, what it says, and what should
+ * happen next. Re-reading a source makes a new inspection and supersedes the old one.
+ */
+export const inspections = pgTable(
+  "inspections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** email | recording */
+    sourceType: text("source_type").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    /** inbound | outbound | conversation */
+    direction: text("direction").notNull(),
+    sourceAt: timestamp("source_at", { withTimezone: true }).notNull(),
+    version: text("version").notNull(),
+    /** analysed | needs_review | superseded | error */
+    status: text("status").notNull().default("analysed"),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+    identity: jsonb("identity").$type<Record<string, unknown>>().notNull(),
+    understanding: jsonb("understanding").$type<Record<string, unknown>>().notNull(),
+    summary: text("summary").notNull().default(""),
+    error: text("error"),
+    reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("inspections_source_idx").on(t.sourceType, t.sourceId), index("inspections_lead_idx").on(t.leadId), index("inspections_status_idx").on(t.status, t.createdAt)],
+);
+
+/**
+ * A fact read from a source, with its provenance. Proposed until applied; never silently
+ * overwrites a different value already in the CRM (that becomes a conflict for Chris).
+ */
+export const facts = pgTable(
+  "facts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: text("key").notNull(),
+    value: jsonb("value").$type<string | number | boolean>().notNull(),
+    display: text("display").notNull(),
+    evidence: text("evidence"),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "cascade" }),
+    sourceType: text("source_type").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    sourceAt: timestamp("source_at", { withTimezone: true }).notNull(),
+    inspectionId: uuid("inspection_id").references(() => inspections.id, { onDelete: "cascade" }),
+    confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull(),
+    /** proposed | applied | conflict | rejected | superseded */
+    state: text("state").notNull().default("proposed"),
+    /** The value already in the CRM when this one conflicts with it. */
+    currentValue: jsonb("current_value").$type<string | number | boolean | null>(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("facts_lead_idx").on(t.leadId, t.key), index("facts_state_idx").on(t.state)],
+);
+
+/** Something someone said they would do: Chris ("I'll send the quote tonight") or the customer. */
+export const commitments = pgTable(
+  "commitments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** get_secure | customer | unknown */
+    owner: text("owner").notNull(),
+    ownerName: text("owner_name"),
+    ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    actionKey: text("action_key").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    dueText: text("due_text"),
+    /** outstanding | done | cancelled */
+    status: text("status").notNull().default("outstanding"),
+    evidence: text("evidence"),
+    confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "cascade" }),
+    sourceType: text("source_type").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    inspectionId: uuid("inspection_id").references(() => inspections.id, { onDelete: "cascade" }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    completedById: uuid("completed_by_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("commitments_status_due_idx").on(t.status, t.dueAt), index("commitments_lead_idx").on(t.leadId)],
+);
+
+/** What the Unified Action Router was asked to do for an inspection, and what happened. */
+export const inspectorActions = pgTable(
+  "inspector_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inspectionId: uuid("inspection_id")
+      .notNull()
+      .references(() => inspections.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    /** auto | approval */
+    mode: text("mode").notNull(),
+    /** done | awaiting_approval | accepted | dismissed | blocked | failed | superseded */
+    status: text("status").notNull(),
+    rule: text("rule").notNull(),
+    reason: text("reason").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    jobId: uuid("job_id").references(() => jobs.id, { onDelete: "set null" }),
+    decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("inspector_actions_inspection_idx").on(t.inspectionId), index("inspector_actions_status_idx").on(t.status, t.createdAt)],
+);
+
+/**
+ * Jev in shadow mode: its bounded classification of the same source, stored next to what the
+ * deterministic rules said and, later, what Chris actually decided. Never drives an action.
+ */
+export const jevObservations = pgTable("jev_observations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  inspectionId: uuid("inspection_id")
+    .notNull()
+    .references(() => inspections.id, { onDelete: "cascade" }),
+  model: text("model"),
+  output: jsonb("output").$type<Record<string, unknown>>(),
+  deterministic: jsonb("deterministic").$type<Record<string, unknown>>().notNull(),
+  chrisDecision: jsonb("chris_decision").$type<Record<string, unknown>>(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  error: text("error"),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------- Relations ----------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1239,6 +1383,10 @@ export type JobNote = typeof jobNotes.$inferSelect;
 export type JobPhoto = typeof jobPhotos.$inferSelect;
 export type Recording = typeof recordings.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
+export type Inspection = typeof inspections.$inferSelect;
+export type Fact = typeof facts.$inferSelect;
+export type CommitmentRow = typeof commitments.$inferSelect;
+export type InspectorActionRow = typeof inspectorActions.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type CalendarConnection = typeof calendarConnections.$inferSelect;
 export type CalendarItem = typeof calendarItems.$inferSelect;

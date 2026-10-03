@@ -2,7 +2,7 @@
  * Pulls new recordings from Plaud into the CRM. Idempotent: a recording already imported is
  * skipped, so the sync can run as often as you like.
  */
-import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import { recordings } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
@@ -53,7 +53,11 @@ export async function importRecentRecordings(opts: { days?: number; log?: (m: st
     }
     const transcript = best.text;
 
-    const match = await matchRecording({ title: item.title, transcript });
+    // Only a phone number files a recording straight away; a spoken name alone is never enough. The
+    // Inspector then reads it with every signal (calendar, email, quote number…) and either files
+    // it or leaves it for Chris with the possible matches.
+    const found = await matchRecording({ title: item.title, transcript });
+    const match = found && found.matchedBy.startsWith("phone") ? found : null;
     const [row] = await db
       .insert(recordings)
       .values({
@@ -75,6 +79,7 @@ export async function importRecentRecordings(opts: { days?: number; log?: (m: st
     if (!row) continue; // another run beat us to it
 
     summary.imported++;
+    await inspectRecording(row.id, false, log);
     if (match) {
       summary.attached++;
       if (match.contactId) {
@@ -133,13 +138,31 @@ export async function upgradeToCleanedTranscripts(summary: ImportSummary, log: (
       continue;
     }
     const patch: Partial<typeof recordings.$inferInsert> = { transcript: cleaned, transcriptPolished: true, polishCheckedAt: new Date(), updatedAt: new Date() };
-    const match = r.status === "review" ? await matchRecording({ title: r.title, transcript: cleaned }) : null;
+    const found = r.status === "review" ? await matchRecording({ title: r.title, transcript: cleaned }) : null;
+    const match = found && found.matchedBy.startsWith("phone") ? found : null;
     if (match) Object.assign(patch, { status: "attached", contactId: match.contactId, leadId: match.leadId, matchedBy: match.matchedBy });
     await db.update(recordings).set(patch).where(eq(recordings.id, r.id));
     summary.cleaned++;
+    // The cleaned transcript reads better: read it again unless Chris has already reviewed it.
+    await inspectRecording(r.id, true, log);
     if (match?.contactId) {
       await logActivity({ entity: "contact", entityId: match.contactId, actorId: null, action: "recording_attached", detail: { recordingId: r.id, title: r.title, matchedBy: match.matchedBy } });
     }
     log(`[plaud] "${r.title}" now has the cleaned-up transcript${match ? ` and was filed (${match.matchedBy})` : ""}`);
+  }
+}
+
+/** Hand a recording to the Lead + Conversation Inspector. Never stops the import. */
+async function inspectRecording(id: string, force: boolean, log: (m: string) => void) {
+  try {
+    const { inspect } = await import("@/lib/inspector/inspect");
+    if (force) {
+      const { inspections } = await import("@/db/schema");
+      const reviewed = await db.query.inspections.findFirst({ where: and(eq(inspections.sourceType, "recording"), eq(inspections.sourceId, id), isNotNull(inspections.reviewedAt)), columns: { id: true } });
+      if (reviewed) return; // Chris already decided who it is with
+    }
+    await inspect("recording", id, { force });
+  } catch (err) {
+    log(`[inspector] recording ${id}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
