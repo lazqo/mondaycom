@@ -71,7 +71,7 @@ const s = StyleSheet.create({
   investLabel: { fontFamily: "Outfit", fontWeight: 600, fontSize: 11, color: BRAND.forest },
   investSub: { fontSize: 8.5, color: BRAND.muted, marginTop: 2 },
   investTotal: { fontFamily: "Outfit", fontWeight: 700, fontSize: 24, lineHeight: 1.2, color: BRAND.forest },
-  card: { flexDirection: "row", borderWidth: 0.75, borderColor: BRAND.rule, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 10, marginBottom: 7, backgroundColor: BRAND.white },
+  card: { flexDirection: "row", borderWidth: 0.75, borderColor: BRAND.rule, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 10, marginBottom: 7 },
   imageBox: { width: 74, height: 74, marginRight: 14, alignItems: "center", justifyContent: "center" },
   image: { maxWidth: 74, maxHeight: 74, objectFit: "contain" },
   cardMain: { flexGrow: 1, flexBasis: 0 },
@@ -83,7 +83,7 @@ const s = StyleSheet.create({
   highlight: { width: "50%", flexDirection: "row", marginBottom: 2.5, paddingRight: 6 },
   dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: BRAND.forest, marginTop: 4.2, marginRight: 6 },
   check: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: BRAND.sage, borderWidth: 1.5, borderColor: BRAND.forest, marginTop: 3, marginRight: 6 },
-  bulletRow: { flexDirection: "row", marginBottom: 2.5 },
+  bulletRow: { flexDirection: "row", marginBottom: 1.5 },
   table: { borderWidth: 0.75, borderColor: BRAND.rule, borderRadius: 6 },
   tr: { flexDirection: "row", paddingVertical: 3.5, paddingHorizontal: 10, borderBottomWidth: 0.5, borderBottomColor: BRAND.rule },
   th: { fontSize: 7.5, color: BRAND.muted, textTransform: "uppercase", letterSpacing: 0.8 },
@@ -94,7 +94,7 @@ const s = StyleSheet.create({
   twoCol: { flexDirection: "row" },
   col: { flexGrow: 1, flexBasis: 0, paddingRight: 12 },
   footer: { position: "absolute", bottom: 20, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", borderTopWidth: 0.75, borderTopColor: BRAND.sage, paddingTop: 6, fontSize: 7.5, color: BRAND.muted },
-  watermark: { position: "absolute", top: 380, left: 60, fontFamily: "Outfit", fontWeight: 700, fontSize: 64, color: "#c0392b", opacity: 0.12, transform: "rotate(-30deg)" },
+  watermark: { position: "absolute", top: 400, left: 40, width: 600, textAlign: "center", fontFamily: "Outfit", fontWeight: 700, fontSize: 54, color: "#c0392b", opacity: 0.12, transform: "rotate(-30deg)" },
 });
 
 function Bullets({ items, tick }: { items: string[]; tick?: boolean }) {
@@ -157,7 +157,7 @@ export function ProposalDocument({ data: d, images }: { data: ProposalData; imag
         </View>
         {d.draft ? (
           <Text style={s.watermark} fixed>
-            DRAFT: NOT APPROVED
+            DRAFT · NOT APPROVED
           </Text>
         ) : null}
         <View style={s.band}>
@@ -270,7 +270,7 @@ export function ProposalDocument({ data: d, images }: { data: ProposalData; imag
                 {notes
                   .filter((_, i) => i % 2 === col)
                   .map((n) => (
-                    <View key={n.heading} style={{ marginBottom: 8 }} wrap={false}>
+                    <View key={n.heading} style={{ marginBottom: 6 }} wrap={false}>
                       <Text style={s.h3}>{n.heading}</Text>
                       <Bullets items={n.items} />
                     </View>
@@ -280,13 +280,21 @@ export function ProposalDocument({ data: d, images }: { data: ProposalData; imag
           </View>
 
           {d.nextSteps ? (
-            <View style={{ marginTop: 16, padding: 14, borderRadius: 6, backgroundColor: BRAND.forest }} wrap={false}>
-              <Text style={{ fontFamily: "Outfit", fontWeight: 600, fontSize: 12, color: BRAND.white }}>Next steps</Text>
-              <Text style={{ color: BRAND.beige, marginTop: 4 }}>
-                {d.nextSteps}
-                {d.validUntil ? ` This proposal is valid until ${nzDate(d.validUntil)}.` : ""}
-              </Text>
-              <Text style={{ color: BRAND.sage, marginTop: 6, fontWeight: 600 }}>{[d.company.phone, d.company.email, d.company.website].filter(Boolean).join("   ·   ")}</Text>
+            <View style={{ marginTop: 10, paddingVertical: 9, paddingHorizontal: 12, borderRadius: 6, backgroundColor: BRAND.forest, flexDirection: "row", alignItems: "center" }} wrap={false}>
+              <View style={{ flexGrow: 1, flexBasis: 0, paddingRight: 12 }}>
+                <Text style={{ fontFamily: "Outfit", fontWeight: 600, fontSize: 11, color: BRAND.white }}>Next steps</Text>
+                <Text style={{ color: BRAND.beige, marginTop: 2 }}>
+                  {d.nextSteps}
+                  {d.validUntil ? ` This proposal is valid until ${nzDate(d.validUntil)}.` : ""}
+                </Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                {[d.company.phone, d.company.email, d.company.website].filter(Boolean).map((c) => (
+                  <Text key={c} style={{ color: BRAND.sage, fontWeight: 600 }}>
+                    {c}
+                  </Text>
+                ))}
+              </View>
             </View>
           ) : null}
         </View>
