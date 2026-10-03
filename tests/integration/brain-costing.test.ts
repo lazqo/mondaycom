@@ -190,6 +190,9 @@ describe("first genuinely priced 4-camera residential quote", () => {
     const a = await brain.runAssessment(leadId, house({ requestedTier: "good", recordingProfileId: profileId }), staff);
     expect(a.packet.costing.complete).toBe(false);
     expect(a.packet.costing.unpriced).toContain("RES_CCTV_SINGLE_4: standard material cost not set");
+    // The labour that is known still counts in the internal cost (6 h x $95).
+    expect(a.packet.costing.labourCost).toBe(570);
+    expect(a.packet.costing.totalInternalCost).toBe(Math.round((a.packet.costing.equipmentCost + 570 + a.packet.costing.allowancesCost + a.packet.costing.otherCost) * 100) / 100);
     expect(a.packet.readiness.ready).toBe(false);
     expect(a.packet.readiness.items.find((i) => i.key === "installation_package")).toMatchObject({ ok: false, detail: expect.stringMatching(/standard material cost not set/) });
     const { quoteId } = await brain.prepareFromAssessment(a.id, { quote: true }, staff);

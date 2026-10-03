@@ -544,6 +544,9 @@ export type Costing = {
   /** Conduit and installation-complexity allowances. */
   allowancesCost: number;
   otherCost: number;
+  /** Hardware + labour + materials + conduit + complexity + other: every known internal cost. */
+  totalInternalCost: number;
+  /** Gross profit and margin mean something only when `complete`; until then the sell side is partial. */
   sellExGst: number;
   gst: number;
   totalIncGst: number;

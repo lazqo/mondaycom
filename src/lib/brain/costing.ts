@@ -186,18 +186,19 @@ export function costQuote(input: {
   }
 
   const lines = [...hardware, ...other];
-  const sum = (kind: CostLine["kind"], f: (l: CostLine) => number, keys?: string[]) =>
-    round2(lines.filter((l) => l.kind === kind && l.priced && (!keys || keys.includes(l.key))).reduce((s, l) => s + f(l), 0));
-  const cost = (l: CostLine) => (l.unitCostExGst ?? 0) * l.quantity;
-  const sell = (l: CostLine) => (l.unitSellExGst ?? 0) * l.quantity;
-  const equipmentCost = sum("hardware", cost);
-  const materialsCost = sum("materials", cost);
-  const labourCost = sum("labour", cost);
-  const allowancesCost = sum("other", cost, ["conduit", "complexity"]);
-  const otherCost = round2(sum("other", cost) - allowancesCost);
-  const sellExGst = round2(lines.filter((l) => l.priced && !l.internalOnly).reduce((s, l) => s + sell(l), 0));
+  // Costs: every line whose internal cost is known counts, whether or not its sell side is entered
+  // yet (the installation line has a known labour cost before the customer sell allowance is set).
+  // Sell: only priced customer lines. An unknown cost is never counted as zero: it is in `unpriced`.
+  const costOf = (pred: (l: CostLine) => boolean) => round2(lines.filter((l) => l.unitCostExGst != null && pred(l)).reduce((s, l) => s + l.unitCostExGst! * l.quantity, 0));
+  const equipmentCost = costOf((l) => l.kind === "hardware");
+  const materialsCost = costOf((l) => l.kind === "materials");
+  const labourCost = costOf((l) => l.kind === "labour");
+  const allowancesCost = costOf((l) => l.kind === "other" && (l.key === "conduit" || l.key === "complexity"));
+  const otherCost = costOf((l) => l.kind === "other" && l.key !== "conduit" && l.key !== "complexity");
+  const totalInternalCost = round2(equipmentCost + labourCost + materialsCost + allowancesCost + otherCost);
+  const sellExGst = round2(lines.filter((l) => l.priced && !l.internalOnly).reduce((s, l) => s + (l.unitSellExGst ?? 0) * l.quantity, 0));
   const gst = round2(sellExGst * policies.gstRate.value);
-  const grossProfit = round2(sellExGst - equipmentCost - materialsCost - labourCost - allowancesCost - otherCost);
+  const grossProfit = round2(sellExGst - totalInternalCost);
   const refreshRequired = lines
     .filter((l) => l.priced && l.productId && (l.freshness === "stale" || l.freshness === "unknown"))
     .map((l) => ({ model: l.model ?? l.customerDescription, supplier: l.supplier ?? null, freshness: l.freshness! }));
@@ -209,6 +210,7 @@ export function costQuote(input: {
     materialsCost,
     allowancesCost,
     otherCost,
+    totalInternalCost,
     sellExGst,
     gst,
     totalIncGst: round2(sellExGst + gst),

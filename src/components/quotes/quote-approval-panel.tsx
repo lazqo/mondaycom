@@ -176,6 +176,8 @@ export function QuoteApprovalPanel({
           <dd>{money(c.allowancesCost)}</dd>
           <dt className="text-gray-500">Other cost</dt>
           <dd>{money(c.otherCost)}</dd>
+          <dt className="text-gray-500">Total internal cost</dt>
+          <dd data-testid="quote-total-internal-cost">{money(c.totalInternalCost)}</dd>
           <dt className="text-gray-500">Markup</dt>
           <dd>{typeof c.markupPct === "number" ? `${c.markupPct}%${c.markupSource === "override" ? " (Chris override)" : " (provisional suggestion)"}` : "—"}</dd>
           <dt className="text-gray-500">Sell ex GST</dt>
@@ -185,9 +187,9 @@ export function QuoteApprovalPanel({
           <dt className="text-gray-500">Total inc GST</dt>
           <dd className="font-medium">{money(c.totalIncGst)}</dd>
           <dt className="text-gray-500">Gross profit</dt>
-          <dd>{money(c.grossProfit)}</dd>
+          <dd>{c.complete ? money(c.grossProfit) : "— until fully priced"}</dd>
           <dt className="text-gray-500">Gross margin</dt>
-          <dd>{typeof c.grossMarginPct === "number" ? `${c.grossMarginPct}%` : "—"}</dd>
+          <dd>{c.complete && typeof c.grossMarginPct === "number" ? `${c.grossMarginPct}%` : "— until fully priced"}</dd>
         </dl>
         {typeof c.markupLogic === "string" ? <p className="text-xs text-gray-600">{c.markupLogic}</p> : null}
         {Array.isArray(c.unpriced) && c.unpriced.length ? <p className="text-xs text-red-600">Missing / unpriced: {(c.unpriced as string[]).join("; ")}</p> : null}

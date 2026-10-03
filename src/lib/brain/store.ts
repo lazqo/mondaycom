@@ -506,6 +506,7 @@ export function commercialSnapshot(packet: DecisionPacket): Record<string, unkno
     materialsCost: c.materialsCost,
     allowancesCost: c.allowancesCost ?? 0,
     otherCost: c.otherCost,
+    totalInternalCost: c.totalInternalCost,
     sellExGst: c.sellExGst,
     gst: c.gst,
     totalIncGst: c.totalIncGst,

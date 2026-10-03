@@ -554,7 +554,7 @@ export function PacketView({
           <dt className="text-gray-500">Installation sell allowance</dt>
           <dd>{money(p.labour.allowanceExGst)}</dd>
           <dt className="text-gray-500">Total internal cost</dt>
-          <dd>{money(c.equipmentCost + c.labourCost + c.materialsCost + (c.allowancesCost ?? 0) + c.otherCost)}</dd>
+          <dd data-testid="packet-total-internal-cost">{money(c.totalInternalCost ?? c.equipmentCost + c.labourCost + c.materialsCost + (c.allowancesCost ?? 0) + c.otherCost)}</dd>
           <dt className="text-gray-500">Materials cost</dt>
           <dd>{money(c.materialsCost)}</dd>
           <dt className="text-gray-500">Labour cost</dt>
@@ -570,9 +570,9 @@ export function PacketView({
           <dt className="text-gray-500">Total inc GST</dt>
           <dd className="font-semibold">{money(c.totalIncGst)}</dd>
           <dt className="text-gray-500">Gross profit</dt>
-          <dd>{money(c.grossProfit)}</dd>
+          <dd>{c.complete ? money(c.grossProfit) : "— until fully priced"}</dd>
           <dt className="text-gray-500">Gross margin</dt>
-          <dd>{c.grossMarginPct != null ? `${c.grossMarginPct}%` : "—"}</dd>
+          <dd>{c.complete && c.grossMarginPct != null ? `${c.grossMarginPct}%` : "— until fully priced"}</dd>
         </dl>
         <p className="text-xs text-gray-600">{c.markupLogic}</p>
         <List items={c.unpriced.map((u) => `Unpriced: ${u}`)} />
