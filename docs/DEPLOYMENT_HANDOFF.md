@@ -752,7 +752,7 @@ Business Brain prepares the quote → Chris reviews → Chris approves the quote
 **What is on it** (A4, normally 2 pages for a residential quote):
 - **Header and cover:** the Get Secure logo (from getsecure.co.nz), the forest green / sage / beige
   palette and the website's typefaces (Outfit and Inter).
-- **Customer details:** name, site address, quote number, date, and the validity date if one is set.
+- **Customer details:** name, site address, quote number, date and validity date (30 days by default).
 - **Recommendation:** a short summary built from the approved lines (camera count, areas covered,
   recorder, storage), with the total investment.
 - **"Your system":** a card for each main product (cameras, recorder, drive). Each card has the photo,
@@ -760,10 +760,12 @@ Business Brain prepares the quote → Chris reviews → Chris approves the quote
   accessories such as junction boxes are listed but get no card.
 - **Installation:** the installation line and what it includes.
 - **Investment summary:** every approved line with its quantity, then subtotal ex GST, GST and total
-  inc GST. There are no per-line prices.
+  inc GST. There are no per-line prices (decided: quantities and the approved totals only).
 - **"Good to know":** the quote's assumptions, exclusions and notes, plus "Recording duration depends
   on camera settings, recording configuration and scene activity." There is no number of days.
 - **Closing:** warranty and support, next steps, and contact details in the footer of every page.
+- **Company identity:** customers see **Get Secure Ltd**. The footer also carries, in small print,
+  "Get Secure Ltd is a trading name of GE Secure Limited".
 
 **Never on it:**
 - supplier, supplier SKU or trade cost;
@@ -786,6 +788,13 @@ Re-approving makes a new PDF from the new snapshot and moves the email onto it.
 - **The quote page:** the "Customer proposal (PDF)" panel lets you view or download it, remake it,
   preview the quote as a PDF before approval (marked DRAFT, not stored), and attach it to or remove it
   from the prepared emails. It also lists product wording still to check.
+- **Quote validity:** also on the quote page. Each quote uses the standard (30 days) unless Chris sets
+  a custom number of days or "No validity date". The validity is printed, so it is part of the
+  approval: changing it on an approved quote needs approving again, and that makes a new PDF.
+- **The email line:** attaching the PDF to a prepared email adds one line before the sign-off: "Please
+  find the quotation attached for your review." It isn't added if the email already mentions an
+  attachment, and removing the PDF takes the line out again. This only changes the draft wording: the
+  email still needs Chris's approval and his Send.
 - **Approvals:** each email shows its attachment and whether it is still valid.
 
 **Product content** (Settings → Business Brain → Products → open a product → *Proposal content*):
@@ -803,15 +812,21 @@ Re-approving makes a new PDF from the new snapshot and moves the email onto it.
 - VJB-240 junction box
 - WD Purple 2/4/6/8 TB
 
-The wording comes only from each product's verified specifications. The photos are the
+The wording comes only from each product's verified specifications. Content is reusable: once Chris
+sets a product's wording status to **Get Secure approved**, it's used on every quote without any
+further approval and no longer shows under "Product wording to check". A missing photo is shown there
+as a reminder only; it never blocks a PDF. The photos are the
 manufacturers' own, from vigi.com and westerndigital.com; for the S455, it's the photo VIGI shows on
 its InSight S455 page. All of it is marked **provisional** until Chris reviews it and sets the wording
 status to Get Secure approved. Anything Chris enters is never overwritten.
 
 **Company details and standard wording** (Settings → Proposals):
-- **Contact details:** company name, phone, email, website, address and GST number. Defaults: Get
-  Secure Limited, 09 977 9990, info@getsecure.co.nz, getsecure.co.nz.
-- **Validity:** proposal validity in days. Blank (the default) prints no validity date.
+- **Contact details:** the name customers see (default **Get Secure Ltd**), the legal entity (default
+  **GE Secure Limited**, footer only), phone, email, website, address and GST number. Contact defaults:
+  09 977 9990, info@getsecure.co.nz, getsecure.co.nz.
+- **Validity:** the standard validity in days, **30** by default. Each quote can override or remove it.
+  Settings saved before this version that still had the old defaults ("Get Secure Limited", no
+  validity) move to the new ones. Anything else you changed is kept.
 - **Wording:** what installation includes, warranty and support, and next steps. The default warranty
   wording follows Get Secure's published warranty page: manufacturer's warranty (TP-Link VIGI 2
   years), claims handled locally, installation labour 12 months.

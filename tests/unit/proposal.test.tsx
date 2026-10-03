@@ -7,7 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { buildProposalData, noteSections, RECORDING_DURATION_NOTE, type ProposalProductSource } from "@/lib/proposals/data";
-import { PROPOSAL_DEFAULTS } from "@/lib/proposals/settings";
+import { PROPOSAL_DEFAULTS, upgradeProposalSettings } from "@/lib/proposals/settings";
+import { ATTACHMENT_LINE, withAttachmentLine, withoutAttachmentLine } from "@/lib/proposals/email-line";
 import { prepareImage } from "@/lib/proposals/image-prep";
 import { renderProposalPdf } from "@/lib/proposals/render";
 
@@ -125,12 +126,47 @@ describe("proposal data", () => {
     expect(JSON.stringify(d)).not.toMatch(/\d+\s*days/i);
   });
 
-  it("validity, warranty and next steps come from the settings", () => {
-    const d = build({ settings: { ...PROPOSAL_DEFAULTS, validityDays: 30, warranty: "", nextSteps: "" } });
-    expect(d.validUntil?.slice(0, 10)).toBe("2026-11-02");
+  it("quotes are valid for 30 days by default; a quote can override or remove it", () => {
+    expect(build().validUntil?.slice(0, 10)).toBe("2026-11-02"); // approved 3 Oct + 30 days
+    expect(build({ quote: { ...quote, validityDays: 14 } }).validUntil?.slice(0, 10)).toBe("2026-10-17");
+    expect(build({ quote: { ...quote, validityDays: 0 } }).validUntil).toBeNull();
+    expect(build({ settings: { ...PROPOSAL_DEFAULTS, validityDays: null } }).validUntil).toBeNull();
+    expect(build({ settings: { ...PROPOSAL_DEFAULTS, validityDays: null }, quote: { ...quote, validityDays: 10 } }).validUntil?.slice(0, 10)).toBe("2026-10-13");
+  });
+
+  it("customers see Get Secure Ltd; the legal entity GE Secure Limited is available for the footer", () => {
+    expect(build().company).toMatchObject({ name: "Get Secure Ltd", legalName: "GE Secure Limited" });
+  });
+
+  it("warranty and next steps come from the settings (blank omits them)", () => {
+    const d = build({ settings: { ...PROPOSAL_DEFAULTS, warranty: "", nextSteps: "" } });
     expect(d.warranty).toEqual([]);
     expect(d.nextSteps).toBeNull();
-    expect(build().validUntil).toBeNull();
+    expect(build().warranty.join(" ")).toMatch(/TP-Link VIGI: 2 years/);
+  });
+});
+
+describe("settings saved by the first version", () => {
+  it("move to the new company name and 30-day standard; anything Chris changed is kept", () => {
+    expect(upgradeProposalSettings({ companyName: "Get Secure Limited", validityDays: null, phone: "09 111 1111" })).toEqual({ phone: "09 111 1111" });
+    expect(upgradeProposalSettings({ companyName: "Get Secure NZ", validityDays: 14 })).toEqual({ companyName: "Get Secure NZ", validityDays: 14 });
+    expect(upgradeProposalSettings({ version: 2, companyName: "Get Secure Limited", validityDays: null })).toMatchObject({ companyName: "Get Secure Limited", validityDays: null });
+  });
+});
+
+describe("the email line added with the attached proposal", () => {
+  const body = "Hi Aroha,\n\nThanks for getting in touch.\n\nI'd suggest 4 cameras.\n\nThanks,\nChris\nGet Secure";
+  it("goes in before the sign-off, once", () => {
+    const withLine = withAttachmentLine(body);
+    expect(withLine).toBe("Hi Aroha,\n\nThanks for getting in touch.\n\nI'd suggest 4 cameras.\n\n" + ATTACHMENT_LINE + "\n\nThanks,\nChris\nGet Secure");
+    expect(withAttachmentLine(withLine)).toBe(withLine);
+  });
+  it("is not added when the email already mentions an attachment, and is appended when there is no sign-off", () => {
+    expect(withAttachmentLine("Hi, the quote is attached.")).toBe("Hi, the quote is attached.");
+    expect(withAttachmentLine("Hi Aroha,\n\nHere it is.")).toBe("Hi Aroha,\n\nHere it is.\n\n" + ATTACHMENT_LINE);
+  });
+  it("comes out again when the attachment is removed", () => {
+    expect(withoutAttachmentLine(withAttachmentLine(body))).toBe(body);
   });
 });
 

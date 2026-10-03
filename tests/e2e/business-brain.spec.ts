@@ -136,14 +136,17 @@ test.describe("CCTV Business Brain", () => {
     await login(page);
     await page.goto("/settings/proposals");
     const form = page.getByTestId("proposal-settings");
-    await expect(form.getByLabel("Company name")).toHaveValue("Get Secure Limited");
+    await expect(form.getByLabel("Name customers see (trading name)")).toHaveValue("Get Secure Ltd");
+    await expect(form.getByLabel("Legal entity (optional)")).toHaveValue("GE Secure Limited");
     await expect(form.getByLabel("Phone")).toHaveValue("09 977 9990");
+    await expect(form.getByLabel("Standard validity (days)")).toHaveValue("30");
+    await expect(form.getByLabel(/Warranty and support/)).toHaveValue(/TP-Link VIGI: 2 years/);
     const before = await sql`select value from app_settings where key = 'proposal'`;
-    await form.getByLabel("Proposal valid for (days)").fill("30");
+    await form.getByLabel("Standard validity (days)").fill("45");
     await form.getByTestId("save-proposal-settings").click();
     await expect(form.getByText(/Saved/)).toBeVisible();
     const [row] = await sql`select value from app_settings where key = 'proposal'`;
-    expect(row.value.validityDays).toBe(30);
+    expect(row.value.validityDays).toBe(45);
     if (before.length) await sql`update app_settings set value = ${sql.json(before[0].value)} where key = 'proposal'`;
     else await sql`delete from app_settings where key = 'proposal'`;
   });
@@ -226,7 +229,10 @@ test.describe("CCTV Business Brain", () => {
     const [{ status: qStatus }] = await sql`select status from quotes where id = ${quoteId}`;
     expect(qStatus).toBe("approved"); // approved, not sent
     await page.goto("/approvals");
-    await expect(page.getByTestId("draft-card").filter({ hasText: LEAD }).getByTestId("draft-attachment")).toContainText("Approved proposal");
+    const emailCard = page.getByTestId("draft-card").filter({ hasText: LEAD });
+    await expect(emailCard.getByTestId("draft-attachment")).toContainText("Approved proposal");
+    await expect(emailCard.getByLabel("Message")).toHaveValue(/Please find the quotation attached for your review\./);
+    await expect(emailCard.getByTestId("send-draft")).toHaveCount(0); // still needs Chris's approval
     await page.goto(`/quotes/${quoteId}`);
 
     // Editing the approved quote voids the approval.

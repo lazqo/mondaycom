@@ -27,8 +27,11 @@ export function ProposalSettingsForm({ settings }: { settings: ProposalSettings 
 
   return (
     <div className="grid gap-3 text-sm sm:grid-cols-2" data-testid="proposal-settings">
-      <Field label="Company name" htmlFor="ps-name">
+      <Field label="Name customers see (trading name)" htmlFor="ps-name" hint="Printed prominently on every proposal">
         <Input id="ps-name" value={v.companyName} onChange={set("companyName")} />
+      </Field>
+      <Field label="Legal entity (optional)" htmlFor="ps-legal" hint="Printed small in the footer: “… is a trading name of …”">
+        <Input id="ps-legal" value={v.legalName} onChange={set("legalName")} />
       </Field>
       <Field label="Phone" htmlFor="ps-phone">
         <Input id="ps-phone" value={v.phone} onChange={set("phone")} />
@@ -45,10 +48,9 @@ export function ProposalSettingsForm({ settings }: { settings: ProposalSettings 
       <Field label="GST number (optional)" htmlFor="ps-gst">
         <Input id="ps-gst" value={v.gstNumber} onChange={set("gstNumber")} />
       </Field>
-      <Field label="Proposal valid for (days)" htmlFor="ps-valid" hint="Leave blank to print no validity date">
+      <Field label="Standard validity (days)" htmlFor="ps-valid" hint="Each quote can override or remove it. Blank: no validity date by default">
         <Input id="ps-valid" type="number" min={1} max={365} value={v.validityDays} onChange={set("validityDays")} />
       </Field>
-      <div />
       <Field label="Installation includes (one point per line)" htmlFor="ps-inst" className="sm:col-span-2">
         <Textarea id="ps-inst" value={v.installationIncludes} onChange={set("installationIncludes")} className="min-h-20" />
       </Field>

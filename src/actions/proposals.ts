@@ -9,6 +9,7 @@ import { requireAdmin, requireOffice } from "@/lib/auth";
 import { assertApprover, humanFromUser, type Actor } from "@/lib/guard/actor";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { KNOWLEDGE_STATUSES } from "@/lib/brain/types";
+import { updateQuoteContent } from "@/lib/quotes/workflow";
 import { attachProposalToDraft, detachProposal, generateProposal } from "@/lib/proposals/workflow";
 import { downloadImage, setProductImage, storeImage } from "@/lib/proposals/images";
 import { saveProposalSettings, type ProposalSettings } from "@/lib/proposals/settings";
@@ -53,6 +54,21 @@ export async function detachProposalAction(draftId: string): Promise<ActionResul
     await detachProposal(draftId, await office());
     refresh();
     return ok(undefined);
+  } catch (err) {
+    return fail(message(err));
+  }
+}
+
+/**
+ * This quote's proposal validity: null = the standard, 0 = none, n = n days. It is printed on the
+ * proposal, so changing it on an approved quote takes the approval (and the PDF) away.
+ */
+export async function setQuoteValidityAction(quoteId: string, validityDays: number | null): Promise<ActionResult<{ approvalVoided: boolean }>> {
+  try {
+    const v = z.number().int().min(0).max(365).nullable().parse(validityDays);
+    const r = await updateQuoteContent(quoteId, { validityDays: v }, await office());
+    refresh(quoteId);
+    return ok(r);
   } catch (err) {
     return fail(message(err));
   }
@@ -144,6 +160,7 @@ export async function removeProductImageAction(productId: string): Promise<Actio
 
 const settingsInput = z.object({
   companyName: z.string().trim().min(1).max(80),
+  legalName: z.string().trim().max(120),
   phone: z.string().trim().max(40),
   email: z.string().trim().max(120),
   website: z.string().trim().max(120),

@@ -158,6 +158,8 @@ export const quotes = pgTable(
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
     total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
     notes: text("notes"),
+    /** Proposal validity for this quote: null = the standard (Settings → Proposals), 0 = none, n = n days. */
+    validityDays: integer("validity_days"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

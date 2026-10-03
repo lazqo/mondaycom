@@ -93,6 +93,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
               current={proposal.current ? { ...proposal.current, generatedAt: formatDateTime(proposal.current.generatedAt) } : null}
               emails={proposal.emails}
               contentGaps={proposal.contentGaps}
+              validity={proposal.validity}
             />
           ) : null}
           <Card>

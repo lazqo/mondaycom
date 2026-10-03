@@ -26,8 +26,8 @@ export class QuoteWorkflowError extends Error {}
 
 const actorId = (a: Actor) => (a.kind === "human" ? a.userId : null);
 
-export function quoteFingerprint(q: Pick<Quote, "title" | "contactId" | "leadId" | "lineItems" | "taxRate" | "notes" | "total">): string {
-  const canonical = JSON.stringify({
+export function quoteFingerprint(q: Pick<Quote, "title" | "contactId" | "leadId" | "lineItems" | "taxRate" | "notes" | "total"> & { validityDays?: number | null }): string {
+  const content: Record<string, unknown> = {
     title: q.title,
     contactId: q.contactId,
     leadId: q.leadId,
@@ -35,8 +35,11 @@ export function quoteFingerprint(q: Pick<Quote, "title" | "contactId" | "leadId"
     taxRate: Number(q.taxRate).toFixed(2),
     notes: q.notes ?? "",
     total: Number(q.total).toFixed(2),
-  });
-  return createHash("sha256").update(canonical).digest("hex");
+  };
+  // A validity set on this quote is printed on its proposal, so it is part of what Chris approves
+  // (only present when set, so approvals made before it existed still match).
+  if (q.validityDays != null) content.validityDays = q.validityDays;
+  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
 }
 
 async function load(id: string) {
@@ -45,7 +48,16 @@ async function load(id: string) {
   return q;
 }
 
-export type QuoteContent = { title?: string; contactId?: string | null; leadId?: string | null; taxRate?: number; lineItems?: QuoteLineItem[]; notes?: string | null };
+export type QuoteContent = {
+  title?: string;
+  contactId?: string | null;
+  leadId?: string | null;
+  taxRate?: number;
+  lineItems?: QuoteLineItem[];
+  notes?: string | null;
+  /** Proposal validity: null = standard, 0 = none, n = n days. */
+  validityDays?: number | null;
+};
 
 /**
  * Change a quote's content. An approved quote whose content changes goes back to needs_review; a
@@ -65,6 +77,7 @@ export async function updateQuoteContent(id: string, patch: QuoteContent, actor:
     lineItems,
     taxRate: taxRate.toFixed(2),
     notes: patch.notes === undefined ? q.notes : patch.notes,
+    validityDays: patch.validityDays === undefined ? q.validityDays : patch.validityDays,
     subtotal: totals.subtotal,
     total: totals.total,
   };

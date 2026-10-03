@@ -17,6 +17,7 @@ import { logActivity } from "@/lib/activity";
 import { type Actor, GuardrailError } from "@/lib/guard/actor";
 import { quoteFingerprint } from "@/lib/quotes/workflow";
 import { applyStarterContent } from "./content";
+import { withAttachmentLine, withoutAttachmentLine } from "./email-line";
 import { buildProposalData, type ProposalData } from "./data";
 import { getProposalSettings } from "./settings";
 import { voidProposals } from "./void";
@@ -145,6 +146,7 @@ export async function generateProposal(quoteId: string, actor: Actor): Promise<{
         .update(drafts)
         .set({
           quoteDocumentId: doc.id,
+          body: withAttachmentLine(d.body),
           updatedAt: new Date(),
           ...(d.status === "approved" ? { status: "ready_for_review" as const, approvedById: null, approvedAt: null, approvalHash: null, reviewNote: "Proposal PDF attached: approve the email again." } : {}),
         })
@@ -194,7 +196,7 @@ export async function attachProposalToDraft(draftId: string, quoteId: string, ac
   if (["sent", "rejected", "cancelled"].includes(d.status)) throw new ProposalError(`A ${d.status} email cannot be changed.`);
   await db
     .update(drafts)
-    .set({ quoteDocumentId: doc.id, updatedAt: new Date(), ...(d.status === "approved" && d.quoteDocumentId !== doc.id ? { status: "ready_for_review" as const, approvedById: null, approvedAt: null, approvalHash: null } : {}) })
+    .set({ quoteDocumentId: doc.id, body: withAttachmentLine(d.body), updatedAt: new Date(), ...(d.status === "approved" && (d.quoteDocumentId !== doc.id || withAttachmentLine(d.body) !== d.body) ? { status: "ready_for_review" as const, approvedById: null, approvedAt: null, approvalHash: null } : {}) })
     .where(eq(drafts.id, draftId));
 }
 
@@ -206,7 +208,7 @@ export async function detachProposal(draftId: string, actor: Actor): Promise<voi
   if (["sent", "rejected", "cancelled"].includes(d.status)) throw new ProposalError(`A ${d.status} email cannot be changed.`);
   await db
     .update(drafts)
-    .set({ quoteDocumentId: null, updatedAt: new Date(), ...(d.status === "approved" ? { status: "ready_for_review" as const, approvedById: null, approvedAt: null, approvalHash: null } : {}) })
+    .set({ quoteDocumentId: null, body: withoutAttachmentLine(d.body), updatedAt: new Date(), ...(d.status === "approved" ? { status: "ready_for_review" as const, approvedById: null, approvedAt: null, approvalHash: null } : {}) })
     .where(eq(drafts.id, draftId));
 }
 
@@ -242,7 +244,9 @@ export async function proposalPanelData(quoteId: string) {
       ].filter(Boolean) as string[],
     }))
     .filter((g) => g.gaps.length);
+  const settings = await getProposalSettings();
   return {
+    validity: { quote: quote.validityDays, standard: settings.validityDays, editable: ["ai_prepared", "needs_review", "approved"].includes(quote.status) },
     approved: PROPOSAL_STATUSES.includes(quote.status) && !!quote.approvalHash,
     current: current ? { id: current.id, filename: current.filename, generatedAt: current.generatedAt, size: current.size } : null,
     emails: emails.map((e) => ({ id: e.id, subject: e.subject, status: e.status, attachment: e.quoteDocumentId ? (current && e.quoteDocumentId === current.id ? ("current" as const) : ("void" as const)) : null })),

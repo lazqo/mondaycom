@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { attachProposalAction, detachProposalAction, generateProposalAction } from "@/actions/proposals";
-import { Badge, Button, Card, CardHeader, FormError } from "@/components/ui";
+import { attachProposalAction, detachProposalAction, generateProposalAction, setQuoteValidityAction } from "@/actions/proposals";
+import { Badge, Button, Card, CardHeader, FormError, Input, Select } from "@/components/ui";
 
 export type ProposalPanelProps = {
   quoteId: string;
@@ -12,6 +12,8 @@ export type ProposalPanelProps = {
   approved: boolean;
   current: { id: string; filename: string; generatedAt: string; size: number } | null;
   emails: { id: string; subject: string; status: string; attachment: "current" | "void" | null }[];
+  /** This quote's validity (null = standard, 0 = none) and the standard from Settings → Proposals. */
+  validity: { quote: number | null; standard: number | null; editable: boolean };
   /** Products on the quote whose proposal wording or photo is missing or not reviewed. */
   contentGaps: { productId: string; name: string; gaps: string[] }[];
 };
@@ -20,7 +22,36 @@ export type ProposalPanelProps = {
  * The customer's branded PDF proposal. It is made from the approved quote when Chris approves it,
  * and attached to the prepared email; sending is still a separate approval.
  */
-export function ProposalPanel({ quoteId, quoteNumber, approved, current, emails, contentGaps }: ProposalPanelProps) {
+function ValidityControl({ quoteId, validity, approved, run, pending }: { quoteId: string; validity: ProposalPanelProps["validity"]; approved: boolean; run: (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => void; pending: boolean }) {
+  const initial = validity.quote == null ? "standard" : validity.quote === 0 ? "none" : "custom";
+  const [mode, setMode] = React.useState(initial);
+  const [days, setDays] = React.useState(validity.quote && validity.quote > 0 ? String(validity.quote) : "");
+  const value = mode === "standard" ? null : mode === "none" ? 0 : Number(days);
+  const changed = value !== validity.quote && !(mode === "custom" && !(Number(days) > 0));
+  const standard = validity.standard ? `${validity.standard} days` : "no validity date";
+  return (
+    <div className="space-y-1 border-t border-gray-100 pt-2" data-testid="proposal-validity">
+      <p className="text-xs font-medium text-gray-700">Quote validity</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={mode} onChange={(e) => setMode(e.target.value)} className="h-8 w-48 text-xs" aria-label="Quote validity" disabled={!validity.editable}>
+          <option value="standard">Standard ({standard})</option>
+          <option value="custom">Custom</option>
+          <option value="none">No validity date</option>
+        </Select>
+        {mode === "custom" ? <Input type="number" min={1} max={365} value={days} onChange={(e) => setDays(e.target.value)} className="h-8 w-20 text-xs" aria-label="Valid for (days)" /> : null}
+        {mode === "custom" ? <span className="text-xs text-gray-500">days</span> : null}
+        {changed && validity.editable ? (
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => setQuoteValidityAction(quoteId, value), approved ? "Validity changed. The quote needs approving again (a new PDF is made then)." : "Validity saved.")}>
+            Save
+          </Button>
+        ) : null}
+      </div>
+      {changed && approved ? <p className="text-xs text-amber-700">The validity is printed on the proposal: changing it takes the approval away.</p> : null}
+    </div>
+  );
+}
+
+export function ProposalPanel({ quoteId, quoteNumber, approved, current, emails, contentGaps, validity }: ProposalPanelProps) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -76,6 +107,8 @@ export function ProposalPanel({ quoteId, quoteNumber, approved, current, emails,
           Preview Q-{quoteNumber} as a PDF
         </a>
 
+        <ValidityControl quoteId={quoteId} validity={validity} approved={approved} run={run} pending={pending} />
+
         {emails.length ? (
           <div className="space-y-1 border-t border-gray-100 pt-2">
             <p className="text-xs font-medium text-gray-700">Prepared emails to the customer</p>
@@ -104,7 +137,9 @@ export function ProposalPanel({ quoteId, quoteNumber, approved, current, emails,
                 ) : null}
               </div>
             ))}
-            <p className="text-xs text-gray-500">Attaching never sends anything: the email still needs Chris&apos;s approval to send.</p>
+            <p className="text-xs text-gray-500">
+              Attaching adds &ldquo;Please find the quotation attached for your review.&rdquo; to the email&apos;s wording and never sends anything: the email still needs Chris&apos;s approval to send.
+            </p>
           </div>
         ) : null}
 

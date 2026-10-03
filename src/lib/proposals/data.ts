@@ -51,7 +51,7 @@ export type ProposalData = {
   notes: { heading: string; items: string[] }[];
   warranty: string[];
   nextSteps: string | null;
-  company: { name: string; phone: string; email: string; website: string; address: string; gstNumber: string };
+  company: { name: string; legalName: string; phone: string; email: string; website: string; address: string; gstNumber: string };
   /** Set on a preview of a quote that is not approved yet. */
   draft: boolean;
 };
@@ -84,6 +84,8 @@ export type ProposalQuoteSource = {
   notes: string | null;
   approvedAt: Date | string | null;
   internalCosting: unknown;
+  /** This quote's validity: null/undefined = the standard, 0 = none, n = n days. */
+  validityDays?: number | null;
 };
 
 const lines = (s: string) =>
@@ -194,7 +196,8 @@ export function buildProposalData(input: {
   const summary = `We recommend ${parts.join(", ")}. ${installation ? "It is professionally installed, cabled and commissioned by Get Secure." : ""}`.trim();
 
   const date = new Date(quote.approvedAt ?? input.now ?? new Date());
-  const validUntil = settings.validityDays ? new Date(date.getTime() + settings.validityDays * 86400000).toISOString() : null;
+  const days = quote.validityDays != null ? quote.validityDays : settings.validityDays;
+  const validUntil = days && days > 0 ? new Date(date.getTime() + days * 86400000).toISOString() : null;
 
   return {
     kind,
@@ -213,7 +216,7 @@ export function buildProposalData(input: {
     notes,
     warranty: lines(settings.warranty).map(sentence),
     nextSteps: settings.nextSteps.trim() || null,
-    company: { name: settings.companyName, phone: settings.phone, email: settings.email, website: settings.website, address: settings.address, gstNumber: settings.gstNumber },
+    company: { name: settings.companyName, legalName: settings.legalName, phone: settings.phone, email: settings.email, website: settings.website, address: settings.address, gstNumber: settings.gstNumber },
     draft: !!input.draft,
   };
 }

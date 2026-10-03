@@ -16,6 +16,7 @@ const brain = await import("@/lib/brain/store");
 const quoting = await import("@/lib/quotes/workflow");
 const drafting = await import("@/lib/drafts/workflow");
 const proposals = await import("@/lib/proposals/workflow");
+const { ATTACHMENT_LINE } = await import("@/lib/proposals/email-line");
 const { applyStarterContent, resetStarterMarker } = await import("@/lib/proposals/content");
 const { applyReferenceCatalogue, resetReferenceMarker } = await import("@/lib/brain/reference/apply");
 const { encryptSecret } = await import("@/lib/crypto");
@@ -151,9 +152,16 @@ describe("proposal PDF from the approved quote", () => {
     expect(doc.approvalHash).toBe(q.approvalHash);
     expect(doc.content.subarray(0, 5).toString()).toBe("%PDF-");
     expect(doc.filename).toBe(`Get-Secure-Proposal-Q-${q.number}-Aroha-Ngata-${RUN}.pdf`);
+    // Standard 30-day validity from the approval date; customers see Get Secure Ltd.
+    const printed = doc.data as unknown as import("@/lib/proposals/data").ProposalData;
+    expect(new Date(printed.validUntil!).getTime() - new Date(q.approvedAt!).getTime()).toBe(30 * 86400000);
+    expect(printed.company).toMatchObject({ name: "Get Secure Ltd", legalName: "GE Secure Limited" });
     expect(await proposals.currentProposal(quoteId)).toMatchObject({ id: doc.id });
     const d = (await db.query.drafts.findFirst({ where: eq(drafts.id, draftId) }))!;
     expect(d).toMatchObject({ quoteDocumentId: doc.id, status: "ready_for_review" });
+    // The draft's wording gains one line about the attachment (nothing else changes, nothing is sent).
+    expect(d.body).toContain(ATTACHMENT_LINE);
+    expect(d.body.split(ATTACHMENT_LINE)).toHaveLength(2);
     expect(q.status).toBe("approved"); // not sent
 
     // What was printed: the approved lines and totals, friendly product names, and no internal data.
@@ -210,6 +218,54 @@ describe("proposal PDF from the approved quote", () => {
     expect(r.attachedTo).toContain(d2.id);
     expect((await db.query.drafts.findFirst({ where: eq(drafts.id, d2.id) }))!.quoteDocumentId).toBe(r.documentId);
     await drafting.approveDraft(d2.id, chris);
+  });
+
+  it("removing the PDF from an email takes the line out again; attaching puts it back", async () => {
+    const d = await drafting.createDraft({ leadId, to: [`aroha+${RUN}@example.com`], subject: `Line ${RUN}`, body: "Hi Aroha,\n\nHere is your quote.\n\nThanks,\nChris" }, staff, { submit: true });
+    await proposals.attachProposalToDraft(d.id, quoteId, staff);
+    expect((await db.query.drafts.findFirst({ where: eq(drafts.id, d.id) }))!.body).toBe(`Hi Aroha,\n\nHere is your quote.\n\n${ATTACHMENT_LINE}\n\nThanks,\nChris`);
+    await proposals.detachProposal(d.id, staff);
+    const after = (await db.query.drafts.findFirst({ where: eq(drafts.id, d.id) }))!;
+    expect(after.body).toBe("Hi Aroha,\n\nHere is your quote.\n\nThanks,\nChris");
+    expect(after.quoteDocumentId).toBeNull();
+  });
+
+  it("a quote's own validity (custom or none) is part of its approval and prints on the next PDF", async () => {
+    const before = (await db.query.quotes.findFirst({ where: eq(quotes.id, quoteId) }))!;
+    expect(before.status).toBe("approved");
+    const r = await quoting.updateQuoteContent(quoteId, { validityDays: 0 }, chris);
+    expect(r.approvalVoided).toBe(true);
+    expect(await proposals.currentProposal(quoteId)).toBeNull();
+    await quoting.approveQuote(quoteId, chris);
+    const g = await proposals.generateProposal(quoteId, chris);
+    const doc = (await db.query.quoteDocuments.findFirst({ where: eq(quoteDocuments.id, g.documentId) }))!;
+    expect((doc.data as { validUntil: string | null }).validUntil).toBeNull();
+    // Back to the standard: null leaves the fingerprint as it was before validity existed.
+    await quoting.updateQuoteContent(quoteId, { validityDays: null }, chris);
+    await quoting.approveQuote(quoteId, chris);
+    await proposals.generateProposal(quoteId, chris);
+  });
+
+  it("product content Chris approved is not flagged on quotes; a missing photo never blocks the PDF", async () => {
+    const q = (await db.query.quotes.findFirst({ where: eq(quotes.id, quoteId) }))!;
+    const ids = ((q.internalCosting as { lines: { productId?: string | null; internalOnly?: boolean }[] }).lines ?? []).filter((l) => l.productId && !l.internalOnly).map((l) => l.productId!);
+    const rows = await db.query.products.findMany({ where: inArray(products.id, ids) });
+    const saved = rows.map((p) => ({ id: p.id, quoteContentStatus: p.quoteContentStatus, quoteDisplayName: p.quoteDisplayName, quoteDescription: p.quoteDescription, quoteHighlights: p.quoteHighlights, quoteImageId: p.quoteImageId }));
+    try {
+      for (const p of rows) await db.update(products).set({ quoteDisplayName: p.quoteDisplayName ?? `${p.model} name`, quoteDescription: "One line.", quoteHighlights: ["A", "B"], quoteContentStatus: "getsecure_approved", quoteImageId: null }).where(eq(products.id, p.id));
+      const panel = (await proposals.proposalPanelData(quoteId))!;
+      expect(panel.contentGaps.flatMap((g) => g.gaps)).not.toContain("wording not reviewed");
+      expect(panel.contentGaps.flatMap((g) => g.gaps)).toContain("no photo"); // shown, not blocking
+      const g = await proposals.generateProposal(quoteId, chris);
+      const doc = (await db.query.quoteDocuments.findFirst({ where: eq(quoteDocuments.id, g.documentId) }))!;
+      expect(doc.content.subarray(0, 5).toString()).toBe("%PDF-");
+      expect((doc.data as { products: { imageId: string | null }[] }).products.every((p) => p.imageId === null)).toBe(true);
+    } finally {
+      for (const p of saved) {
+        const { id, ...rest } = p;
+        await db.update(products).set(rest).where(eq(products.id, id));
+      }
+    }
   });
 
   it("editing the approved quote voids the PDF too", async () => {

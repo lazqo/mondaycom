@@ -93,7 +93,7 @@ const s = StyleSheet.create({
   grand: { flexDirection: "row", justifyContent: "flex-end", paddingVertical: 8, paddingHorizontal: 10, backgroundColor: BRAND.forest, borderBottomLeftRadius: 5, borderBottomRightRadius: 5 },
   twoCol: { flexDirection: "row" },
   col: { flexGrow: 1, flexBasis: 0, paddingRight: 12 },
-  footer: { position: "absolute", bottom: 20, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", borderTopWidth: 0.75, borderTopColor: BRAND.sage, paddingTop: 6, fontSize: 7.5, color: BRAND.muted },
+  footer: { position: "absolute", bottom: 16, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", borderTopWidth: 0.75, borderTopColor: BRAND.sage, paddingTop: 6, fontSize: 7.5, color: BRAND.muted },
   watermark: { position: "absolute", top: 400, left: 40, width: 600, textAlign: "center", fontFamily: "Outfit", fontWeight: 700, fontSize: 54, color: "#c0392b", opacity: 0.12, transform: "rotate(-30deg)" },
 });
 
@@ -152,7 +152,20 @@ export function ProposalDocument({ data: d, images }: { data: ProposalData; imag
       <Page size="A4" style={s.page}>
         {/* Inline: react-pdf drops fixed elements wrapped in a component. */}
         <View style={s.footer} fixed>
-          <Text>{[d.company.name, d.company.phone, d.company.email, d.company.website, d.company.gstNumber ? `GST ${d.company.gstNumber}` : null].filter(Boolean).join("  ·  ")}</Text>
+          <View style={{ flexGrow: 1, flexBasis: 0, paddingRight: 12 }}>
+            <Text>{[d.company.name, d.company.phone, d.company.email, d.company.website].filter(Boolean).join("  ·  ")}</Text>
+            {d.company.legalName || d.company.gstNumber || d.company.address ? (
+              <Text style={{ fontSize: 6.5, marginTop: 1.5 }}>
+                {[
+                  d.company.legalName && d.company.legalName !== d.company.name ? `${d.company.name} is a trading name of ${d.company.legalName}` : null,
+                  d.company.address || null,
+                  d.company.gstNumber ? `GST ${d.company.gstNumber}` : null,
+                ]
+                  .filter(Boolean)
+                  .join("  ·  ")}
+              </Text>
+            ) : null}
+          </View>
           <Text render={({ pageNumber, totalPages }) => `${d.quoteNumber}  ·  Page ${pageNumber} of ${totalPages}`} />
         </View>
         {d.draft ? (

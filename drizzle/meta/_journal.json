@@ -113,6 +113,13 @@
       "when": 1791064853994,
       "tag": "0015_proposal_pdf",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791067811490,
+      "tag": "0016_quote_validity",
+      "breakpoints": true
     }
   ]
 }
