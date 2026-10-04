@@ -302,7 +302,8 @@ describe.skipIf(!dovecotUp)("IMAP + SMTP against local Dovecot", () => {
     execFileSync("tests/support/dovecot/deliver.sh", [rewrite("04-intercom.eml", id, `Intercom ${id}`)]);
     const deadline = Date.now() + 15_000;
     let stored = null;
-    while (Date.now() < deadline && !stored) {
+    // Stored first, classified a moment later: wait for both.
+    while (Date.now() < deadline && (!stored || stored.classification === "pending")) {
       await new Promise((r) => setTimeout(r, 500));
       stored = await db.query.emails.findFirst({ where: eq(emails.messageId, `<${id}@imap.test>`) });
     }
