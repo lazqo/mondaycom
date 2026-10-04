@@ -55,6 +55,9 @@ export function startIngestionLoop(log: (m: string) => void = console.log): () =
         }
       }
       await processPendingEmails();
+      // Emails and conversations waiting for the Inspector, and retries while Hermes was unavailable.
+      const { drainInspectorQueue } = await import("@/lib/inspector/queue");
+      await drainInspectorQueue({ log });
       const run = await runAutomationsIfDue(5);
       if (run && (run.created || run.resolved)) log(`automations: ${run.created} new reminders, ${run.resolved} resolved`);
       await runCalendarSyncIfDue(env.CALENDAR_SYNC_SECONDS, log);

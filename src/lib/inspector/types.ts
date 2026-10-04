@@ -3,7 +3,7 @@
  * same InspectorInput, are understood the same way, and feed the same action pipeline.
  */
 
-export const INSPECTOR_VERSION = "inspector-1.0.0";
+export const INSPECTOR_VERSION = "inspector-2.0.0-hermes";
 
 export type SourceType = "email" | "recording";
 /** inbound email, outbound email (ours), or a recorded conversation. */
@@ -34,19 +34,7 @@ export type InspectorInput = {
 
 export type ServiceType = "cctv" | "alarm" | "access_control" | "intercom" | "networking" | "other";
 export type PropertyType = "residential" | "commercial";
-export type Intent =
-  | "new_enquiry"
-  | "quote_request"
-  | "site_visit_request"
-  | "booking_request"
-  | "question"
-  | "quote_change"
-  | "acceptance"
-  | "objection"
-  | "service_issue"
-  | "follow_up"
-  | "information"
-  | "not_relevant";
+export type Intent = (typeof INTENTS)[number];
 export type Urgency = "low" | "normal" | "high" | "urgent";
 
 /** A fact the Inspector read, with the words it read it from. */
@@ -58,31 +46,36 @@ export type ExtractedFact = {
   confidence: number;
 };
 
-export type FactKey =
-  | "contact_name"
-  | "email"
-  | "phone"
-  | "company"
-  | "site_address"
-  | "service"
-  | "property_type"
-  | "job_type"
-  | "camera_count"
-  | "storeys"
-  | "areas"
-  | "existing_system"
-  | "existing_cabling"
-  | "remote_viewing"
-  | "budget"
-  | "timing"
-  | "brand"
-  | "site_visit_requested";
+export const FACT_KEYS = [
+  "contact_name",
+  "email",
+  "phone",
+  "company",
+  "site_address",
+  "service",
+  "property_type",
+  "job_type",
+  "camera_count",
+  "storeys",
+  "areas",
+  "existing_system",
+  "existing_cabling",
+  "remote_viewing",
+  "budget",
+  "timing",
+  "brand",
+  "site_visit_requested",
+] as const;
+export type FactKey = (typeof FACT_KEYS)[number];
+
+export const INTENTS = ["new_enquiry", "quote_request", "site_visit_request", "booking_request", "question", "quote_change", "acceptance", "objection", "service_issue", "follow_up", "information", "not_relevant"] as const;
+export const COMMITMENT_KEYS = ["send_quote", "send_photos", "call", "visit", "send_info", "confirm", "pay", "check", "other"] as const;
 
 export type Commitment = {
   owner: "get_secure" | "customer" | "unknown";
   ownerName: string | null;
   action: string;
-  actionKey: "send_quote" | "send_photos" | "call" | "visit" | "send_info" | "confirm" | "pay" | "check" | "other";
+  actionKey: (typeof COMMITMENT_KEYS)[number];
   /** Resolved due time, if the words give one. */
   dueAt: string | null;
   /** The words used for the time ("tonight", "by Friday"). */

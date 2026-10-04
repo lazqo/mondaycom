@@ -57,6 +57,22 @@ services:
       AI_LEAD_CONFIDENCE_THRESHOLD: ${AI_LEAD_CONFIDENCE_THRESHOLD:-0.75}
       HEALTH_TOKEN: ${HEALTH_TOKEN:-}
       APP_VERSION: ${APP_VERSION:-}
+      # Hermes, the Inspector (docs/DEPLOYMENT_HANDOFF.md section 17). Unset = not connected: every
+      # new email and conversation then waits in the Inspector for Chris.
+      HERMES_API_URL: ${HERMES_API_URL:-}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
+      HERMES_MODEL: ${HERMES_MODEL:-}
+      HERMES_TIMEOUT_MS: ${HERMES_TIMEOUT_MS:-}
+      HERMES_MIN_CONFIDENCE: ${HERMES_MIN_CONFIDENCE:-}
+      # Lets Hermes use the CRM's MCP tools at /api/mcp (unset = the endpoint is off).
+      HERMES_MCP_TOKEN: ${HERMES_MCP_TOKEN:-}
+      # Jev shadow classifier (off unless JEV_SHADOW=on and an Anthropic key is set).
+      JEV_SHADOW: ${JEV_SHADOW:-off}
+      JEV_MODEL: ${JEV_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    # Lets the app reach a Hermes Agent running on the VPS itself at http://host.docker.internal:8642.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "3000"
     volumes:

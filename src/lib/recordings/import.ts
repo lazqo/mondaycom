@@ -155,13 +155,15 @@ export async function upgradeToCleanedTranscripts(summary: ImportSummary, log: (
 /** Hand a recording to the Lead + Conversation Inspector. Never stops the import. */
 async function inspectRecording(id: string, force: boolean, log: (m: string) => void) {
   try {
-    const { inspect } = await import("@/lib/inspector/inspect");
     if (force) {
       const { inspections } = await import("@/db/schema");
       const reviewed = await db.query.inspections.findFirst({ where: and(eq(inspections.sourceType, "recording"), eq(inspections.sourceId, id), isNotNull(inspections.reviewedAt)), columns: { id: true } });
       if (reviewed) return; // Chris already decided who it is with
     }
-    await inspect("recording", id, { force });
+    // Queued, not awaited: the import never waits for Hermes.
+    const { enqueueInspection, kickInspectorQueue } = await import("@/lib/inspector/queue");
+    await enqueueInspection("recording", id, { force });
+    kickInspectorQueue((m) => log(m));
   } catch (err) {
     log(`[inspector] recording ${id}: ${err instanceof Error ? err.message : String(err)}`);
   }

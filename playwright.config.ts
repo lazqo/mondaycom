@@ -45,6 +45,10 @@ export default defineConfig({
           PLAUD_ENABLED: "true",
           PLAUD_CLI: `${process.cwd()}/tests/support/fake-plaud.mjs`,
           FAKE_PLAUD_STATE: `${process.cwd()}/test-results/e2e-plaud.json`,
+          // Hermes is the stand-in API server from tests/support/hermes-mock.ts (TEST key).
+          HERMES_API_URL: "http://127.0.0.1:3198",
+          HERMES_API_KEY: "e2e-hermes-key-not-a-secret",
+          HERMES_TIMEOUT_MS: "10000",
         },
         url: `${baseURL}/api/health`,
         reuseExistingServer: !process.env.CI,

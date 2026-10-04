@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { acceptInspectorAction, confirmIdentityAction, dismissInspectorAction, reinspectAction, resolveFactAction, setCommitmentStatusAction } from "@/actions/inspector";
+import { acceptInspectorAction, confirmIdentityAction, dismissInspectorAction, reinspectAction, resolveFactAction, resolveReviewAction, setCommitmentStatusAction } from "@/actions/inspector";
 import { searchLinkTargets } from "@/actions/inbox";
 import { Button, Input } from "@/components/ui";
 import type { ActionResult } from "@/lib/action-result";
@@ -44,15 +44,15 @@ export function ActionDecision({ actionId, canApprove, acceptLabel = "Accept" }:
 }
 
 /** A new value that conflicts with the CRM: use it, or keep what is there. */
-export function FactDecision({ factId }: { factId: string }) {
+export function FactDecision({ factId, proposed = false }: { factId: string; proposed?: boolean }) {
   const { pending, err, act } = useAct();
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <Button size="sm" disabled={pending} data-testid={`apply-fact-${factId}`} onClick={() => act(() => resolveFactAction(factId, "apply"))}>
-        Use new value
+        {proposed ? "Apply" : "Use new value"}
       </Button>
       <Button size="sm" variant="secondary" disabled={pending} data-testid={`reject-fact-${factId}`} onClick={() => act(() => resolveFactAction(factId, "reject"))}>
-        Keep current
+        {proposed ? "Reject" : "Keep current"}
       </Button>
       <ErrorText err={err} />
     </div>
@@ -156,6 +156,30 @@ export function IdentityReview({ inspectionId, candidates }: { inspectionId: str
           {!found.leads.length && !found.contacts.length ? <li className="px-3 py-1.5 text-gray-500">Nobody found.</li> : null}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * A review Hermes could not settle: accept what it recommended (when it was only unsure), read it
+ * again (Hermes back, or after a correction), or mark it dealt with.
+ */
+export function HermesReviewControls({ inspectionId, reviewActionId, canAccept, sourceType, sourceId }: { inspectionId: string; reviewActionId: string | null; canAccept: boolean; sourceType: "email" | "recording"; sourceId: string }) {
+  const { pending, err, act } = useAct();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {canAccept && reviewActionId ? (
+        <Button size="sm" disabled={pending} data-testid={`accept-recommendation-${inspectionId}`} onClick={() => act(() => acceptInspectorAction(reviewActionId))}>
+          Accept recommendation
+        </Button>
+      ) : null}
+      <Button size="sm" variant="secondary" disabled={pending} data-testid={`read-again-${inspectionId}`} onClick={() => act(() => reinspectAction(sourceType, sourceId))}>
+        {pending ? "Working…" : "Read again"}
+      </Button>
+      <Button size="sm" variant="ghost" disabled={pending} data-testid={`mark-reviewed-${inspectionId}`} onClick={() => act(() => resolveReviewAction(inspectionId, ""))}>
+        Mark reviewed
+      </Button>
+      <ErrorText err={err} />
     </div>
   );
 }

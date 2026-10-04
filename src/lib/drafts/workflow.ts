@@ -18,6 +18,7 @@ import { logActivity } from "@/lib/activity";
 import { type Actor, GuardrailError, actorLabel, assertAgentMay, assertApprover } from "@/lib/guard/actor";
 import { connectionFromMailbox, createImapClient } from "@/lib/email/imap";
 import { normalizeSubject } from "@/lib/email/parse";
+import { recordFeedback } from "@/lib/inspector/feedback";
 import { sendReply } from "@/lib/email/smtp";
 import { attachmentForDraft } from "@/lib/proposals/workflow";
 
@@ -96,6 +97,10 @@ export async function updateDraft(id: string, patch: { to?: string[]; cc?: strin
     .set({ ...next, status, updatedAt: new Date(), ...(voids ? { approvedById: null, approvedAt: null, approvalHash: null } : {}) })
     .where(eq(drafts.id, id))
     .returning();
+  // Chris rewriting a reply the system or Hermes prepared: kept for the learning layer.
+  if (actor.kind === "human" && d.createdByActor !== "user" && (next.body !== d.body || next.subject !== d.subject) && d.leadId) {
+    await recordFeedback({ leadId: d.leadId, contactId: d.contactId, kind: "draft_edited", subject: d.subject, value: { createdBy: d.createdByActor, subjectChanged: next.subject !== d.subject, bodyBefore: d.body.length, bodyAfter: next.body.length }, userId: actor.userId });
+  }
   return row;
 }
 
@@ -173,6 +178,7 @@ export async function markDraftSent(id: string, emailId: string): Promise<void> 
   if (d.status === "sent") return;
   const email = await db.query.emails.findFirst({ where: eq(emails.id, emailId), columns: { threadId: true, receivedAt: true } });
   await db.update(drafts).set({ status: "sent", sentEmailId: emailId, sentAt: email?.receivedAt ?? new Date(), updatedAt: new Date() }).where(eq(drafts.id, id));
+  if (d.leadId) await recordFeedback({ leadId: d.leadId, contactId: d.contactId, kind: "draft_sent", subject: d.subject, value: { createdBy: d.createdByActor }, userId: d.approvedById });
   if (email && d.leadId) {
     const lead = await db.query.leads.findFirst({ where: eq(leads.id, d.leadId), columns: { contactId: true } });
     await db.update(emailThreads).set({ leadId: d.leadId, contactId: lead?.contactId ?? null, updatedAt: new Date() }).where(and(eq(emailThreads.id, email.threadId)));

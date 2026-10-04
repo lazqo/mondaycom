@@ -17,6 +17,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs, leads, quotes, type Quote, type QuoteLineItem } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { recordFeedback } from "@/lib/inspector/feedback";
 import { computeTotals } from "@/lib/quotes";
 import { nextNumber } from "@/lib/numbering";
 import { voidProposals } from "@/lib/proposals/void";
@@ -87,6 +88,10 @@ export async function updateQuoteContent(id: string, patch: QuoteContent, actor:
     .set({ ...next, updatedAt: new Date(), ...(voids ? { status: "needs_review" as const, approvedById: null, approvedAt: null, approvalHash: null } : {}) })
     .where(eq(quotes.id, id));
   await logActivity({ entity: "quote", entityId: id, actorId: actorId(actor), action: "updated" });
+  // Chris changing what the system prepared is the signal the learning layer needs (labour, lines, totals).
+  if (actor.kind === "human" && q.origin === "brain" && q.leadId && (patch.lineItems || patch.taxRate !== undefined)) {
+    await recordFeedback({ leadId: q.leadId, contactId: q.contactId, kind: "quote_edited", subject: `Q-${q.number}`, value: { totalBefore: Number(q.total), totalAfter: Number(next.total), linesBefore: q.lineItems.length, linesAfter: lineItems.length }, userId: actor.userId });
+  }
   if (voids) {
     await logActivity({ entity: "quote", entityId: id, actorId: actorId(actor), action: "approval_invalidated", detail: { reason: "changed after approval" } });
     await voidProposals(id, "quote changed after approval", actorId(actor));
@@ -120,6 +125,7 @@ export async function approveQuote(id: string, actor: Actor): Promise<void> {
     .set({ status: "approved", approvedById: actor.userId, approvedAt: new Date(), approvalHash: quoteFingerprint(q), updatedAt: new Date() })
     .where(eq(quotes.id, id));
   await logActivity({ entity: "quote", entityId: id, actorId: actor.userId, action: "status_changed", detail: { to: "approved" } });
+  if (q.leadId) await recordFeedback({ leadId: q.leadId, contactId: q.contactId, kind: "quote_approved", subject: `Q-${q.number}`, value: { origin: q.origin, total: Number(q.total) }, userId: actor.userId });
 }
 
 /** Send back for changes (the reason is kept on the quote's history). */
@@ -170,6 +176,7 @@ export async function setQuoteStatus(id: string, status: "draft" | "sent" | "acc
     if (q.leadId && leadStatus) {
       await tx.update(leads).set({ status: leadStatus, updatedAt: new Date() }).where(eq(leads.id, q.leadId));
       await logActivity({ entity: "lead", entityId: q.leadId, actorId: actor.userId, action: "status_changed", detail: { changes: { status: { to: leadStatus } }, via: `quote #${q.number}` } });
+      if (leadStatus === "won" || leadStatus === "lost") await recordFeedback({ leadId: q.leadId, kind: leadStatus === "won" ? "lead_won" : "lead_lost", subject: `Q-${q.number}`, value: { via: "quote" }, userId: actor.userId });
     }
 
     if (status === "accepted" && q.jobs.length === 0) {

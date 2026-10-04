@@ -3,6 +3,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { startSmtpSink } from "../support/smtp-sink";
 import { startItPlusMock } from "../support/itplus-mock";
+import { startHermesMock } from "../support/hermes-mock";
 
 export const ITPLUS_MOCK_PORT = 3199;
 /** TEST login for the IT Plus stand-in (never a real account). */
@@ -29,8 +30,11 @@ export default async function globalSetup() {
     },
     ITPLUS_MOCK_PORT,
   );
+  // A stand-in Hermes Agent API server (playwright.config.ts points HERMES_API_URL at it).
+  const hermes = await startHermesMock();
   return async () => {
     await sink.stop();
     await itplus.close();
+    hermes.close();
   };
 }

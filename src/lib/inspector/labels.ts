@@ -46,3 +46,25 @@ export const FACT_LABELS: Record<FactKey, string> = {
   brand: "Brand",
   site_visit_requested: "Site visit requested",
 };
+
+/** Hermes's recommended next actions, as Chris reads them. */
+export const HERMES_ACTION_LABELS: Record<string, string> = {
+  RUN_BUSINESS_BRAIN: "Run the Business Brain",
+  PREPARE_QUOTE: "Prepare quote",
+  ASK_CUSTOMER: "Ask the customer",
+  PROPOSE_SITE_VISIT: "Propose a site visit",
+  DRAFT_REPLY: "Draft a reply",
+  CREATE_INTERNAL_TASK: "Create a task",
+  FOLLOW_UP: "Follow up",
+  WAITING_ON_CUSTOMER: "Waiting on the customer",
+  NEEDS_REVIEW: "Needs review",
+  NO_ACTION: "No action",
+};
+
+/** Why an item waits for Chris. */
+export const REVIEW_KIND_LABELS: Record<string, string> = {
+  identity: "Who is this?",
+  hermes_unavailable: "Hermes could not read it",
+  hermes_low_confidence: "Hermes is unsure",
+  hermes_flagged: "Hermes asks you to look",
+};

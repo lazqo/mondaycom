@@ -839,97 +839,170 @@ alarm panels, keypads, intercoms and access controllers.
 
 ---
 
-## 17. Lead + Conversation Inspector
+## 17. Lead + Conversation Inspector (Hermes)
 
-Every new email and every Plaud conversation is read by the Inspector. Both go through the same
-pipeline:
+Every new email and Plaud conversation is read by **Hermes**, Get Secure's own agent (Nous
+Research's Hermes Agent). Hermes understands what the customer means in context and recommends the
+next step. The CRM checks that recommendation against its rules, the Business Brain decides design
+and pricing, and Chris approves anything that reaches a customer.
 
 ```
-email / Plaud conversation
-  → who is it? (several signals, never a name alone)
-  → what does it say? (facts with the words they came from, intent, urgency, objections,
-    decisions, commitments, what is missing: blocking or not)
-  → recommended actions (fixed rules, each with its rule name)
-  → Unified Action Router: internal work is done now; anything for the customer waits for Chris
-  → timeline: read → facts → Brain run → quote prepared → Chris approved → PDF → email sent
+email / Plaud conversation / CRM event
+  → identity (the CRM's hard rules: phone, email, thread, appointment, quote number; never a name alone)
+  → Hermes Inspector (understanding, facts with evidence, commitments, blockers, recommended action,
+    confidence, reason)
+  → validation + policy layer (hard guardrails, business rules, advisory checks)
+  → Business Brain (design, products, pricing: the authority)
+  → CRM prepares or proposes (tasks, notes, quote and reply drafts, site-visit proposals)
+  → Chris approves anything customer-facing
 ```
 
-It is deterministic: no AI service is involved unless Jev is switched on (see below), and Jev only
-ever observes.
+**Who decides what**
+- **Hermes:** what it means, and the recommended next action.
+- **Validator:** safety, data integrity and policy.
+- **Business Brain:** technical design and commercial truth.
+- **CRM:** the record and its history.
+- **Chris:** final approval of anything customer-facing or commercial.
 
-**What it does on its own** (as `system:inspector`, which the guard refuses for anything
-customer-facing):
-- adds an internal note and fills **blank** lead fields from what the customer said;
-- files a recording against a lead/customer when the evidence is strong (see "Who is it?");
-- creates tasks: call the customer, follow up, service case, price a quote, reply to a question;
-- for a residential CCTV enquiry with nothing blocking: runs the Business Brain on the lead and
-  prepares the quote and reply, which wait in **Approvals**;
-- for a vague enquiry: prepares a reply asking **only** what blocks a quote (home or business, how
-  many cameras or which areas, storeys). It never asks for something just because a field is blank.
+The old deterministic rules no longer decide what a customer means. They still find identity
+signals, provide the fallback when Hermes is unavailable, and are shown beside Hermes's reading for
+comparison only ("Old rules (comparison only)"). They never override Hermes.
 
-**What waits for Chris** (Inspector → *Waiting for you*):
-- site visits and bookings: accepting makes Chris's task to arrange it. It never books or confirms
-  anything with the customer;
-- revised quotes (after a price/scope objection or a change request): accepting re-runs the Brain and
-  prepares a revised quote for Approvals. No discount is applied automatically.
+**The three tiers of checks**
+- **Hard guardrails (Hermes cannot override):**
+  - Identity is decided by the CRM's signals. A name alone never matches; Hermes may suggest who it
+    is, but nothing is written to a customer until Chris confirms.
+  - A fact is accepted only with evidence found in the email, form or transcript, and only with a
+    sane value. A fact that conflicts with the CRM is flagged with both values and never
+    overwritten, including on a re-read.
+  - A prepared reply may not quote a price, offer a discount or promise a date. If it tries, it is
+    held back and Chris gets a task.
+  - Nothing is sent, confirmed, accepted or discounted by the system. This is enforced in code by the
+    actor guard, for Hermes and the Inspector alike.
+  - A real enquiry is never "no action".
+  - Below 60% confidence, Hermes's recommendation waits for Chris instead of being acted on (see
+    `HERMES_MIN_CONFIDENCE` below).
+- **Business rules (deterministic, authoritative):**
+  - Commercial CCTV, or a customer asking for a visit, goes to a site-visit proposal.
+  - Only CCTV has a Business Brain; anything else becomes a manual-quote task.
+  - The Brain runs only with its inputs: home or business, cameras or areas, and storeys (for a
+    home). If any are missing, the customer is asked for exactly those.
+  - One prepared quote at a time. A revised quote after a sent one waits for Chris.
+  - After the Brain runs, the Brain decides. If it needs a site visit, a visit is proposed; if
+    nothing has an approved price, no quote is prepared and Chris gets "Price the quote".
+- **Advisory checks (logged, never blocking):**
+  - Two-storey cabling complexity.
+  - An upgrade with unknown cabling (the Brain assumes no reusable cable).
+  - Gaps that don't block progress (not asked).
+  - Low-confidence facts (proposed, not filled in).
+  - Where the old rules read it differently.
+  - Possible urgency.
+  - Hermes's own advisories.
 
-**What it never does:** send an email or a quote, confirm a booking or site visit, promise a price or
-a date, discount, or accept terms. These are enforced in code by the actor guard, not just by the
-rules. A prepared quote or email never changes the lead's status or "last contact": prepared is not
-sent.
+**What you see:** in **Inspector → Recently read**, each item shows Hermes's headline: recommended
+action, confidence and reason. Under it: the facts with their evidence, blockers, commitments and
+objections, the guardrails, business rules and advisories that applied, the Business Brain's
+outcome, and every action prepared. When a rule stops something, it says so, for example: "Prepare
+quote blocked by: Nothing in the design has an approved price yet · Action created: Price the quote
+for …". The lead page's Inspector panel and the timeline ("Hermes read the email · Recommended:
+Prepare quote · 94% sure") show the same.
 
-**Business Brain rules still decide.** Commercial CCTV, or a customer asking for a site visit, goes to
-a site visit, not a quote. If the Brain says a site visit is needed, the quote is not prepared and a
-site-visit proposal waits for Chris. If nothing in the design has an approved price, no quote or reply
-is prepared and Chris gets a "Price the quote" task instead. An upgrade with unknown cabling never gets
-the cheaper upgrade labour. The Inspector routes; the Brain designs and prices.
+**Needs your review** holds:
+- **Who is this?**: uncertain identity. Hermes's suggestion is shown; you choose.
+- **Hermes is unsure**: below the confidence threshold. "Accept recommendation" carries it out as you.
+- **Hermes asks you to look**, or **Hermes could not read it** (see Fallback). You can "Read again"
+  or "Mark reviewed".
 
-**Who is it?** Signals are scored together: the email thread or Chris's own choice (authoritative), the
-email address, a phone number, a quote number, an appointment the conversation was recorded during
-(30 minutes before it to an hour after), and, as supporting evidence only, address, company and name.
-A name on its own is **never** enough. When the evidence is weak or two people are too close, it goes
-to Inspector → **Who is this?**, showing the possible matches and why. Nothing customer-specific (facts,
-filing, commitments against a lead) is written until Chris chooses. Choosing "Not a customer" there
-also clears the email from the Inbox's Needs review; "Not a lead" in the Inbox, or Dismiss on the
-Recordings page, closes the matching review in the Inspector.
+**Fallback.** If Hermes is not connected, unreachable, slower than the timeout, or returns something
+unusable (after one retry with the problem stated), the item is never lost and never "no action":
+- the CRM's own extraction is used only where safe (identity, blank fields, commitments);
+- the item goes to **Needs your review → Hermes could not read it**;
+- Hermes is tried again after 5, 15 and 60 minutes. A later Hermes reading replaces the fallback
+  unless you have already dealt with it.
+Until Hermes is connected, every new enquiry therefore waits in the Inspector for you.
 
-*Change from before:* importing a Plaud recording used to file it automatically on a name match. It
-now files automatically only on a phone number match; a name-only match waits for Chris.
+**Audit and learning-ready data.**
+- **`inspector_runs`:** one row per run with:
+  - the model and contract version;
+  - references to the context it was given (lead, quotes, tasks, commitments; not copies);
+  - Hermes's structured result, confidence, recommended action and reason;
+  - what the validator did and the Business Brain's result;
+  - the final CRM actions.
+  When Hermes's reply is unusable, its start is kept for diagnosis. No hidden reasoning is stored.
+- **`inspector_feedback`:** records each of Chris's decisions next to what Hermes recommended. These
+  include accepted or dismissed actions, identity choices, applied or rejected facts, and closed
+  commitments. It also records outcomes: quote approved or edited, reply edited or sent, lead won
+  or lost. This is the material a later learning layer will use. Nothing changes a rule, a price or
+  a workflow by itself.
+- **`agent_audit`:** every call Hermes makes to the CRM's tools, allowed or refused.
 
-**Facts and conflicts.** Each fact keeps where it came from (email or recording, which one, when), the
-words, a confidence and its state (applied, proposed, conflict, rejected). A new value that disagrees
-with the CRM is **never** written over it: it appears under *Conflicting facts* with both values, and
-Chris picks "Use new value" or "Keep current". The same street written with or without the suburb is
-not a conflict.
+**Hermes's access to the CRM (MCP).** Hermes has no database access. The CRM offers it tools at
+`/api/mcp` (MCP over HTTP, bearer token), as `agent:hermes`.
+- **Read:**
+  - find people;
+  - a lead or customer;
+  - the timeline;
+  - open tasks, commitments, quotes (as the customer sees them), visits and jobs, facts;
+  - the Business Brain's latest outcome (no costs);
+  - an email thread, a recording transcript, an Inspector result;
+  - the review queue.
+- **Act (prepare and propose only, all audited):**
+  - an internal note or task;
+  - run the Business Brain;
+  - prepare a quote, which waits in Approvals (commercial CCTV refused);
+  - prepare a reply draft, which waits for Chris (refused if it quotes a price, a discount or a date);
+  - propose a fact or flag a conflict, which Chris applies;
+  - propose a site visit, booking or revised quote, which Chris accepts;
+  - request a review.
 
-**Commitments.** "I'll send the quote tonight" from Chris on a call becomes *Chris: Send the quote
-tonight*, due 9pm today, outstanding. "I'll send the photos tomorrow" from the customer becomes theirs,
-due 5pm tomorrow. They show on:
-- **Today:** *Our commitments* (overdue, due today, or undated) and *Waiting on customers*;
-- the lead, customer and job pages (Inspector panel);
-- the lead and customer timelines.
+  There is no tool that sends, approves, confirms, accepts, discounts or writes a fact directly.
+  Supplier credentials, costs and margins are not reachable.
 
-Mark one Done (or ✕ if no longer needed) on Today or the lead page.
+**Setting it up** (on the VPS, after deploying):
+1. In Hermes Agent, turn on its API server (`~/.hermes/.env`):
+   ```
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=<a long random key: openssl rand -hex 32>
+   API_SERVER_HOST=172.17.0.1      # the Docker bridge, reachable from the CRM container, not the internet
+   ```
+   Restart it with `hermes gateway`. Keep port 8642 closed in the VPS firewall (only 22, 80 and 443
+   are open).
+2. In `/opt/getsecure/.env`:
+   ```
+   HERMES_API_URL=http://host.docker.internal:8642
+   HERMES_API_KEY=<the same API_SERVER_KEY>
+   HERMES_MCP_TOKEN=<another long random key: openssl rand -hex 32>
+   ```
+   Optional settings:
+   - `HERMES_MODEL`: the model or profile name Hermes exposes; default `hermes-agent`.
+   - `HERMES_TIMEOUT_MS`: default `120000`.
+   - `HERMES_MIN_CONFIDENCE`: default `0.6`.
+   Then run `docker compose -f docker-compose.prod.yml up -d`.
+3. Give Hermes the CRM's tools (`~/.hermes/config.yaml`), then `/reload-mcp` in Hermes:
+   ```yaml
+   mcp_servers:
+     getsecure_crm:
+       url: "https://hermes.aucklandsecuritysystems.co.nz/api/mcp"
+       headers:
+         Authorization: "Bearer <HERMES_MCP_TOKEN>"
+       timeout: 120
+   ```
+4. Check Hermes against the eight Inspector scenarios. Nothing is written to the CRM:
+   `docker compose -f docker-compose.prod.yml exec web pnpm hermes:check`
+5. Open the Inspector. Items that waited while Hermes was not connected can be read again with
+   **Read again**. A re-read uses Hermes, and it never overwrites conflicting facts.
 
-**Where to look:**
-- **Inspector** (main menu, with a count): Who is this?, Waiting for you, Conflicting facts, and
-  Recently read: what it understood from each email or conversation, every action it took and why
-  (rule name), with links to the quote or draft. "Read again" re-reads a source after a correction.
-- **Lead, customer and job pages:** the Inspector panel, plus Inspector entries on the timeline.
+Which model Hermes runs on is set in Hermes Agent (its provider configuration), not in the CRM.
+The CRM records the model name Hermes reports with every run.
 
-**Jev (shadow mode, off by default).** Jev is a Claude classifier that answers a small fixed set of
-questions beside the rules (intent, conversation type, urgency, quote readiness, call vs quote vs
-ask, objection type, site-visit probability, confidence). It never drives an action, a design, a
-price, an HDD choice, a supplier cost or anything sent. Its answers are stored with the rules' answer
-and with what Chris actually did, and compared at the bottom of the Inspector page. To switch it on,
-set `JEV_SHADOW=on` and `ANTHROPIC_API_KEY` (optionally `JEV_MODEL`). Note that this sends the email or
-transcript text to Anthropic. It never sends supplier credentials or prices. With either variable
-unset, nothing leaves the server.
+**Deploying:**
+- Migration `0019_hermes_inspector` adds the run, feedback, audit and queue tables, and new columns
+  on inspections. `./deploy/update.sh` runs it.
+- Earlier inspections are kept as they were, marked "Rules (before Hermes)".
+- Nothing is re-read automatically.
 
-**Deploying:** migration `0017_inspector` adds the Inspector tables (inspections, facts, commitments,
-inspector actions, Jev observations) and a `kind` column on tasks. `./deploy/update.sh` runs it.
-Nothing is backfilled: only new emails and conversations are read. To read an existing one, use "Read
-again" from the Inspector, or re-run classification on an email in the Inbox.
+**Jev** (the earlier shadow classifier) is unchanged and still off by default. Hermes now does what
+Jev was meant to prove, so Jev can be removed later.
 
 ## 18. Leads: Next action and Lost reason
 

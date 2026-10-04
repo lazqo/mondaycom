@@ -12,5 +12,5 @@ export default defineConfig({
   },
   // tsconfig keeps JSX for Next; tests compile it themselves.
   oxc: { jsx: { runtime: "automatic" } },
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: { alias: { "@": path.resolve(__dirname, "src"), "server-only": path.resolve(__dirname, "tests/support/server-only.ts") } },
 });

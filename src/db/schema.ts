@@ -1105,6 +1105,16 @@ export const inspections = pgTable(
     understanding: jsonb("understanding").$type<Record<string, unknown>>().notNull(),
     summary: text("summary").notNull().default(""),
     error: text("error"),
+    /** Who understood it: "hermes", "fallback" (Hermes unavailable: rules extraction + review), "rules" (before Hermes). */
+    engine: text("engine").notNull().default("rules"),
+    /** Hermes's structured result, as validated against the contract. */
+    hermes: jsonb("hermes").$type<Record<string, unknown>>(),
+    /** What the validator did with it: hard blocks, business-rule overrides, advisories, final plan. */
+    validation: jsonb("validation").$type<Record<string, unknown>>(),
+    /** The old deterministic reading, kept for comparison and debugging only. */
+    rulesView: jsonb("rules_view").$type<Record<string, unknown>>(),
+    /** Why it waits for Chris: identity | hermes_unavailable | hermes_low_confidence | hermes_flagged. */
+    reviewKind: text("review_kind"),
     reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1173,6 +1183,109 @@ export const commitments = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("commitments_status_due_idx").on(t.status, t.dueAt), index("commitments_lead_idx").on(t.leadId)],
+);
+
+/**
+ * One Hermes Inspector run (or fallback): what went in (references, not copies), what came back,
+ * what the validator and the Business Brain did with it, and what the CRM finally did. The record
+ * the learning layer will later compare against Chris's decisions and the outcome. No hidden
+ * reasoning is stored: only Hermes's concise stated reason and evidence.
+ */
+export const inspectorRuns = pgTable(
+  "inspector_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inspectionId: uuid("inspection_id").references(() => inspections.id, { onDelete: "cascade" }),
+    sourceType: text("source_type").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    /** hermes-api, or the test stand-in's name. */
+    runtime: text("runtime"),
+    model: text("model"),
+    /** Contract/prompt version. */
+    version: text("version").notNull(),
+    /** ok | invalid_output | timeout | unavailable | not_configured | error */
+    status: text("status").notNull(),
+    contextRefs: jsonb("context_refs").$type<Record<string, unknown>>().notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    /** The start of Hermes's reply when it could not be used (for diagnosis). */
+    rawExcerpt: text("raw_excerpt"),
+    error: text("error"),
+    durationMs: integer("duration_ms"),
+    confidence: numeric("confidence", { precision: 4, scale: 3 }),
+    recommendedAction: text("recommended_action"),
+    reason: text("reason"),
+    validation: jsonb("validation").$type<Record<string, unknown>>(),
+    brainResult: jsonb("brain_result").$type<Record<string, unknown>>(),
+    finalActions: jsonb("final_actions").$type<unknown[]>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("inspector_runs_source_idx").on(t.sourceType, t.sourceId), index("inspector_runs_inspection_idx").on(t.inspectionId)],
+);
+
+/**
+ * Chris's decisions on what the Inspector recommended, and what happened afterwards (quote approved,
+ * edited, sent; lead won or lost). Learning-ready: each row says what Hermes recommended and what
+ * Chris or the outcome said instead.
+ */
+export const inspectorFeedback = pgTable(
+  "inspector_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inspectionId: uuid("inspection_id").references(() => inspections.id, { onDelete: "set null" }),
+    runId: uuid("run_id").references(() => inspectorRuns.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
+    /** action_accepted | action_dismissed | identity_confirmed | not_a_customer | fact_applied | fact_rejected | review_resolved | commitment_done | commitment_cancelled | quote_approved | quote_edited | draft_edited | draft_sent | lead_won | lead_lost */
+    kind: text("kind").notNull(),
+    /** What it was about: an action type, a fact key, a quote number. */
+    subject: text("subject"),
+    /** What Hermes had recommended at the time (its recommended_action, or the specific value). */
+    hermesRecommendation: text("hermes_recommendation"),
+    value: jsonb("value").$type<Record<string, unknown>>(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("inspector_feedback_lead_idx").on(t.leadId, t.createdAt), index("inspector_feedback_kind_idx").on(t.kind, t.createdAt)],
+);
+
+/** Every call an agent (Hermes) makes to a CRM tool: allowed, refused or failed. */
+export const agentAudit = pgTable(
+  "agent_audit",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agent: text("agent").notNull(),
+    tool: text("tool").notNull(),
+    /** read | write */
+    access: text("access").notNull(),
+    /** ok | denied | error */
+    status: text("status").notNull(),
+    args: jsonb("args").$type<Record<string, unknown>>(),
+    resultSummary: text("result_summary"),
+    error: text("error"),
+    leadId: uuid("lead_id"),
+    contactId: uuid("contact_id"),
+    durationMs: integer("duration_ms"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("agent_audit_created_idx").on(t.createdAt), index("agent_audit_lead_idx").on(t.leadId)],
+);
+
+/** Emails and conversations waiting to be inspected, with retries when Hermes is unavailable. */
+export const inspectorQueue = pgTable(
+  "inspector_queue",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceType: text("source_type").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    force: boolean("force").notNull().default(false),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("inspector_queue_source_idx").on(t.sourceType, t.sourceId), index("inspector_queue_next_idx").on(t.nextAttemptAt)],
 );
 
 /** What the Unified Action Router was asked to do for an inspection, and what happened. */
@@ -1391,6 +1504,7 @@ export type Inspection = typeof inspections.$inferSelect;
 export type Fact = typeof facts.$inferSelect;
 export type CommitmentRow = typeof commitments.$inferSelect;
 export type InspectorActionRow = typeof inspectorActions.$inferSelect;
+export type InspectorRun = typeof inspectorRuns.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type CalendarConnection = typeof calendarConnections.$inferSelect;
 export type CalendarItem = typeof calendarItems.$inferSelect;

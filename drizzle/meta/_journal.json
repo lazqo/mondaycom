@@ -134,6 +134,13 @@
       "when": 1791085613711,
       "tag": "0018_lead_next_action",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791092091047,
+      "tag": "0019_hermes_inspector",
+      "breakpoints": true
     }
   ]
 }

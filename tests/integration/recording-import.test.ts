@@ -15,8 +15,9 @@ process.env.PLAUD_CLI = resolve("tests/support/fake-plaud.mjs");
 process.env.FAKE_PLAUD_STATE = STATE;
 
 const { db } = await import("@/db");
-const { recordings, contacts, commitments, inspections } = await import("@/db/schema");
+const { recordings, contacts, commitments, inspections, inspectorQueue, inspectorRuns } = await import("@/db/schema");
 const { importRecentRecordings } = await import("@/lib/recordings/import");
+const { settleInspectorQueue } = await import("@/lib/inspector/queue");
 
 type Rec = { id: string; title: string; date: string; duration: string; original: string; polished: string | null };
 const A: Rec = {
@@ -54,6 +55,8 @@ afterAll(async () => {
   if (ids.length) {
     await db.delete(commitments).where(inArray(commitments.sourceId, ids));
     await db.delete(inspections).where(inArray(inspections.sourceId, ids));
+    await db.delete(inspectorQueue).where(inArray(inspectorQueue.sourceId, ids));
+    await db.delete(inspectorRuns).where(inArray(inspectorRuns.sourceId, ids));
   }
   await db.delete(recordings).where(like(recordings.externalId, `%${RUN}`));
   await db.delete(contacts).where(eq(contacts.id, contactId));
@@ -93,9 +96,11 @@ describe("importing Plaud recordings", () => {
     expect(b.transcript).toContain("021 555 8812");
     expect(b.status).toBe("attached");
     expect(b.contactId).toBe(contactId);
-    // The Inspector read it again with the cleaned-up words, now against that customer.
+    // Queued for the Inspector with the cleaned-up words. Hermes is not connected in this test, so
+    // it is filed against the customer (a phone match) and waits for Chris: never "no action".
+    await settleInspectorQueue();
     const ins = (await db.query.inspections.findFirst({ where: and(eq(inspections.sourceId, b.id), ne(inspections.status, "superseded")), orderBy: [desc(inspections.createdAt)] }))!;
-    expect(ins).toMatchObject({ status: "analysed", contactId });
+    expect(ins).toMatchObject({ engine: "fallback", status: "needs_review", reviewKind: "hermes_unavailable", contactId });
   });
 
   it("upgrades a recording imported before cleaned-up transcripts were fetched", async () => {

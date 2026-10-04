@@ -1,5 +1,6 @@
 /**
- * End-to-end: the Lead + Conversation Inspector through the real import paths.
+ * End-to-end: the Hermes-first Lead + Conversation Inspector through the real import paths, with
+ * Hermes played by the stand-in API server in tests/support/hermes-mock.ts (the real HTTP path).
  *
  *   1. An email enquiry is read: facts fill the lead, the Business Brain runs, and anything for
  *      the customer waits in Approvals. The lead is still New: prepared is not contacted.
@@ -39,9 +40,9 @@ function up(port: number): boolean {
   }
 }
 
-function deliver(o: { subject: string; id: string; body: string; inReplyTo?: string }, tag: string) {
+function deliver(o: { subject: string; id: string; body: string; inReplyTo?: string; from?: string }, tag: string) {
   const raw = [
-    `From: ${NAME} <${CUSTOMER}>`,
+    `From: ${o.from ?? `${NAME} <${CUSTOMER}>`}`,
     "To: info@getsecure.co.nz",
     `Subject: ${o.subject}`,
     `Message-ID: ${o.id}`,
@@ -75,6 +76,14 @@ async function syncMail(page: Page) {
   await page.goto("/inbox");
   await page.getByTestId("sync-now").click();
   await expect(page.getByText(/\d+ new, \d+ sent/)).toBeVisible({ timeout: 30_000 });
+}
+
+/** The Inspector works in the background: reload until what we expect is there. */
+async function eventually(page: Page, url: string, check: () => Promise<void>) {
+  await expect(async () => {
+    await page.goto(url);
+    await check();
+  }).toPass({ timeout: 45_000, intervals: [500, 1000, 2000] });
 }
 
 async function syncPlaud(page: Page, expected: RegExp) {
@@ -126,12 +135,14 @@ test.describe("Lead + Conversation Inspector", () => {
     await login(page);
     await syncMail(page);
 
-    await page.goto("/inspector");
     const row = page.getByTestId("inspector-recent").locator("details").filter({ hasText: SUBJECT });
-    await expect(row).toBeVisible();
-    await expect(row).toContainText("Run the Business Brain");
+    // The row appears as soon as Hermes's reading is stored; its actions follow a moment later.
+    await eventually(page, "/inspector", async () => expect(row).toContainText("Run the Business Brain", { timeout: 1000 }));
+    await expect(row).toContainText("Hermes");
     await expect(row).toContainText("Prepare quote");
     await row.locator("summary").click();
+    await expect(row.getByTestId("hermes-recommendation")).toContainText("Recommended next action: Prepare quote");
+    await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: 92%");
     await expect(row).toContainText("Cameras: 4");
     await row.getByRole("link", { name: NAME }).click();
     await page.waitForURL(/\/leads\/[0-9a-f-]{36}$/);
@@ -144,7 +155,8 @@ test.describe("Lead + Conversation Inspector", () => {
     await expect(page.locator("h1")).toContainText("New");
     await expect(page.getByTestId("inspector-panel")).toBeVisible();
     const tl = page.getByTestId("timeline");
-    await expect(tl).toContainText("Inspector read the email");
+    await expect(tl).toContainText("Hermes read the email");
+    await expect(tl).toContainText("Recommended: Prepare quote");
     await expect(tl).toContainText("Business Brain ran");
     await expect(tl).not.toContainText("Email sent to");
   });
@@ -153,8 +165,8 @@ test.describe("Lead + Conversation Inspector", () => {
     deliver({ subject: `Re: ${SUBJECT}`, id: `<insp-2-${RUN}@example.com>`, inReplyTo: ENQUIRY_ID, body: `Sorry, the address is actually ${NEW_STREET}.` }, "address");
     await login(page);
     await syncMail(page);
-    await page.goto("/inspector");
     const conflict = page.getByTestId("fact-conflict").filter({ hasText: NEW_STREET });
+    await eventually(page, "/inspector", async () => expect(conflict).toBeVisible({ timeout: 1000 }));
     await expect(conflict).toContainText(STREET.split(",")[0]);
     await conflict.getByRole("button", { name: "Keep current" }).click();
     await expect(conflict).toHaveCount(0);
@@ -179,8 +191,8 @@ test.describe("Lead + Conversation Inspector", () => {
     await login(page);
     await syncPlaud(page, /1 new · 1 filed/);
 
-    await page.goto("/dashboard");
     const ours = page.getByTestId("section-our-commitments").getByTestId("commitment").filter({ hasText: NAME });
+    await eventually(page, "/dashboard", async () => expect(ours).toBeVisible({ timeout: 1000 }));
     await expect(ours).toContainText("tonight");
     await expect(ours).toContainText(/send the quote/i);
     const theirs = page.getByTestId("section-waiting-on-customers").getByTestId("commitment").filter({ hasText: NAME });
@@ -189,8 +201,8 @@ test.describe("Lead + Conversation Inspector", () => {
 
     await page.goto(leadUrl);
     await expect(page.getByTestId("inspector-panel")).toContainText(/send the quote/i);
-    await expect(page.getByTestId("timeline")).toContainText("Chris to send the quote tonight");
-    await expect(page.getByTestId("timeline")).toContainText(`${NAME.split(" ")[0]} to send the photos of the eaves tomorrow`);
+    await expect(page.getByTestId("timeline")).toContainText("Chris to send the quote");
+    await expect(page.getByTestId("timeline")).toContainText(`${NAME.split(" ")[0]} to send the photos of the eaves`);
 
     await page.goto("/dashboard");
     await ours.getByRole("button", { name: "Done" }).click();
@@ -208,9 +220,11 @@ test.describe("Lead + Conversation Inspector", () => {
     await login(page);
     await syncPlaud(page, /1 new · 0 filed · 1 to review/);
 
-    await page.goto("/inspector");
     const card = page.getByTestId("identity-review").filter({ hasText: `Site chat ${RUN}` });
+    await eventually(page, "/inspector", async () => expect(card).toBeVisible({ timeout: 1000 }));
     await expect(card).toContainText("Only name evidence");
+    // Hermes may suggest who it is; that alone never files it.
+    await expect(card.getByTestId("hermes-identity-suggestion")).toContainText("Hermes suggests");
     const candidate = card.getByTestId("identity-candidate").filter({ hasText: NAME });
     await expect(candidate).toContainText(`name ${NAME}`);
     await candidate.getByRole("button", { name: "It's them" }).click();
@@ -218,5 +232,45 @@ test.describe("Lead + Conversation Inspector", () => {
 
     await page.goto(leadUrl);
     await expect(page.getByTestId("timeline")).toContainText(`Recorded conversation: Site chat ${RUN}`);
+  });
+
+  test("5. a CCTV landing-page lead is a new enquiry: Hermes recommends a quote, never 'no action'", async ({ page }) => {
+    const who = `Isapela ${SURNAME[0].toUpperCase()}${SURNAME.slice(1).toLowerCase()}`;
+    const form = [
+      "New Lead · CCTV Landing",
+      "",
+      who.toUpperCase(),
+      "",
+      `Phone 021 088 ${String(Date.now()).slice(-4)} Email isapela+${RUN}@example.com ServiceCCTV Installation`,
+      "",
+      "REQUEST SUMMARY",
+      "",
+      `PropertyResidential HomeStoreysDouble storeyCameras2Current SetupNew InstallationTimelineAs Soon As PossibleAddress${(Date.now() % 900) + 10} Solo Place, Manurewa`,
+      "",
+      `Sent from the Get Secure website. Reply to this email to respond directly to ${who}.`,
+    ].join("\n");
+    deliver({ subject: "New Lead · CCTV Landing", id: `<landing-${RUN}@updates.getsecure.co.nz>`, body: form, from: "Get Secure Website <noreply@updates.getsecure.co.nz>" }, "landing");
+    await login(page);
+    await syncMail(page);
+    const row = page.getByTestId("inspector-recent").locator("details").filter({ hasText: who });
+    await eventually(page, "/inspector", async () => expect(row).toContainText("Run the Business Brain", { timeout: 1000 }));
+    await expect(row).toContainText("2 cameras, two-storey");
+    await expect(row).not.toContainText("No action");
+    await row.locator("summary").click();
+    await expect(row.getByTestId("hermes-recommendation")).toContainText("Recommended next action: Prepare quote");
+    await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: 94%");
+    await expect(row).toContainText("Old rules (comparison only)");
+  });
+
+  test("6. Hermes unavailable: the email waits for review, never 'no action'", async ({ page }) => {
+    deliver({ subject: `Cameras please ${RUN}`, id: `<down-${RUN}@example.com>`, body: "Hi, could I get some cameras for the house? HERMES-DOWN" }, "down");
+    await login(page);
+    await syncMail(page);
+    const card = page.getByTestId("hermes-review").filter({ hasText: `Cameras please ${RUN}` });
+    await eventually(page, "/inspector", async () => expect(card).toBeVisible({ timeout: 1000 }));
+    await expect(card).toContainText("Hermes could not read it");
+    await expect(card).not.toContainText("No action");
+    await card.getByRole("button", { name: "Mark reviewed" }).click();
+    await expect(card).toHaveCount(0);
   });
 });

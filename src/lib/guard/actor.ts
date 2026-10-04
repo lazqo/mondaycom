@@ -44,6 +44,11 @@ export const AGENT_CAPABILITIES = [
   "create_quote_draft",
   "propose_booking",
   "propose_bom",
+  // Internal record keeping (Hermes through the CRM's MCP tools): never seen by a customer.
+  "add_internal_note",
+  "create_internal_task",
+  "propose_fact_update",
+  "request_review",
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 

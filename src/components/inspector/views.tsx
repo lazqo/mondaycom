@@ -67,8 +67,16 @@ export function ConflictLine({ item, showSubject = true }: { item: ConflictItem;
   return (
     <div className="space-y-1.5 px-4 py-3 text-sm" data-testid="fact-conflict">
       <p className="text-gray-900">
-        <span className="font-medium">{FACT_LABELS[f.key as FactKey] ?? f.key}</span>: CRM has <span className="font-medium">{fmt(f.currentValue)}</span>, the new {sourceLabel(f.sourceType)} says{" "}
-        <span className="font-medium">{f.display || fmt(f.value)}</span>
+        <span className="font-medium">{FACT_LABELS[f.key as FactKey] ?? f.key}</span>:{" "}
+        {f.state === "proposed" ? (
+          <>
+            {f.sourceType === "hermes" ? "Hermes proposes" : `the ${sourceLabel(f.sourceType)} suggests`} <span className="font-medium">{f.display || fmt(f.value)}</span> (not filled in until you apply it)
+          </>
+        ) : (
+          <>
+            CRM has <span className="font-medium">{fmt(f.currentValue)}</span>, {f.sourceType === "hermes" ? "Hermes says" : `the new ${sourceLabel(f.sourceType)} says`} <span className="font-medium">{f.display || fmt(f.value)}</span>
+          </>
+        )}
         {showSubject && item.subject ? (
           <>
             {" · "}
@@ -79,7 +87,7 @@ export function ConflictLine({ item, showSubject = true }: { item: ConflictItem;
         ) : null}
       </p>
       {f.evidence ? <p className="text-xs italic text-gray-500">“{f.evidence}”</p> : null}
-      <FactDecision factId={f.id} />
+      <FactDecision factId={f.id} proposed={f.state === "proposed"} />
     </div>
   );
 }

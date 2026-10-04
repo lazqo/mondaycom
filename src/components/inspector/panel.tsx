@@ -4,6 +4,7 @@ import { getInspectorPanel } from "@/queries/inspector";
 import { formatDateTime } from "@/lib/utils";
 import { AwaitingLine, CommitmentLine, ConflictLine, sourceLabel, UnderstandingView } from "./views";
 import { ReinspectButton } from "./controls";
+import { HermesView } from "./hermes-view";
 
 /**
  * The Inspector on a lead or job page: open commitments (ours and the customer's), anything
@@ -63,7 +64,7 @@ export async function InspectorPanel({ leadId, jobId, contactId, canApprove }: {
               </span>
               <ReinspectButton sourceType={p.latest.inspection.sourceType as "email" | "recording"} sourceId={p.latest.inspection.sourceId} />
             </p>
-            <p className="text-sm text-gray-900">{p.latest.inspection.summary}</p>
+            <HermesView inspection={p.latest.inspection} actions={p.latest.actions} compact />
             <UnderstandingView u={p.latest.understanding} />
           </div>
         ) : null}

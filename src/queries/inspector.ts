@@ -61,6 +61,8 @@ export type ReviewItem = {
   understanding: Understanding;
   identity: IdentityResult;
   candidates: (IdentityCandidate & { subject: Subject })[];
+  /** The review's own action (NEEDS_REVIEW), with Hermes's recommendation in its payload. */
+  reviewAction: InspectorActionRow | null;
 };
 export type AwaitingItem = { action: InspectorActionRow; source: SourceRef | null; subject: Subject };
 export type ConflictItem = { fact: Fact; source: SourceRef | null; subject: Subject };
@@ -71,8 +73,11 @@ export async function getInspectorQueue() {
   const [review, awaiting, conflicts] = await Promise.all([
     db.query.inspections.findMany({ where: eq(inspections.status, "needs_review"), orderBy: [desc(inspections.sourceAt)], limit: 50 }),
     db.query.inspectorActions.findMany({ where: and(eq(inspectorActions.status, "awaiting_approval"), notInArray(inspectorActions.type, IDENTITY_ACTIONS)), orderBy: [desc(inspectorActions.createdAt)], limit: 50 }),
-    db.query.facts.findMany({ where: eq(facts.state, "conflict"), orderBy: [desc(facts.createdAt)], limit: 50 }),
+    db.query.facts.findMany({ where: inArray(facts.state, ["conflict", "proposed"]), orderBy: [desc(facts.createdAt)], limit: 50 }),
   ]);
+  const reviewActions = review.length
+    ? await db.query.inspectorActions.findMany({ where: and(inArray(inspectorActions.inspectionId, ids(review.map((r) => r.id))), eq(inspectorActions.type, "NEEDS_REVIEW"), eq(inspectorActions.status, "awaiting_approval")) })
+    : [];
   const actionInspections = awaiting.length ? await db.select({ id: inspections.id, sourceType: inspections.sourceType, sourceId: inspections.sourceId }).from(inspections).where(inArray(inspections.id, ids(awaiting.map((a) => a.inspectionId)))) : [];
   const insById = new Map(actionInspections.map((i) => [i.id, i]));
   const src = await sourcesFor([...review, ...conflicts.map((f) => ({ sourceType: f.sourceType, sourceId: f.sourceId })), ...actionInspections]);
@@ -98,6 +103,7 @@ export async function getInspectorQueue() {
         understanding: r.understanding as unknown as Understanding,
         identity: r.identity as unknown as IdentityResult,
         candidates: ((r.identity as unknown as IdentityResult).candidates ?? []).slice(0, 5).map((c) => ({ ...c, subject: subjectOf(n, c) })),
+        reviewAction: reviewActions.find((a) => a.inspectionId === r.id) ?? null,
       }),
     ),
     awaiting: awaiting.map((a): AwaitingItem => {
@@ -116,7 +122,7 @@ export async function inspectorReviewCount(): Promise<number> {
             (i.source_type = 'email' and exists (select 1 from emails e where e.id = i.source_id))
             or (i.source_type = 'recording' and exists (select 1 from recordings r where r.id = i.source_id and r.status <> 'dismissed'))))
         + (select count(*) from ${inspectorActions} where ${inspectorActions.status} = 'awaiting_approval' and ${inspectorActions.type} not in ('NEEDS_REVIEW', 'LINK_RECORDING'))
-        + (select count(*) from ${facts} where ${facts.state} = 'conflict')`,
+        + (select count(*) from ${facts} where ${facts.state} in ('conflict', 'proposed'))`,
     })
     .from(sql`(select 1) as one`);
   return Number(r?.n ?? 0);
@@ -181,12 +187,13 @@ export async function getInspectorPanel(scope: { leadId?: string | null; jobId?:
   const [latest, awaiting, conflicts, commitmentItems] = await Promise.all([
     db.query.inspections.findFirst({ where: and(match(inspections), ne(inspections.status, "superseded")), orderBy: [desc(inspections.sourceAt)] }),
     db.query.inspectorActions.findMany({ where: and(match(inspectorActions), eq(inspectorActions.status, "awaiting_approval"), notInArray(inspectorActions.type, IDENTITY_ACTIONS)), orderBy: [desc(inspectorActions.createdAt)], limit: 20 }),
-    db.query.facts.findMany({ where: and(match(facts), eq(facts.state, "conflict")), orderBy: [desc(facts.createdAt)], limit: 20 }),
+    db.query.facts.findMany({ where: and(match(facts), inArray(facts.state, ["conflict", "proposed"])), orderBy: [desc(facts.createdAt)], limit: 20 }),
     getOutstandingCommitments({ leadIds, contactId: scope.contactId, jobId: scope.jobId }),
   ]);
   const src = await sourcesFor([...(latest ? [latest] : []), ...conflicts]);
+  const latestActions = latest ? await db.query.inspectorActions.findMany({ where: eq(inspectorActions.inspectionId, latest.id), orderBy: [asc(inspectorActions.createdAt)] }) : [];
   return {
-    latest: latest ? { inspection: latest, source: src.get(latest.sourceId) ?? null, understanding: latest.understanding as unknown as Understanding } : null,
+    latest: latest ? { inspection: latest, source: src.get(latest.sourceId) ?? null, understanding: latest.understanding as unknown as Understanding, actions: latestActions } : null,
     awaiting: awaiting.map((a): AwaitingItem => ({ action: a, source: null, subject: null })),
     conflicts: conflicts.map((f): ConflictItem => ({ fact: f, source: src.get(f.sourceId) ?? null, subject: null })),
     commitments: commitmentItems,

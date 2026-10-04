@@ -10,6 +10,7 @@ import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { LEAD_SOURCES, LEAD_STATUSES, LEAD_URGENCIES } from "@/lib/constants";
 import { typedNextAction } from "@/lib/leads/next-action";
+import { recordFeedback } from "@/lib/inspector/feedback";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
 import { isWebsiteLeadSender, WEBSITE_SENDER_MESSAGE } from "@/lib/email/website-lead";
@@ -145,6 +146,9 @@ export async function updateLead(id: string, input: unknown): Promise<ActionResu
     action: changes.status ? "status_changed" : "updated",
     detail: { changes },
   });
+  if (changes.status && (data.status === "won" || data.status === "lost")) {
+    await recordFeedback({ leadId: id, kind: data.status === "won" ? "lead_won" : "lead_lost", value: { via: "lead", lostReason: (data.lostReason as string | undefined) ?? existing.lostReason ?? null }, userId: user.id });
+  }
   revalidatePath("/leads");
   revalidatePath(`/leads/${id}`);
   return ok(undefined);

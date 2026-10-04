@@ -55,3 +55,9 @@ export async function reinspectAction(sourceType: SourceType, sourceId: string):
   if (!["email", "recording"].includes(sourceType) || !id.safeParse(sourceId).success) return fail("Invalid source");
   return run(async () => ({ status: (await inspector.inspect(sourceType, sourceId, { force: true }))?.status ?? null }));
 }
+
+/** Close a review Hermes could not decide (or could not read): Chris has dealt with it. */
+export async function resolveReviewAction(inspectionId: string, note: string): Promise<ActionResult<undefined>> {
+  if (!id.safeParse(inspectionId).success) return fail("Invalid inspection");
+  return run(async (actor) => void (await inspector.resolveReview(inspectionId, actor, note.trim() || null)));
+}

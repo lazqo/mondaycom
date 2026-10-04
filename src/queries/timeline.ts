@@ -1,4 +1,5 @@
-import "server-only";
+// No "server-only" marker here: the Inspector reads timelines outside Next.js too (the worker,
+// pnpm hermes:check). It talks to the database directly, so it can never run in a browser anyway.
 /**
  * The complete history of a relationship, as one chronological list.
  *
@@ -33,7 +34,7 @@ import { stripQuotedReply } from "@/lib/email/parse";
 import { zonedToUtc } from "@/lib/calendar/ics";
 import { formatDate, formatDateOnly, formatDateTime, formatMoney, formatTime } from "@/lib/utils";
 import { isWebsiteLeadSender } from "@/lib/email/website-lead";
-import { ACTION_LABELS, FACT_LABELS } from "@/lib/inspector/labels";
+import { ACTION_LABELS, FACT_LABELS, HERMES_ACTION_LABELS } from "@/lib/inspector/labels";
 import type { ActionType, FactKey } from "@/lib/inspector/types";
 
 export type TimelineKind =
@@ -130,8 +131,16 @@ type Scope = { leadIds: string[]; contactId: string | null; label: boolean };
 function inspectorItem(action: string, d: Record<string, unknown>, leadId: string | null): Pick<TimelineItem, "kind" | "title" | "meta" | "body" | "href"> | null | undefined {
   const fact = (k: unknown) => FACT_LABELS[k as FactKey] ?? String(k).replace(/_/g, " ");
   switch (action) {
-    case "inspected":
-      return { kind: "inspector", title: `Inspector read the ${d.sourceType === "recording" ? "conversation" : "email"}${d.title ? ` “${String(d.title)}”` : ""}`, body: d.summary ? String(d.summary) : null, href: leadId ? `/leads/${leadId}` : "/inspector" };
+    case "inspected": {
+      const what = `${d.sourceType === "recording" ? "conversation" : "email"}${d.title ? ` “${String(d.title)}”` : ""}`;
+      const meta =
+        d.engine === "hermes" && d.recommended
+          ? `Recommended: ${HERMES_ACTION_LABELS[String(d.recommended)] ?? String(d.recommended)}${typeof d.confidence === "number" ? ` · ${Math.round(d.confidence * 100)}% sure` : ""}`
+          : d.engine === "fallback"
+            ? "Hermes unavailable: waiting for review"
+            : null;
+      return { kind: "inspector", title: `${d.engine === "hermes" ? "Hermes" : "Inspector"} read the ${what}`, meta, body: d.summary ? String(d.summary) : null, href: leadId ? `/leads/${leadId}` : "/inspector" };
+    }
     case "inspector_note":
       return null; // the same summary as "inspected"
     case "facts_applied":

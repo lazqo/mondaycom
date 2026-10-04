@@ -94,6 +94,16 @@ async function task(ctx: RouteContext, a: PlannedAction, def: { title: string; k
   return row ? { taskId: row.id } : { taskId: null, note: "an open task of this kind already exists" };
 }
 
+/** "today", "next_business_day", a YYYY-MM-DD or an ISO date: the task's due date in the business's time zone. */
+function dueDate(due: unknown, today: string): string {
+  if (due === "today") return today;
+  if (typeof due === "string" && /^\d{4}-\d{2}-\d{2}/.test(due)) {
+    const d = due.length === 10 ? due : dateInAppTz(new Date(due));
+    return d < today ? today : d;
+  }
+  return businessDay(new Date(), 1);
+}
+
 const who = async (leadId: string | null) => (leadId ? ((await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { name: true } }))?.name ?? "the customer") : "the customer");
 
 /** Carry out one action. Returns what it produced, or throws (recorded as failed). */
@@ -118,7 +128,7 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
     case "PROPOSE_LEAD_FACT_UPDATE":
       return { status: "done", result: ctx.applyFacts ? await ctx.applyFacts() : {} };
     case "CREATE_INTERNAL_TASK":
-      return { status: "done", result: await task(ctx, a, { title: String(a.payload.title ?? a.reason), kind: String(a.payload.kind ?? "task"), due: a.payload.due === "today" ? today : businessDay(new Date(), 1) }) };
+      return { status: "done", result: await task(ctx, a, { title: String(a.payload.title ?? a.reason), kind: String(a.payload.kind ?? "task"), due: dueDate(a.payload.due, today), detail: a.payload.detail ? String(a.payload.detail) : undefined }) };
     case "CREATE_SERVICE_CASE":
       return { status: "done", result: await task(ctx, a, { title: `Service case: ${await who(ctx.leadId)}`, kind: "service_case", due: a.payload.urgency === "urgent" ? today : businessDay(new Date(), 1), detail: `${a.reason} "${ctx.input.text.slice(0, 300)}"` }) };
     case "CALL_CUSTOMER": {
@@ -126,7 +136,10 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       return { status: "done", result: await task(ctx, a, { title: `Call ${await who(ctx.leadId)}`, kind: "call", due: today, detail: `${a.reason}${ask}` }) };
     }
     case "PREPARE_FOLLOW_UP":
-      return { status: "done", result: await task(ctx, a, { title: `Follow up ${await who(ctx.leadId)}`, kind: "follow_up", due: businessDay(new Date(), Number(a.payload.inDays ?? 3)) }) };
+      return {
+        status: "done",
+        result: await task(ctx, a, { title: a.payload.title ? String(a.payload.title) : `Follow up ${await who(ctx.leadId)}`, kind: "follow_up", due: a.payload.due ? dueDate(a.payload.due, today) : businessDay(new Date(), Number(a.payload.inDays ?? 3)) }),
+      };
     case "RUN_BUSINESS_BRAIN": {
       if (!ctx.leadId) return { status: "blocked", result: { reason: "No open lead to assess. Create a lead for this customer first." } };
       const input = await enquiryWithFacts(ctx.leadId);
@@ -144,8 +157,9 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       if (brain.siteVisitRequired) return { status: "blocked", result: { reason: "The Business Brain requires a site visit first.", siteVisitRequired: true } };
       // No approved price for anything in it: no quote and no reply, a pricing task for Chris instead.
       if (!Number(brain.pricedLines ?? 0)) {
-        const t = await task(ctx, a, { title: `Price the quote for ${await who(ctx.leadId)}`, kind: "quote", due: today, detail: "The Business Brain designed the system but nothing in it has an approved price yet, so no quote was prepared. Approve the trade prices (or enter the quote by hand), then prepare it from the assessment." });
-        return { status: "blocked", result: { reason: "Nothing in the design has an approved price yet, so no quote was prepared.", ...t } };
+        const title = `Price the quote for ${await who(ctx.leadId)}`;
+        const t = await task(ctx, a, { title, kind: "quote", due: today, detail: "The Business Brain designed the system but nothing in it has an approved price yet, so no quote was prepared. Approve the trade prices (or enter the quote by hand), then prepare it from the assessment." });
+        return { status: "blocked", result: { reason: "Nothing in the design has an approved price yet, so no quote was prepared.", ...t, created: title } };
       }
       // Reply only if there is no unsent email already waiting for this lead.
       const waiting = ctx.leadId ? await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, ctx.leadId), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } }) : null;
@@ -161,7 +175,11 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       const waiting = ctx.leadId ? await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, ctx.leadId), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } }) : null;
       if (waiting) return { status: "done", result: { draftId: waiting.id, note: "a reply is already waiting for review" } };
       const src = ctx.input.sourceType === "email" ? await db.query.emails.findFirst({ where: eq(emails.id, ctx.input.sourceId), columns: { threadId: true, subject: true } }) : null;
-      const mail = composeQuestionsEmail(lead?.name ?? ctx.input.from.name, (a.payload.ask as string[]) ?? [], src?.subject ?? null);
+      // A reply Hermes wrote (already checked by the validator), or the blocking questions only.
+      const mail =
+        typeof a.payload.body === "string"
+          ? { subject: String(a.payload.subject ?? (src?.subject ? (/^re:/i.test(src.subject) ? src.subject : `Re: ${src.subject}`) : "Your enquiry")), body: a.payload.body }
+          : composeQuestionsEmail(lead?.name ?? ctx.input.from.name, (a.payload.ask as string[]) ?? [], src?.subject ?? null);
       const d = await createDraft({ kind: "email", leadId: ctx.leadId, contactId: ctx.contactId, threadId: src?.threadId ?? null, to: [to], subject: mail.subject, body: mail.body }, actor, { submit: true });
       return { status: "done", result: { draftId: d.id } };
     }
@@ -171,8 +189,10 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
 }
 
 /** Store and carry out an inspection's actions. Approval actions wait; auto ones run now. */
-export async function routeActions(planned: PlannedAction[], ctx: RouteContext): Promise<{ id: string; type: ActionType; status: string }[]> {
-  const out: { id: string; type: ActionType; status: string }[] = [];
+export type RoutedAction = { id: string; type: ActionType; status: string; rule: string; result: Record<string, unknown> | null };
+
+export async function routeActions(planned: PlannedAction[], ctx: RouteContext): Promise<RoutedAction[]> {
+  const out: RoutedAction[] = [];
   const earlier = new Map<ActionType, Record<string, unknown>>();
   const queue = [...planned];
   while (queue.length) {
@@ -186,7 +206,7 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
         result = r.result;
         earlier.set(a.type, r.result);
         // The Brain decides a site visit is needed: propose one instead of quoting.
-        if (a.type === "PREPARE_QUOTE" && r.result.siteVisitRequired && !planned.some((p) => p.type === "PROPOSE_SITE_VISIT")) {
+        if ((a.type === "PREPARE_QUOTE" || a.type === "RUN_BUSINESS_BRAIN") && r.result.siteVisitRequired && ![...planned, ...queue].some((p) => p.type === "PROPOSE_SITE_VISIT") && !out.some((o) => o.type === "PROPOSE_SITE_VISIT")) {
           const reasons = (earlier.get("RUN_BUSINESS_BRAIN")?.siteVisitReasons as string[] | undefined) ?? [];
           queue.push({ type: "PROPOSE_SITE_VISIT", mode: "approval", rule: "business_brain_site_visit", reason: `The Business Brain requires a site visit${reasons.length ? `: ${reasons.join("; ")}` : ""}.`, payload: {} });
         }
@@ -199,7 +219,7 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
       .insert(inspectorActions)
       .values({ inspectionId: ctx.inspectionId, type: a.type, mode: a.mode, status, rule: a.rule, reason: a.reason, payload: a.payload, result, leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId })
       .returning({ id: inspectorActions.id });
-    out.push({ id: row.id, type: a.type, status });
+    out.push({ id: row.id, type: a.type, status, rule: a.rule, result });
   }
   return out;
 }

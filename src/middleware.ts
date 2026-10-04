@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
 const SESSION_COOKIE = "gs_session";
-const PUBLIC_PATHS = ["/login", "/setup", "/api/health"];
+// /api/mcp authenticates Hermes itself, with its own bearer token (no session cookie).
+const PUBLIC_PATHS = ["/login", "/setup", "/api/health", "/api/mcp"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

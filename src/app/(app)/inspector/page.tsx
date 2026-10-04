@@ -3,8 +3,10 @@ import Link from "next/link";
 import { requireOffice } from "@/lib/auth";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { getInspectorQueue, getJevComparison, getRecentInspections } from "@/queries/inspector";
-import { ACTION_LABELS, ActionStatus, AwaitingLine, ConflictLine, sourceLabel, UnderstandingView } from "@/components/inspector/views";
-import { IdentityReview, ReinspectButton } from "@/components/inspector/controls";
+import { ACTION_LABELS, AwaitingLine, ConflictLine, sourceLabel, UnderstandingView } from "@/components/inspector/views";
+import { HermesReviewControls, IdentityReview, ReinspectButton } from "@/components/inspector/controls";
+import { EngineBadge, HermesView } from "@/components/inspector/hermes-view";
+import { REVIEW_KIND_LABELS } from "@/lib/inspector/labels";
 import { formatDateTime } from "@/lib/utils";
 import type { ActionType } from "@/lib/inspector/types";
 
@@ -22,42 +24,68 @@ export default async function InspectorPage() {
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Inspector</h1>
         <p className="text-sm text-gray-500">
-          Every email and Plaud conversation is read here. Internal work (notes, tasks, the Business Brain, prepared quotes and drafts) is done for you; anything that reaches a customer waits for{" "}
+          Hermes reads every email and Plaud conversation and recommends the next step. The CRM&apos;s rules check it, the Business Brain decides design and pricing, internal work (notes, tasks, prepared quotes and drafts) is done for you, and anything that reaches a customer waits for{" "}
           {canApprove ? "you" : "Chris"}. Nothing is sent from this page.
         </p>
       </div>
 
       <Card data-testid="inspector-identity">
-        <CardHeader title={<span className="inline-flex items-center gap-2">Who is this? {count(q.review.length)}</span>} />
-        {q.review.length === 0 ? <p className="px-4 py-3 text-sm text-gray-500">Every email and conversation is matched. Anything uncertain waits here, with nothing written to a customer until you choose.</p> : null}
+        <CardHeader title={<span className="inline-flex items-center gap-2">Needs your review {count(q.review.length)}</span>} />
+        {q.review.length === 0 ? <p className="px-4 py-3 text-sm text-gray-500">Nothing waiting. Anything uncertain (who it is, what Hermes could not read or was unsure about) waits here, with nothing customer-facing done until you decide.</p> : null}
         <div className="divide-y divide-gray-100">
-          {q.review.map((r) => (
-            <div key={r.inspection.id} className="space-y-2 px-4 py-3" data-testid="identity-review">
-              <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span>
-                  <span className="font-medium text-gray-900">{r.source?.title ?? sourceLabel(r.inspection.sourceType)}</span>
-                  <span className="text-gray-500">
-                    {" "}
-                    · {r.source?.from ?? sourceLabel(r.inspection.sourceType)} · {formatDateTime(r.inspection.sourceAt)}
+          {q.review.map((r) => {
+            const kind = r.inspection.reviewKind ?? "identity";
+            const payload = (r.reviewAction?.payload ?? {}) as { hermesSuggestion?: { key: string; reason: string } | null; plan?: unknown[] };
+            const suggested = payload.hermesSuggestion ? (payload.hermesSuggestion.key === "new" ? "a new customer" : (r.candidates.find((c) => (c.leadId ? `lead:${c.leadId}` : `customer:${c.contactId}`) === payload.hermesSuggestion!.key)?.subject?.label ?? payload.hermesSuggestion.key)) : null;
+            return (
+              <div key={r.inspection.id} className="space-y-2 px-4 py-3" data-testid={kind === "identity" ? "identity-review" : "hermes-review"}>
+                <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge className="bg-[#ffcb00] text-gray-900">{REVIEW_KIND_LABELS[kind] ?? kind}</Badge>
+                    <span className="font-medium text-gray-900">{r.source?.title ?? sourceLabel(r.inspection.sourceType)}</span>
+                    <span className="text-gray-500">
+                      {r.source?.from ?? sourceLabel(r.inspection.sourceType)} · {formatDateTime(r.inspection.sourceAt)}
+                    </span>
                   </span>
-                </span>
-                {r.source ? (
-                  <Link href={r.source.href} className="text-xs text-brand-700 hover:underline">
-                    Open {sourceLabel(r.inspection.sourceType)}
-                  </Link>
-                ) : null}
-              </p>
-              <p className="text-sm text-gray-900">{r.inspection.summary}</p>
-              <p className="text-xs text-gray-600">{r.identity.reason}</p>
-              <details className="text-sm">
-                <summary className="cursor-pointer text-xs text-gray-500">What it says (not written to anyone yet)</summary>
-                <div className="mt-2">
-                  <UnderstandingView u={r.understanding} />
-                </div>
-              </details>
-              <IdentityReview inspectionId={r.inspection.id} candidates={r.candidates} />
-            </div>
-          ))}
+                  {r.source ? (
+                    <Link href={r.source.href} className="text-xs text-brand-700 hover:underline">
+                      Open {sourceLabel(r.inspection.sourceType)}
+                    </Link>
+                  ) : null}
+                </p>
+                {kind === "identity" ? (
+                  <>
+                    <p className="text-sm text-gray-900">{r.inspection.summary}</p>
+                    <p className="text-xs text-gray-600">{r.identity.reason}</p>
+                    {suggested ? (
+                      <p className="text-xs text-gray-600" data-testid="hermes-identity-suggestion">
+                        Hermes suggests {suggested}
+                        {payload.hermesSuggestion?.reason ? ` (${payload.hermesSuggestion.reason})` : ""}. That alone never files it: you choose.
+                      </p>
+                    ) : null}
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-xs text-gray-500">What it says (not written to anyone yet)</summary>
+                      <div className="mt-2">
+                        <UnderstandingView u={r.understanding} />
+                      </div>
+                    </details>
+                    <IdentityReview inspectionId={r.inspection.id} candidates={r.candidates} />
+                  </>
+                ) : (
+                  <>
+                    <HermesView inspection={r.inspection} actions={r.reviewAction ? [r.reviewAction] : []} compact={false} />
+                    <HermesReviewControls
+                      inspectionId={r.inspection.id}
+                      reviewActionId={r.reviewAction?.id ?? null}
+                      canAccept={canApprove && kind === "hermes_low_confidence" && Array.isArray(payload.plan)}
+                      sourceType={r.inspection.sourceType as "email" | "recording"}
+                      sourceId={r.inspection.sourceId}
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       </Card>
 
@@ -72,7 +100,7 @@ export default async function InspectorPage() {
           </div>
         </Card>
         <Card data-testid="inspector-conflicts">
-          <CardHeader title={<span className="inline-flex items-center gap-2">Conflicting facts {count(q.conflicts.length)}</span>} />
+          <CardHeader title={<span className="inline-flex items-center gap-2">Facts to check {count(q.conflicts.length)}</span>} />
           {q.conflicts.length === 0 ? <p className="px-4 py-3 text-sm text-gray-500">Nothing new disagrees with the CRM. When it does, the CRM keeps its value until you choose.</p> : null}
           <div className="divide-y divide-gray-100">
             {q.conflicts.map((f) => (
@@ -99,7 +127,8 @@ export default async function InspectorPage() {
                   <span className="block truncate text-xs text-gray-500">{r.inspection.summary}</span>
                 </span>
                 <span className="flex flex-wrap gap-1">
-                  {r.inspection.status === "needs_review" ? <Badge className="bg-[#ffcb00] text-gray-900">Who is this?</Badge> : null}
+                  <EngineBadge engine={r.inspection.engine} />
+                  {r.inspection.status === "needs_review" ? <Badge className="bg-[#ffcb00] text-gray-900">{REVIEW_KIND_LABELS[r.inspection.reviewKind ?? "identity"] ?? "Needs review"}</Badge> : null}
                   {r.actions
                     .filter((a) => a.type !== "ADD_INTERNAL_NOTE" && a.type !== "PROPOSE_LEAD_FACT_UPDATE")
                     .map((a) => (
@@ -110,28 +139,7 @@ export default async function InspectorPage() {
                 </span>
               </summary>
               <div className="mt-3 space-y-3 border-l-2 border-gray-100 pl-3">
-                <UnderstandingView u={r.understanding} />
-                <ul className="space-y-1">
-                  {r.actions.map((a) => (
-                    <li key={a.id} className="flex flex-wrap items-center gap-2 text-xs">
-                      <ActionStatus status={a.status} />
-                      <span className="font-medium text-gray-900">{ACTION_LABELS[a.type as ActionType] ?? a.type}</span>
-                      <span className="text-gray-600">{a.reason}</span>
-                      {a.result && typeof a.result.reason === "string" ? <span className="text-gray-500">({a.result.reason})</span> : null}
-                      {a.result && typeof a.result.error === "string" ? <span className="text-red-600">({a.result.error})</span> : null}
-                      {a.result && typeof a.result.quoteId === "string" ? (
-                        <Link href={`/quotes/${a.result.quoteId}`} className="text-brand-700 hover:underline">
-                          open quote
-                        </Link>
-                      ) : null}
-                      {a.result && typeof a.result.draftId === "string" ? (
-                        <Link href="/approvals" className="text-brand-700 hover:underline">
-                          draft in Approvals
-                        </Link>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                <HermesView inspection={r.inspection} actions={r.actions} />
                 <div className="flex items-center gap-3 text-xs">
                   {r.source ? (
                     <Link href={r.source.href} className="text-brand-700 hover:underline">

@@ -33,6 +33,12 @@ Production runs the built-in offline classifier. There is no Anthropic account o
 | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Auto-create leads at or above this; below goes to Needs review. Raise to `0.9` to be cautious. |
 | `ANTHROPIC_API_KEY` | `sk-ant-…` | Only if you ever switch `AI_PROVIDER` away from `rules`. From console.anthropic.com; costs roughly 2 US cents per email classified. |
 | `AI_MODEL` | `claude-opus-5` | Only used when the provider is Anthropic. |
+| `HERMES_API_URL` | `http://host.docker.internal:8642` | Hermes Agent's API server. With this and `HERMES_API_KEY` unset, Hermes is not connected and every new email and conversation waits in the Inspector for Chris. See section 17 of `docs/DEPLOYMENT_HANDOFF.md`. |
+| `HERMES_API_KEY` | `openssl rand -hex 32` | The `API_SERVER_KEY` set in Hermes Agent. |
+| `HERMES_MCP_TOKEN` | `openssl rand -hex 32` | Turns on `/api/mcp`, the CRM's tools for Hermes (read, and prepare/propose only). At least 24 characters. Unset = the endpoint is off. |
+| `HERMES_MODEL` | `hermes-agent` | Optional: the model/profile name Hermes exposes. |
+| `HERMES_TIMEOUT_MS` | `120000` | Optional: how long to wait for Hermes before falling back to review. |
+| `HERMES_MIN_CONFIDENCE` | `0.6` | Optional: below this, Hermes's recommendation waits for Chris. |
 | `JEV_SHADOW` | `off` | Leave off. `on` (together with `ANTHROPIC_API_KEY`) runs Jev beside the Inspector's rules in shadow mode: it classifies only, never drives an action, and sends the email or transcript text to Anthropic. See section 17 of `docs/DEPLOYMENT_HANDOFF.md`. |
 | `JEV_MODEL` | `claude-opus-5-5` | Only used when Jev is on. |
 
