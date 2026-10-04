@@ -9,7 +9,7 @@
  */
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { cctvAssessments, commitments, contacts, emails, events, facts, inspections, jobs, leads, quotes, recordings, tasks } from "@/db/schema";
+import { cctvAssessments, commitments, contacts, emails, events, facts, inspections, inspectorFeedback, jobs, leads, quotes, recordings, tasks } from "@/db/schema";
 import { getContactTimeline, getLeadTimeline } from "@/queries/timeline";
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
@@ -67,7 +67,7 @@ const scopeOr = (t: { leadId: typeof tasks.leadId; contactId: typeof tasks.conta
 export async function readOpenTasks(s: Scope) {
   if (!s.leadId && !s.contactId) return [];
   const rows = await db.query.tasks.findMany({ where: and(eq(tasks.status, "open"), scopeOr(tasks, s)), orderBy: [desc(tasks.createdAt)], limit: 20 });
-  return rows.map((t) => ({ id: t.id, title: t.title, kind: t.kind, dueAt: t.dueAt, detail: t.detail?.slice(0, 300) ?? null }));
+  return rows.map((t) => ({ ref: `task:${t.id}`, id: t.id, title: t.title, kind: t.kind, dueAt: t.dueAt, detail: t.detail?.slice(0, 300) ?? null }));
 }
 
 export async function readCommitments(s: Scope, opts: { includeDone?: boolean } = {}) {
@@ -77,7 +77,7 @@ export async function readCommitments(s: Scope, opts: { includeDone?: boolean } 
     orderBy: [desc(commitments.createdAt)],
     limit: 20,
   });
-  return rows.map((c) => ({ id: c.id, owner: c.owner, ownerName: c.ownerName, action: c.action, dueAt: iso(c.dueAt), dueText: c.dueText, status: c.status, said: c.evidence }));
+  return rows.map((c) => ({ ref: `commitment:${c.id}`, id: c.id, owner: c.owner, ownerName: c.ownerName, action: c.action, dueAt: iso(c.dueAt), dueText: c.dueText, status: c.status, said: c.evidence, recordedAt: iso(c.createdAt) }));
 }
 
 /** Quotes as the customer sees them: no cost, margin or supplier. */
@@ -87,15 +87,48 @@ export async function readQuotes(s: Scope) {
     where: or(s.leadId ? eq(quotes.leadId, s.leadId) : sql`false`, s.contactId ? eq(quotes.contactId, s.contactId) : sql`false`),
     orderBy: [desc(quotes.createdAt)],
     limit: 10,
-    columns: { id: true, number: true, title: true, status: true, total: true, sentAt: true, createdAt: true, origin: true },
+    columns: { id: true, number: true, title: true, status: true, total: true, sentAt: true, acceptedAt: true, createdAt: true, origin: true },
   });
-  return rows.map((q) => ({ id: q.id, number: `Q-${q.number}`, title: q.title, status: q.status, totalIncGst: Number(q.total), sentAt: iso(q.sentAt), preparedBy: q.origin, createdAt: iso(q.createdAt) }));
+  return rows.map((q) => ({ ref: `quote:${q.id}`, id: q.id, number: `Q-${q.number}`, title: q.title, status: q.status, totalIncGst: Number(q.total), sentAt: iso(q.sentAt), acceptedAt: iso(q.acceptedAt), preparedBy: q.origin, createdAt: iso(q.createdAt) }));
 }
 
+/** Site visits and jobs with what happened when, so a later visit or job can be cited as evidence. */
 export async function readVisitsAndJobs(s: Scope) {
-  const visits = s.leadId ? await db.query.events.findMany({ where: and(eq(events.leadId, s.leadId), eq(events.kind, "site_visit")), orderBy: [desc(events.startsAt)], limit: 5, columns: { startsAt: true, title: true } }) : [];
-  const jobRows = s.leadId || s.contactId ? await db.query.jobs.findMany({ where: or(s.leadId ? eq(jobs.leadId, s.leadId) : sql`false`, s.contactId ? eq(jobs.contactId, s.contactId) : sql`false`), orderBy: [desc(jobs.createdAt)], limit: 5, columns: { id: true, number: true, title: true, status: true } }) : [];
-  return { siteVisits: visits.map((v) => ({ at: iso(v.startsAt), title: v.title })), jobs: jobRows.map((j) => ({ id: j.id, number: `J-${j.number}`, title: j.title, status: j.status })) };
+  const visits =
+    s.leadId || s.contactId
+      ? await db.query.events.findMany({ where: and(eq(events.kind, "site_visit"), or(s.leadId ? eq(events.leadId, s.leadId) : sql`false`, s.contactId ? eq(events.contactId, s.contactId) : sql`false`)), orderBy: [desc(events.startsAt)], limit: 5, columns: { id: true, startsAt: true, endsAt: true, title: true } })
+      : [];
+  const jobRows =
+    s.leadId || s.contactId
+      ? await db.query.jobs.findMany({ where: or(s.leadId ? eq(jobs.leadId, s.leadId) : sql`false`, s.contactId ? eq(jobs.contactId, s.contactId) : sql`false`), orderBy: [desc(jobs.createdAt)], limit: 5, columns: { id: true, number: true, title: true, status: true, siteAddress: true, createdAt: true, doneAt: true, invoicedAt: true } })
+      : [];
+  const now = Date.now();
+  return {
+    siteVisits: visits.map((v) => ({ ref: `visit:${v.id}`, at: iso(v.startsAt), title: v.title, held: v.endsAt.getTime() < now })),
+    jobs: jobRows.map((j) => ({ ref: `job:${j.id}`, id: j.id, number: `J-${j.number}`, title: j.title, status: j.status, site: j.siteAddress, createdAt: iso(j.createdAt), completedAt: iso(j.doneAt), invoicedAt: iso(j.invoicedAt) })),
+  };
+}
+
+/**
+ * Chris's recent corrections of Hermes (what it recommended, what he did instead, his note), so
+ * real decisions improve Hermes's judgement through its context rather than new hard-coded rules.
+ */
+export async function readRecentCorrections(limit = 12) {
+  const rows = await db.query.inspectorFeedback.findMany({
+    where: inArray(inspectorFeedback.kind, ["action_dismissed", "fact_rejected", "not_a_customer", "review_resolved", "commitment_cancelled", "proposed_lead_accepted", "hermes_decision_reversed", "identity_confirmed"]),
+    orderBy: [desc(inspectorFeedback.createdAt)],
+    limit,
+  });
+  const insIds = [...new Set(rows.map((r) => r.inspectionId).filter((x): x is string => !!x))];
+  const summaries = new Map((insIds.length ? await db.query.inspections.findMany({ where: inArray(inspections.id, insIds), columns: { id: true, summary: true } }) : []).map((i) => [i.id, i.summary]));
+  return rows.map((r) => ({
+    at: iso(r.createdAt),
+    about: r.inspectionId ? (summaries.get(r.inspectionId) ?? null) : null,
+    hermesRecommended: r.hermesRecommendation,
+    chrisDid: r.kind.replace(/_/g, " "),
+    subject: r.subject,
+    note: typeof r.value?.note === "string" ? r.value.note : null,
+  }));
 }
 
 /** The latest Business Brain run for a lead, as an outcome: never its costs. */

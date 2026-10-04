@@ -6,6 +6,7 @@ import { ACTION_LABELS, FACT_LABELS, HERMES_ACTION_LABELS } from "@/lib/inspecto
 import type { Check, Validation } from "@/lib/inspector/validate";
 import type { ActionType, FactKey, Understanding } from "@/lib/inspector/types";
 import { ActionStatus } from "./views";
+import { ReopenCommitmentButton } from "./controls";
 
 type StoredValidation = Pick<Validation, "hard" | "business" | "advisories" | "rejectedFacts" | "headline"> & { fallback?: { hermesStatus: string; error: string | null } };
 
@@ -140,6 +141,12 @@ export function HermesView({ inspection, actions, compact = false }: { inspectio
                   </Link>
                 ) : null}
                 {a.result && typeof (a.result as { error?: unknown }).error === "string" ? <span className="text-red-600">({String((a.result as { error: string }).error)})</span> : null}
+                {a.type === "RESOLVE_COMMITMENT" && a.status === "done" && typeof (a.result as { resolvedAs?: unknown } | null)?.resolvedAs === "string" ? (
+                  <>
+                    <span className="text-gray-800">“{String((a.result as { action?: string }).action ?? "")}”{(a.result as { evidenceRef?: string }).evidenceRef ? ` · shown by ${String((a.result as { evidenceRef?: string }).evidenceRef)}` : ""}</span>
+                    <ReopenCommitmentButton id={String((a.result as { commitmentId: string }).commitmentId)} />
+                  </>
+                ) : null}
                 {a.result && typeof (a.result as { inHand?: unknown }).inHand === "string" ? <span className="font-medium text-gray-800" data-testid="in-hand">{String((a.result as { inHand: string }).inHand)}</span> : null}
                 {a.result && Array.isArray((a.result as { items?: unknown }).items) && a.type === "OUTSTANDING" ? <span className="text-gray-800">{((a.result as { items: string[] }).items).slice(1).join(" · ")}</span> : null}
               </li>

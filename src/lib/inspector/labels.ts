@@ -18,6 +18,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   NO_ACTION: "No action",
   NEEDS_REVIEW: "Needs review",
   OUTSTANDING: "Outstanding",
+  RESOLVE_COMMITMENT: "Commitment kept",
 };
 
 /** What accepting does, in Chris's words. Never "send" or "confirm". */

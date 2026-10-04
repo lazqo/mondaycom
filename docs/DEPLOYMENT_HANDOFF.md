@@ -842,144 +842,160 @@ alarm panels, keypads, intercoms and access controllers.
 ## 17. Lead + Conversation Inspector (Hermes)
 
 Every new email and Plaud conversation is read by **Hermes**, Get Secure's own agent (Nous
-Research's Hermes Agent). Hermes understands what the customer means in context and recommends the
-next step. The CRM checks that recommendation against its rules, the Business Brain decides design
-and pricing, and Chris approves anything that reaches a customer.
+Research's Hermes Agent). Hermes is the operational intelligence: it decides what a message is and
+what should happen next. The CRM's guardrails only check that Hermes is authorised to do it safely.
+The Business Brain stays the technical and commercial authority, and Chris approves anything
+externally binding.
 
 ```
-email / Plaud conversation / CRM event
-  → identity (the CRM's hard rules: phone, email, thread, appointment, quote number; never a name alone)
-  → Hermes Inspector (understanding, facts with evidence, commitments, blockers, recommended action,
-    confidence, reason)
-  → validation + policy layer (hard guardrails, business rules, advisory checks)
-  → Business Brain (design, products, pricing: the authority)
-  → CRM prepares or proposes (tasks, notes, quote and reply drafts, site-visit proposals)
-  → Chris approves anything customer-facing
+email / Plaud conversation
+  → Hermes thinks and decides (lead or not, which work it belongs to, resolved or waiting,
+    commitments kept, next step)
+  → guardrails check authority, safety and data integrity
+  → Business Brain checks technical and commercial truth (design, products, pricing, policy)
+  → CRM carries out internal work (tasks, notes, filing, quote and reply drafts, proposals)
+  → Chris approves anything that reaches a customer or commits the business
 ```
 
 **Who decides what**
-- **Hermes:** what it means, and the recommended next action.
-- **Validator:** safety, data integrity and policy.
-- **Business Brain:** technical design and commercial truth.
+- **Hermes:** operational judgement. Every decision is audited, and Chris can reverse it.
+  - Lead or not a lead.
+  - What the customer is trying to achieve.
+  - Which lead, job or site a message belongs to, even from a new contact.
+  - Whether a matter is resolved, waiting on us, or waiting on the customer, and whether a
+    commitment was kept, citing CRM records.
+  - The next step: internal tasks and notes, running the Business Brain, preparing a quote or a
+    reply, proposing a site visit or booking.
+- **Guardrails:** authority, safety and data integrity only (below).
+- **Business Brain:** products, compatibility, supplier routing, labour, pricing, markup, packages,
+  the commercial-CCTV site-visit policy. If Hermes's recommendation conflicts with it, the Brain
+  wins.
 - **CRM:** the record and its history.
-- **Chris:** final approval of anything customer-facing or commercial.
+- **Chris:** approval of anything customer-facing or commercial, and the reviewer of anything Hermes
+  is unsure about.
 
-The old deterministic rules no longer decide what a customer means. They still find identity
-signals, provide the fallback when Hermes is unavailable, and are shown beside Hermes's reading for
-comparison only ("Old rules (comparison only)"). They never override Hermes.
+The old deterministic rules no longer decide anything:
+- the email rules classifier is a first signal, kept as evidence;
+- identity signals come from the CRM;
+- the rules are the fallback when Hermes is unavailable;
+- their reading is shown for comparison only ("Old rules (comparison only)").
 
-**Which emails Hermes reads.** The old rules email classifier ("lead", "not a lead", "needs
-review") is now only a first signal. It is kept on the email and in each Inspector run as evidence,
-never as the final interpretation.
-- **Filtered before Hermes:** only mail with a strong deterministic reason:
-  - an `Auto-Submitted` header;
-  - bulk, junk or list precedence;
-  - auto-reply headers;
-  - a `List-Unsubscribe` header (newsletters and marketing);
-  - a mailer-daemon or postmaster sender;
-  - auto-reply, out-of-office and bounce subjects.
-  These are never sent to Hermes.
-- **Everything else is read by Hermes in the background,** including email the rules classifier
-  called "not a lead".
-- **When the rules said "not a lead":**
-  - If Hermes agrees, or cannot be reached, the rules verdict stands. Nothing is put in front of
-    Chris and nothing is written. An unreachable Hermes is still retried later.
-  - If Hermes reads a genuine enquiry (a new enquiry, quote, visit or booking request, or a service
-    issue), it goes to **Needs your review → Hermes thinks this is a lead**. It is only a
-    proposal: no lead, customer, fact, task or commitment is created or changed. Chris chooses:
-    - **Make it a lead** creates the lead through the same path as accepting an email in the
-      Inbox. A customer is linked only by the existing exact-email match, never by a name. Hermes
-      then reads it again with the lead known.
-    - **Not a lead** closes the review.
-    Either choice is recorded in `inspector_feedback` beside Hermes's recommendation.
+Real cases improve Hermes, not the rules. Hermes's instructions and context carry:
+- the CRM records it needs, each with a ref it can cite (`job:…`, `visit:…`, `quote:…`, `task:…`,
+  `commitment:…`);
+- **Chris's recent corrections** (what Hermes recommended, what Chris did instead, the note), for
+  example a commitment reopened or a "not a lead" lead reopened.
 
-**The three tiers of checks**
-- **Hard guardrails (Hermes cannot override):**
-  - Identity is decided by the CRM's signals. A name alone never matches; Hermes may suggest who it
-    is, but nothing is written to a customer until Chris confirms.
-  - A fact is accepted only with evidence found in the email, form or transcript, and only with a
-    sane value. A fact that conflicts with the CRM is flagged with both values and never
-    overwritten, including on a re-read.
-  - A prepared reply may not quote a price, offer a discount or promise a date. If it tries, it is
-    held back and Chris gets a task.
-  - Nothing is sent, confirmed, accepted or discounted by the system. This is enforced in code by the
-    actor guard, for Hermes and the Inspector alike.
-  - A real enquiry is never silently "no action". This check looks at where the enquiry stands in
-    the CRM, so older conversations are judged correctly:
-    - If something is still open, that specific item becomes the action, marked **Outstanding**.
-      Examples: "We said we'd prepare and send the camera plan (later that day)", "Waiting on the
-      customer to send photos", "Open task: …". Open items are commitments from the conversation
-      that the CRM does not show as done, commitments still outstanding on the lead or customer, and
-      open tasks. Nothing new is created; the commitment or task is already on Today and the lead.
-    - If nothing is open and the CRM shows the enquiry has moved on, Hermes's "no action" stands and
-      the reason is recorded. Moved on means a job completed, invoiced or scheduled, a site visit
-      held, or a quote accepted with a job created.
-    - Otherwise it goes to Chris as before.
-    - **A commitment counts as kept when a later CRM event clearly proves that specific commitment
-      happened**, and nothing else is inferred:
+So real-world corrections feed back as:
 
-      | Commitment | Kept when, after it was said |
-      | --- | --- |
-      | "Book the installation visit" | The installation job was done or invoiced, or its appointment took place |
-      | "Come out for a site visit" | The visit or the job took place |
-      | "The customer will be available" | The visit or the job took place |
-      | "Go ahead with the quote" | The quote was accepted or a job was created |
-      | "Send the quote" | A quote was sent |
+```
+Hermes recommendation → Chris's correction or acceptance → outcome → Hermes's next judgement
+```
 
-      Sending a camera plan, sending photos and paying are never inferred. A job finished before
-      the conversation proves nothing. Commitments proven kept are closed, and the evidence goes on
-      the lead's timeline ("Commitment kept: … shown by J-1008 completed on …").
-  - Below 60% confidence, Hermes's recommendation waits for Chris instead of being acted on (see
-    `HERMES_MIN_CONFIDENCE` below).
-- **Business rules (deterministic, authoritative):**
-  - Commercial CCTV, or a customer asking for a visit, goes to a site-visit proposal.
-  - Only CCTV has a Business Brain; anything else becomes a manual-quote task.
-  - The Brain runs only with its inputs: home or business, cameras or areas, and storeys (for a
-    home). If any are missing, the customer is asked for exactly those.
-  - One prepared quote at a time. A revised quote after a sent one waits for Chris.
-  - After the Brain runs, the Brain decides. If it needs a site visit, a visit is proposed; if
-    nothing has an approved price, no quote is prepared and Chris gets "Price the quote".
-- **Advisory checks (logged, never blocking):**
-  - Two-storey cabling complexity.
-  - An upgrade with unknown cabling (the Brain assumes no reusable cable).
-  - Gaps that don't block progress (not asked).
-  - Low-confidence facts (proposed, not filled in).
-  - Where the old rules read it differently.
-  - Possible urgency.
-  - Hermes's own advisories.
+**Guardrails (enforced in code; Hermes cannot override them)**
+- **Nothing is binding without Chris:**
+  - no sending an email, quote or follow-up;
+  - no confirming a booking, visit or date;
+  - no accepting terms;
+  - no discount.
+  A prepared reply may not contain a price, a discount or a promised date. If it does, it is held
+  back and Chris gets a task. A customer saying yes becomes a task for Chris; terms are never
+  accepted automatically.
+- **No invented prices, costs or products, and no overriding the Business Brain.** Prices come only
+  from the Brain's approved data.
+- **A person's identity:**
+  - It is never decided by Hermes or by a name alone.
+  - No customer records are merged on weak evidence.
+  - The sender of a message is linked to a customer only by the CRM's identity rules (phone,
+    email, thread, appointment, quote number), or by Chris.
+- **Work can still continue in an evidenced context.** Example: an unknown sender, Zavier, writes
+  about the keypad at 138 Wiri Station Road.
+  - Hermes may place the message in that site's existing lead or job, as long as the message itself
+    shows it (the site's street address, the job or quote number, the thread), or the CRM found a
+    signal other than a name.
+  - The email is filed there and Hermes's tasks run there.
+  - Facts are only proposed, and a reply goes to the sender's own address.
+  - The sender stays unlinked until Chris links them. A context the message does not show is not
+    used.
+- **Data integrity:**
+  - A fact needs the source's own words (or the form field) and a sane value.
+  - A fact that differs from the CRM is flagged for Chris, never overwritten.
+  - A commitment needs the words that were said.
+  - **Closing an enquiry** ("no action") or **marking a commitment kept** needs Hermes to cite a CRM
+    record from its context (for example `job:…` completed). Otherwise it goes to Chris. The CRM
+    checks the record is real; it does not re-judge it.
+- **Confidence:** below the threshold (`HERMES_MIN_CONFIDENCE`, default 60%), Hermes's
+  recommendation waits for Chris.
+- **Leads someone has worked on:** Hermes never deletes anything. It may mark lost ("Not a lead
+  (Hermes)") only a lead the rules created from that same email that nobody has touched. A lead
+  that has been worked on is left for Chris.
+- No supplier credentials or secrets reach Hermes, and Hermes has no direct database access.
+
+**Business Brain authority (applied after Hermes's decision)**
+- Commercial CCTV is designed from a site visit, whatever Hermes recommended.
+- Only CCTV has a Business Brain; other services become a manual-quote task.
+- The Brain runs only with its inputs (home or business, cameras or areas, storeys for a home). If
+  any are missing, the customer is asked for them.
+- One prepared quote at a time. A revised quote after a sent one waits for Chris.
+- After a run, the Brain decides:
+  - site visit needed → a visit is proposed;
+  - nothing priced → "Price the quote";
+  - only commercial inputs missing → "Price the quote / complete costing".
+
+**Advisories** (shown, never deciding):
+- two-storey complexity;
+- unknown upgrade cabling;
+- gaps that don't block progress;
+- where the old rules read it differently;
+- Hermes's own notes.
+
+**Lead or not.** Hermes decides `lead_decision` for every inbound email.
+- **Lead:** the lead is created through the same path as accepting it in the Inbox. A customer is
+  linked only by an exact email match. The timeline says "Hermes created this lead from the email",
+  and Chris can mark it lost.
+- **Lead, but Hermes is under the threshold:** it goes to **Needs your review → Hermes thinks this
+  is a lead**, with **Make it a lead** / **Not a lead**.
+- **Not a lead:** an untouched lead the rules created from it is marked lost ("Not a lead
+  (Hermes)"). Reopening it is recorded as a correction.
+
+**Which emails Hermes reads.** Everything except mail with a strong mechanical reason:
+- an `Auto-Submitted` header;
+- bulk, junk or list precedence;
+- auto-reply headers;
+- a `List-Unsubscribe` header;
+- a mailer-daemon or postmaster sender;
+- auto-reply, out-of-office and bounce subjects.
+
+Those are never sent to Hermes. If Hermes cannot be reached, the rules' verdict stands, and it is
+retried.
+
+**Commitments.** Hermes marks an outstanding commitment kept (or no longer needed) when the record
+shows it, citing the record. Example: "Book the installation visit" is kept because `job:…` (J-1008)
+was completed. The commitment is closed, the timeline says "Hermes: commitment kept … shown by …",
+and the Inspector shows a **Reopen** button. Reopening is recorded as a correction.
+
+**Nothing is offered twice.**
+- A site visit, booking or revised quote is not offered again if it is already in hand: an open task
+  to arrange it, the same proposal waiting, or a visit already booked. It is shown as "Site visit
+  already awaiting arrangement."
+- A task is never created twice with the same title on the same lead.
+- A pricing task is not repeated when one is open.
 
 **What you see:** in **Inspector → Recently read**, each item shows Hermes's headline: recommended
-action, confidence and reason. Under it: the facts with their evidence, blockers, commitments and
-objections, the guardrails, business rules and advisories that applied, the Business Brain's
-outcome, and every action prepared. When a rule stops something, it says so, for example: "Prepare
-quote blocked by: Nothing in the design has an approved price yet · Action created: Price the quote
-for …". The lead page's Inspector panel and the timeline ("Hermes read the email · Recommended:
-Prepare quote · 94% sure") show the same.
+action, confidence and reason. Under it you see:
+- the facts with their evidence;
+- commitments;
+- the guardrails, Brain rules and advisories that applied;
+- the Brain's outcome;
+- every action taken or prepared.
 
-**Pricing is a task, not a review.** Sometimes the only thing stopping a quote is costing the
-Business Brain cannot finish, and everything it lists is a commercial input Chris enters (a price not
-yet approved, labour hours or an allowance not set). Then Chris gets a task, "Price the quote /
-complete costing for Q-1006", instead of a generic review.
-- This applies when Hermes asks for a review for that reason, or wants a quote that is already
-  prepared, or the Brain has just run.
-- The task is made only once. If one is already open, it is shown as already open.
-- Needs your review is kept for real decisions: a design gap (no suitable product, nothing
-  selected), a site visit, a blocking question, an objection or conflict, or a review reason that
-  is not pricing.
-
-**Website-form names are evidence.** Hermes quotes the form's details as the CRM shows them to it
-("Name: Andre Bunton"). Those labelled values are accepted as evidence from the source. A name that
-is not in the form is still refused. Who the customer is is still decided only by the CRM's identity
-rules.
-
-**Nothing is offered twice.** A site visit, booking or revised quote is not offered again if it is
-already in hand: an open task to arrange it, the same proposal already waiting for Chris, or (for a
-site visit) one already booked. The action is shown as "already in hand", with a note such as
-"Site visit already awaiting arrangement." Accepting a proposal after such a task was added does not
-create a second task. A task is never created twice with the same title on the same lead.
+When a guardrail or the Brain changed the outcome, it says which. The lead page's Inspector panel
+and the timeline show the same.
 
 **Needs your review** holds:
-- **Who is this?**: uncertain identity. Hermes's suggestion is shown; you choose.
+- **Who is this?**: the sender is not identified. Hermes's suggestion is shown; you choose. If Hermes
+  placed the message in an evidenced site or job, the work has already continued there.
+- **Hermes thinks this is a lead**: Hermes was under the threshold; Make it a lead / Not a lead.
 - **Hermes is unsure**: below the confidence threshold. "Accept recommendation" carries it out as you.
 - **Hermes asks you to look**, or **Hermes could not read it** (see Fallback). You can "Read again"
   or "Mark reviewed".
@@ -1061,7 +1077,7 @@ Until Hermes is connected, every new enquiry therefore waits in the Inspector fo
          Authorization: "Bearer <HERMES_MCP_TOKEN>"
        timeout: 120
    ```
-5. Check Hermes against the nine Inspector scenarios. Nothing is written to the CRM:
+5. Check Hermes against the ten Inspector scenarios. Nothing is written to the CRM:
    `docker compose -f docker-compose.prod.yml exec web pnpm hermes:check`
 6. Open the Inspector. Items that waited while Hermes was not connected can be read again with
    **Read again**. A re-read uses Hermes, and it never overwrites conflicting facts.

@@ -146,6 +146,9 @@ export async function updateLead(id: string, input: unknown): Promise<ActionResu
     action: changes.status ? "status_changed" : "updated",
     detail: { changes },
   });
+  if (changes.status && existing.status === "lost" && data.status !== "lost" && (existing.lostReason ?? "").startsWith("Not a lead (Hermes)")) {
+    await recordFeedback({ leadId: id, kind: "hermes_decision_reversed", subject: "lead_not_a_lead", value: { reopenedAs: data.status, hermesReason: existing.lostReason }, userId: user.id });
+  }
   if (changes.status && (data.status === "won" || data.status === "lost")) {
     await recordFeedback({ leadId: id, kind: data.status === "won" ? "lead_won" : "lead_lost", value: { via: "lead", lostReason: (data.lostReason as string | undefined) ?? existing.lostReason ?? null }, userId: user.id });
   }

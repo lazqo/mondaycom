@@ -114,6 +114,12 @@ const SCENARIOS: Scenario[] = [
     identity: matched,
     expect: (h) => (["new_enquiry", "quote_request", "site_visit_request", "booking_request", "service_issue"].includes(h.intent) && h.recommended_action !== "NO_ACTION" ? null : `intent ${h.intent} → ${h.recommended_action}`),
   },
+  {
+    name: "10. Unknown sender about an existing site (work continues there; the sender stays unlinked)",
+    input: email("Hi, the keypad at 138 Wiri Station Road is beeping again and won't arm. Zavier", "Keypad", { name: "Zavier", email: "zavier@example.com", phone: null }),
+    identity: { status: "needs_review", chosen: null, candidates: [{ leadId: "00000000-0000-0000-0000-00000000000b", contactId: null, jobId: null, label: "Wiri Depot (138 Wiri Station Road)", score: 0.5, signals: [{ kind: "address", detail: "address 138 Wiri Station Road", weight: 0.5 }] }], confidence: 0.5, reason: "Only address evidence." },
+    expect: (h) => (h.operational_context.ref === "lead:00000000-0000-0000-0000-00000000000b" && h.lead_decision !== "lead" ? null : `context ${h.operational_context.ref ?? "none"}, lead_decision ${h.lead_decision}`),
+  },
 ];
 
 async function main() {
@@ -136,7 +142,7 @@ async function main() {
     const problem = s.expect(h, v);
     if (problem) failed++;
     console.log(`${problem ? "✘" : "✓"} ${s.name}  (${Math.round(out.durationMs / 100) / 10}s)`);
-    console.log(`    Hermes: ${h.intent} → ${h.recommended_action} · ${Math.round(h.confidence * 100)}% · ${h.reason}`);
+    console.log(`    Hermes: ${h.intent} → ${h.recommended_action} · ${Math.round(h.confidence * 100)}% · lead: ${h.lead_decision}${h.operational_context.ref ? ` · context ${h.operational_context.ref}` : ""} · ${h.reason}`);
     console.log(`    CRM would: ${plan(v).join(", ") || "nothing"}${v.headline.changedBy ? ` (changed by ${v.headline.changedBy})` : ""}`);
     for (const c of [...v.hard, ...v.business]) console.log(`    rule: ${c.message}`);
     if (problem) console.log(`    expected otherwise: ${problem}`);

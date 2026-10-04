@@ -74,6 +74,19 @@ export function CommitmentButtons({ id }: { id: string }) {
   );
 }
 
+/** Hermes marked a commitment kept: Chris can put it back to outstanding (recorded as a correction). */
+export function ReopenCommitmentButton({ id }: { id: string }) {
+  const { pending, err, act } = useAct();
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button size="sm" variant="ghost" disabled={pending} data-testid={`commitment-reopen-${id}`} onClick={() => act(() => setCommitmentStatusAction(id, "outstanding"))}>
+        Reopen
+      </Button>
+      <ErrorText err={err} />
+    </span>
+  );
+}
+
 export function ReinspectButton({ sourceType, sourceId }: { sourceType: "email" | "recording"; sourceId: string }) {
   const { pending, err, act } = useAct();
   return (

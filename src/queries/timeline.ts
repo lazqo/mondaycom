@@ -151,6 +151,14 @@ function inspectorItem(action: string, d: Record<string, unknown>, leadId: strin
       return { kind: "inspector", title: "Business Brain ran", meta: [d.complete ? "fully priced" : "not fully priced", d.siteVisit ? "site visit needed" : null].filter(Boolean).join(" · "), href: leadId ? `/leads/${leadId}/assessment` : null };
     case "quote_prepared_by_inspector":
       return { kind: "quote", title: `Quote${d.quoteNumber ? ` Q-${String(d.quoteNumber)}` : ""} prepared for approval`, meta: d.draftId ? "reply drafted too · nothing sent" : "nothing sent", href: d.quoteId ? `/quotes/${String(d.quoteId)}` : null };
+    case "commitment_resolved":
+      return { kind: "inspector", title: `Hermes: commitment ${d.status === "cancelled" ? "no longer needed" : "kept"}: ${String(d.action ?? "")}`, meta: d.evidence ? `shown by ${String(d.evidence)}` : null, body: d.reason ? String(d.reason) : null };
+    case "lead_created_by_hermes":
+      return { kind: "inspector", title: "Hermes created this lead from the email", meta: typeof d.confidence === "number" ? `${Math.round(d.confidence * 100)}% sure` : null, body: d.reason ? String(d.reason) : null };
+    case "lead_reversed_by_hermes":
+      return { kind: "inspector", title: "Hermes: not a lead (marked lost; reopen to undo)", body: d.reason ? String(d.reason) : null };
+    case "email_filed_by_hermes":
+      return { kind: "inspector", title: `Hermes filed an email here${d.title ? ` “${String(d.title)}”` : ""}`, meta: d.from ? `from ${String(d.from)} (sender not linked to a customer)` : null };
     case "commitment_kept":
       return { kind: "inspector", title: `Commitment kept: ${String(d.action ?? "")}`, meta: d.evidence ? `shown by ${String(d.evidence)}` : null };
     case "inspector_action_accepted":

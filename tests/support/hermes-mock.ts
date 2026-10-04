@@ -14,6 +14,7 @@ export const HERMES_MOCK_KEY = "e2e-hermes-key-not-a-secret";
 type Pack = {
   source: { type: string; text: string; title: string; form: { fields: Record<string, string> } | null; transcript: { turns: { speaker: string | null; text: string }[] } | null };
   identity: { status: string; candidates: { key: string; label: string }[] };
+  crm: { lead: { id: string } | null } | null;
 };
 
 const base = {
@@ -40,6 +41,8 @@ const base = {
 
 function answer(pack: Pack): Record<string, unknown> | "down" {
   const text = pack.source.text;
+  // Hermes decides whether it is a lead: a new enquiry from someone with no lead yet is one.
+  const enquiry = pack.crm?.lead ? "existing" : "lead";
   if (/HERMES-DOWN/.test(text)) return "down";
   const form = pack.source.form?.fields;
   if (form?.Cameras) {
@@ -49,6 +52,7 @@ function answer(pack: Pack): Record<string, unknown> | "down" {
       ...base,
       conversation_type: "new_enquiry",
       intent: "new_enquiry",
+      lead_decision: enquiry,
       service: "cctv",
       property_type: "residential",
       summary: `New residential CCTV enquiry from the CCTV landing page: ${cams} cameras, ${two ? "two-storey" : "single-storey"}, new installation.`,
@@ -107,6 +111,7 @@ function answer(pack: Pack): Record<string, unknown> | "down" {
       ...base,
       conversation_type: "new_enquiry",
       intent: "quote_request",
+      lead_decision: enquiry,
       service: "cctv",
       property_type: /house|home/i.test(text) ? "residential" : null,
       summary: `Residential CCTV enquiry: ${cams[1]} cameras.`,

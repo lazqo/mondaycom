@@ -65,6 +65,10 @@ const R = (over: Partial<HermesResult>): HermesResult => ({
   task: null,
   reply_draft: null,
   identity: { suggestion: "unknown", candidate_key: null, reason: "" },
+  lead_decision: "undecided",
+  operational_context: { ref: null, reason: "" },
+  resolution: { status: "open", evidence: [] },
+  commitment_updates: [],
   conflicts: [],
   confidence: 0.9,
   reason: "test",
@@ -250,7 +254,7 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     expect((ins.rulesView as { primaryIntent: string }).primaryIntent).toBeTruthy();
     // Audit: the run records the model, the context it was given, the recommendation and the outcome.
     const run = (await runFor(ins.id))!;
-    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-1" });
+    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-2" });
     expect(Number(run.confidence)).toBeCloseTo(0.94);
     expect(run.contextRefs).toMatchObject({ leadId: ins.leadId, source: { type: "email", id: e.id } });
     expect((run.brainResult as { steps: { type: string }[] }).steps.map((s) => s.type)).toContain("RUN_BUSINESS_BRAIN");
@@ -660,7 +664,7 @@ describe("other guardrails", () => {
   });
 });
 
-describe("rules 'not a lead' is a first signal, not the final word", () => {
+describe("Hermes decides lead / not lead (audited and reversible); the rules are a first signal", () => {
   const notLead = {
     name: "test-not-lead",
     classify: async (input: { from: { name: string | null; address: string }; subject: string }) => ({
@@ -670,41 +674,45 @@ describe("rules 'not a lead' is a first signal, not the final word", () => {
       durationMs: 1,
     }),
   };
-  const yesLead = { ...notLead, name: "test", classify: async (input: Parameters<typeof notLead.classify>[0]) => ({ ...(await notLead.classify(input)), result: { ...(await notLead.classify(input)).result, is_lead: true } }) };
+  const yesLead = { ...notLead, name: "test", classify: async (input: Parameters<typeof notLead.classify>[0]) => ({ ...(await notLead.classify(input)), result: { ...(await notLead.classify(input)).result, is_lead: true, service: "CCTV" } }) };
+  const enquiry = (confidence: number): Partial<HermesResult> => ({ intent: "quote_request", lead_decision: "lead", summary: "Wants cameras for a shop.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring about the shop cameras ${RUN}`, due: null, detail: null }, confidence, reason: "A shop owner asking for 6 cameras." });
 
-  it("Hermes sees an enquiry: proposed to Chris, nothing created until Chris accepts; then a lead via the normal path", async () => {
+  it("the rules said not a lead, Hermes is sure it is one: the lead is created through the normal path and the work goes on", async () => {
     setClassifier(notLead as never);
     try {
-      script = () => ({ intent: "quote_request", summary: "Wants cameras for a shop.", facts: [{ key: "camera_count", value: 6, evidence: "6 cameras", confidence: 0.95 }], recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring about cameras", due: null, detail: null }, confidence: 0.9, reason: "A shop owner asking for 6 cameras." });
-      const e = await email({ from: `prop+${RUN}@example.com`, name: "Prop Owner", subject: "Re: your flyer", text: "Saw your flyer. We'd like 6 cameras for the shop, can someone call me?" });
-      const out = await processEmail(e.id);
-      expect(out.classification).toBe("not_lead");
+      script = () => enquiry(0.9);
+      const e = await email({ from: `hermeslead+${RUN}@example.com`, name: "Shop Owner", subject: "Re: your flyer", text: "Saw your flyer. We'd like 6 cameras for the shop, can someone call me?" });
+      expect((await processEmail(e.id)).classification).toBe("not_lead");
       await settleInspectorQueue();
-      expect(calls).toBe(1);
-      const ins = (await latestFor(e.id))!;
-      expect(ins).toMatchObject({ engine: "hermes", status: "needs_review", reviewKind: "hermes_proposed_lead", leadId: null });
-      expect((ins.rulesView as { classification: string }).classification).toBe("not_lead");
-      const acts = await actionsOf(ins.id);
-      expect(acts.map((a) => a.type)).toEqual(["NEEDS_REVIEW"]);
-      expect(acts[0]).toMatchObject({ rule: "hermes_proposed_lead", status: "awaiting_approval" });
-      // Nothing written: no lead, no task, no facts, no commitments; the email is still "not a lead".
-      expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
-      expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, "Ring about cameras") })).toBeUndefined();
-      expect(await db.query.commitments.findFirst({ where: eq(S.commitments.sourceId, e.id) })).toBeUndefined();
-      expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ classification: "not_lead", leadId: null });
-
-      // Only a person can accept it.
-      await expect(acceptProposedLead(ins.id, INSPECTOR_ACTOR)).rejects.toBeInstanceOf(GuardrailError);
-      const after = await acceptProposedLead(ins.id, chris);
       const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
       leadIds.push(lead.id);
-      expect(lead).toMatchObject({ status: "new", createdById: chris.userId });
-      expect(after).toMatchObject({ engine: "hermes" });
-      const reread = (await latestFor(e.id))!;
-      expect(reread).toMatchObject({ leadId: lead.id });
-      expect(reread.reviewKind).not.toBe("hermes_proposed_lead");
-      expect(await db.query.inspectorFeedback.findFirst({ where: and(eq(S.inspectorFeedback.inspectionId, ins.id), eq(S.inspectorFeedback.kind, "proposed_lead_accepted")) })).toBeTruthy();
-      // A second click does not make a second lead.
+      expect(lead).toMatchObject({ status: "new", createdById: null });
+      expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ classification: "lead", leadId: lead.id });
+      const ins = (await latestFor(e.id))!;
+      expect(ins).toMatchObject({ engine: "hermes", status: "analysed", leadId: lead.id });
+      expect((ins.rulesView as { classification: string }).classification).toBe("not_lead");
+      expect(await db.query.tasks.findFirst({ where: and(eq(S.tasks.leadId, lead.id), eq(S.tasks.title, `Ring about the shop cameras ${RUN}`)) })).toBeTruthy();
+      expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, lead.id), eq(S.activityLog.action, "lead_created_by_hermes")) })).toBeTruthy();
+    } finally {
+      setClassifier(yesLead as never);
+    }
+  });
+
+  it("Hermes thinks it is a lead but is not sure: proposed to Chris; only a person accepts, once", async () => {
+    setClassifier(notLead as never);
+    try {
+      script = () => enquiry(0.5);
+      const e = await email({ from: `prop+${RUN}@example.com`, name: "Prop Owner", subject: "Re: your flyer", text: "Saw your flyer. Might want cameras for the shop at some point." });
+      await processEmail(e.id);
+      await settleInspectorQueue();
+      const ins = (await latestFor(e.id))!;
+      expect(ins).toMatchObject({ engine: "hermes", status: "needs_review", reviewKind: "hermes_proposed_lead", leadId: null });
+      expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
+      await expect(acceptProposedLead(ins.id, INSPECTOR_ACTOR)).rejects.toBeInstanceOf(GuardrailError);
+      await acceptProposedLead(ins.id, chris);
+      const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+      leadIds.push(lead.id);
+      expect(lead).toMatchObject({ createdById: chris.userId });
       await expect(acceptProposedLead(ins.id, chris)).rejects.toThrow();
     } finally {
       setClassifier(yesLead as never);
@@ -714,17 +722,43 @@ describe("rules 'not a lead' is a first signal, not the final word", () => {
   it("Hermes agrees it is not a lead: nothing for Chris, nothing written", async () => {
     setClassifier(notLead as never);
     try {
-      script = () => ({ conversation_type: "other", intent: "not_relevant", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.9, reason: "A supplier's delivery note." });
+      script = () => ({ conversation_type: "supplier", intent: "not_relevant", lead_decision: "not_lead", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.9, reason: "A supplier's delivery note." });
       const e = await email({ from: `supp+${RUN}@example.com`, name: "Supplier", subject: "Your delivery", text: "Your order has been dispatched." });
       await processEmail(e.id);
       await settleInspectorQueue();
       expect(calls).toBe(1);
-      const ins = (await latestFor(e.id))!;
-      expect(ins).toMatchObject({ engine: "hermes", status: "analysed", reviewKind: null, leadId: null });
-      expect(await actionsOf(ins.id)).toEqual([]);
+      expect(await latestFor(e.id)).toMatchObject({ engine: "hermes", status: "analysed", reviewKind: null, leadId: null });
+      expect(await actionsOf((await latestFor(e.id))!.id)).toEqual([]);
     } finally {
       setClassifier(yesLead as never);
     }
+  });
+
+  it("the rules made a lead, Hermes is sure it is not one: the untouched lead is marked lost (reversible); a worked lead is left for Chris", async () => {
+    script = () => ({ conversation_type: "spam_or_marketing", intent: "not_relevant", lead_decision: "not_lead", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.92, reason: "A marketing email about SEO." });
+    const e = await email({ from: `seo+${RUN}@example.com`, name: "SEO Agency", subject: "Grow your camera business", text: "We can get your CCTV business to page one of Google." });
+    expect((await processEmail(e.id)).classification).toBe("lead");
+    await settleInspectorQueue();
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+    leadIds.push(lead.id);
+    expect(lead.status).toBe("lost");
+    expect(lead.lostReason).toMatch(/^Not a lead \(Hermes\)/);
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("not_lead");
+
+    // Once someone has worked on a lead (a quote exists), Hermes cannot close it: Chris decides.
+    const notLeadScript = script;
+    script = () => ({ lead_decision: "undecided", recommended_action: "NEEDS_REVIEW", confidence: 0.9, reason: "Unsure." });
+    const e2 = await email({ from: `seo2+${RUN}@example.com`, name: "SEO Agency 2", subject: "Cameras for our office", text: "We'd like cameras for our office." });
+    await processEmail(e2.id);
+    await settleInspectorQueue();
+    script = notLeadScript;
+    const lead2 = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e2.id) }))!;
+    leadIds.push(lead2.id);
+    await db.insert(S.quotes).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "Office CCTV", leadId: lead2.id, status: "draft" });
+    const out = (await inspect("email", e2.id, { force: true }))!;
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, lead2.id) }))!.status).not.toBe("lost");
+    expect(out.status).toBe("needs_review");
+    expect((await actionsOf(out.inspectionId)).find((a) => a.type === "NEEDS_REVIEW")).toMatchObject({ rule: "worked_lead_kept" });
   });
 
   it("Hermes unavailable for a 'not a lead' email: the rules verdict stands, no review card, retried later", async () => {
@@ -734,9 +768,7 @@ describe("rules 'not a lead' is a first signal, not the final word", () => {
       const e = await email({ from: `nl-down+${RUN}@example.com`, name: "Somebody", subject: "Hello", text: "Just saying hi." });
       await processEmail(e.id);
       await settleInspectorQueue();
-      const ins = (await latestFor(e.id))!;
-      expect(ins).toMatchObject({ engine: "fallback", status: "analysed", reviewKind: null, leadId: null });
-      expect(await actionsOf(ins.id)).toEqual([]);
+      expect(await latestFor(e.id)).toMatchObject({ engine: "fallback", status: "analysed", reviewKind: null, leadId: null });
       expect(await db.query.inspectorQueue.findFirst({ where: eq(S.inspectorQueue.sourceId, e.id) })).toBeTruthy();
     } finally {
       setClassifier(yesLead as never);
@@ -746,24 +778,23 @@ describe("rules 'not a lead' is a first signal, not the final word", () => {
   it("obvious automated mail is filtered before Hermes and never sent to it", async () => {
     const e = await email({ from: `news+${RUN}@example.com`, name: "Supplier News", subject: "October newsletter", text: "New products and offers." });
     await db.update(S.emails).set({ headers: { "list-unsubscribe": "<mailto:unsub@example.com>" } }).where(eq(S.emails.id, e.id));
-    const out = await processEmail(e.id);
-    expect(out).toMatchObject({ classification: "not_lead", prefiltered: true });
+    expect(await processEmail(e.id)).toMatchObject({ classification: "not_lead", prefiltered: true });
     await settleInspectorQueue();
     expect(calls).toBe(0);
     expect(await latestFor(e.id)).toBeUndefined();
   });
 });
 
-describe("real-data follow-ups: lifecycle-aware 'no action', nothing offered twice", () => {
+describe("Hermes judges; the guardrails only check evidence and authority (real cases)", () => {
   const made: { jobs: string[]; contacts: string[] } = { jobs: [], contacts: [] };
   afterAll(async () => {
     if (made.jobs.length) await db.delete(S.jobs).where(inArray(S.jobs.id, made.jobs));
     if (made.contacts.length) await db.delete(S.contacts).where(inArray(S.contacts.id, made.contacts));
   });
-  async function customerWithLead(name: string) {
+  async function customerWithLead(name: string, site: string | null = null) {
     const [c] = await db.insert(S.contacts).values({ name: `${name} ${RUN}` }).returning();
     made.contacts.push(c.id);
-    const [l] = await db.insert(S.leads).values({ name: `${name} ${RUN}`, email: `${name.toLowerCase()}+${RUN}@example.com`, contactId: c.id, status: "won", source: "email", service: "CCTV" }).returning();
+    const [l] = await db.insert(S.leads).values({ name: `${name} ${RUN}`, email: `${name.toLowerCase()}+${RUN}@example.com`, contactId: c.id, status: "won", source: "email", service: "CCTV", site }).returning();
     leadIds.push(l.id);
     return { contactId: c.id, leadId: l.id };
   }
@@ -772,44 +803,104 @@ describe("real-data follow-ups: lifecycle-aware 'no action', nothing offered twi
     await db.update(S.emails).set({ leadId }).where(eq(S.emails.id, e.id));
     return e;
   }
-
-  it("an old enquiry whose job is completed: Hermes's 'no action' stands, nothing for Chris", async () => {
-    const { contactId, leadId } = await customerWithLead("Finished");
-    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV install", contactId, leadId, status: "invoiced" }).returning();
+  const job = async (contactId: string, leadId: string, over: Partial<typeof S.jobs.$inferInsert> = {}) => {
+    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV install", contactId, leadId, status: "invoiced", ...over }).returning();
     made.jobs.push(j.id);
-    script = () => ({ intent: "quote_request", recommended_action: "NO_ACTION", confidence: 0.9, reason: "Historical enquiry: the job has been done." });
+    return j;
+  };
+
+  it("an old enquiry: Hermes closes it citing the invoiced job → 'no action' stands; without evidence it goes to Chris", async () => {
+    const { contactId, leadId } = await customerWithLead("Finished");
+    const j = await job(contactId, leadId);
+    script = () => ({ intent: "quote_request", recommended_action: "NO_ACTION", confidence: 0.9, reason: "Historical enquiry: the job has been done.", resolution: { status: "resolved", evidence: [{ ref: `job:${j.id}`, note: `J-${j.number} invoiced` }] } });
     const e = await emailOn(leadId, "Hi, could we get a quote for cameras at the house?", `finished+${RUN}@example.com`);
     const out = (await inspect("email", e.id))!;
     expect(out.status).toBe("analysed");
-    const ins = (await latestFor(e.id))!;
-    expect((ins.validation as { headline: { final: string; changedBy: string | null } }).headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
-    expect(JSON.stringify(ins.validation)).toContain(`J-${j.number} invoiced`);
-    expect((await actionsOf(out.inspectionId)).map((a) => a.type)).not.toContain("NEEDS_REVIEW");
+    expect(((await latestFor(e.id))!.validation as { headline: { final: string; changedBy: string | null } }).headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
+    script = () => ({ intent: "quote_request", recommended_action: "NO_ACTION", confidence: 0.9, reason: "Nothing to do." });
+    expect((await inspect("email", e.id, { force: true }))!.status).toBe("needs_review");
   });
 
-  it("Campbell: a promise not shown as done is the outstanding action, not a generic review", async () => {
-    const { leadId } = await customerWithLead("Campbell");
-    await db.insert(S.events).values({ title: "Site visit", kind: "site_visit", leadId, startsAt: new Date(Date.now() - 3 * 86400_000), endsAt: new Date(Date.now() - 3 * 86400_000 + 3600_000) });
+  it("Aphichart: Hermes marks the visit commitments kept, citing the completed job; Chris can reopen (recorded as a correction)", async () => {
+    const { contactId, leadId } = await customerWithLead("Aphichart");
+    const j = await job(contactId, leadId, { doneAt: new Date(), invoicedAt: new Date() });
+    const earlier = await emailOn(leadId, "Chris: I'll book the installation visit. Aphichart: I'll be available tomorrow.", `aphichart+${RUN}@example.com`);
+    const [c1] = await db.insert(S.commitments).values({ owner: "get_secure", action: "Book the installation visit", actionKey: "visit", confidence: "0.9", leadId, contactId, sourceType: "email", sourceId: earlier.id }).returning();
+    const [c2] = await db.insert(S.commitments).values({ owner: "customer", action: "Be available tomorrow", actionKey: "confirm", confidence: "0.9", leadId, contactId, sourceType: "email", sourceId: earlier.id }).returning();
     script = () => ({
-      intent: "site_visit_request",
+      intent: "booking_request",
       recommended_action: "NO_ACTION",
-      confidence: 0.85,
-      reason: "The visit has happened.",
-      commitments: [{ owner: "get_secure", owner_name: "Chris", action: "prepare and send the camera plan", action_key: "send_info", due_text: "later that day", due_at: null, evidence: "I'll prepare and send the camera plan later that day" }],
+      confidence: 0.9,
+      reason: `J-${j.number} was completed and invoiced.`,
+      resolution: { status: "resolved", evidence: [{ ref: `job:${j.id}`, note: "completed and invoiced" }] },
+      commitment_updates: [
+        { id: c1.id, status: "done", evidence_ref: `job:${j.id}`, note: "The installation took place." },
+        { id: c2.id, status: "done", evidence_ref: `job:${j.id}`, note: "The visit happened." },
+        { id: c2.id, status: "done", evidence_ref: "job:00000000-0000-0000-0000-000000000000", note: "made up" },
+      ],
     });
-    const e = await emailOn(leadId, "Thanks for coming out. Chris said: I'll prepare and send the camera plan later that day.", `campbell+${RUN}@example.com`);
+    const e = await emailOn(leadId, "Following up on the install.", `aphichart+${RUN}@example.com`);
     const out = (await inspect("email", e.id))!;
     expect(out.status).toBe("analysed");
-    const acts = await actionsOf(out.inspectionId);
-    expect(acts.map((a) => a.type)).not.toContain("NEEDS_REVIEW");
-    expect(acts.find((a) => a.type === "OUTSTANDING")).toMatchObject({ status: "outstanding", reason: "We said we'd prepare and send the camera plan (later that day)" });
-    const c = (await db.query.commitments.findFirst({ where: eq(S.commitments.sourceId, e.id) }))!;
-    expect(c).toMatchObject({ status: "outstanding", leadId });
-    // Chris marks it done: read again, and "no action" now stands.
-    await setCommitmentStatus(c.id, "done", chris);
+    const resolved = (await actionsOf(out.inspectionId)).filter((a) => a.type === "RESOLVE_COMMITMENT");
+    expect(resolved).toHaveLength(2);
+    expect(resolved.every((a) => a.status === "done")).toBe(true);
+    expect((await db.query.commitments.findFirst({ where: eq(S.commitments.id, c1.id) }))!).toMatchObject({ status: "done", completedById: null });
+    expect(await db.query.activityLog.findMany({ where: and(eq(S.activityLog.entityId, leadId), eq(S.activityLog.action, "commitment_resolved")) })).toHaveLength(2);
+    // Chris disagrees: reopen. Recorded as a correction Hermes will see.
+    await setCommitmentStatus(c1.id, "outstanding", chris);
+    expect((await db.query.commitments.findFirst({ where: eq(S.commitments.id, c1.id) }))!.status).toBe("outstanding");
+    expect(await db.query.inspectorFeedback.findFirst({ where: and(eq(S.inspectorFeedback.leadId, leadId), eq(S.inspectorFeedback.kind, "hermes_decision_reversed")) })).toBeTruthy();
+  });
+
+  it("Nympha: Hermes asks for the costing to be completed → that task, once; a re-read shows it already open", async () => {
+    const { leadId } = await customerWithLead("Nympha");
+    const [q] = await db.insert(S.quotes).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV", leadId, status: "ai_prepared", origin: "brain" }).returning();
+    const title = `Price the quote / complete costing for Q-${q.number}`;
+    script = () => ({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title, due: "today", detail: "Labour and allowance inputs are unset." }, confidence: 0.9, reason: `Q-${q.number} cannot be finished until the labour and allowance inputs are entered.` });
+    const e = await emailOn(leadId, "Hi, any update on the quote for the cameras?", `nympha+${RUN}@example.com`);
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.title, title), eq(S.tasks.status, "open")) })).toHaveLength(1);
     const again = (await inspect("email", e.id, { force: true }))!;
-    expect((await actionsOf(again.inspectionId)).map((a) => a.type)).not.toContain("OUTSTANDING");
-    expect(((await latestFor(e.id))!.validation as { headline: { final: string } }).headline.final).toBe("NO_ACTION");
+    expect((await actionsOf(again.inspectionId)).find((a) => a.type === "CREATE_INTERNAL_TASK")!.result).toMatchObject({ inHand: `Already open: ${title}.` });
+    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) })).toHaveLength(1);
+  });
+
+  it("Zavier: an unknown sender about an existing site → the work continues there; the sender stays unlinked", async () => {
+    const site = `${700 + Math.floor(Math.random() * 99)} Wiri${RUN} Station Road, Manukau`;
+    const { leadId } = await customerWithLead("Wiri Depot", site);
+    const title = `Check the keypad at ${site.split(",")[0]}`;
+    script = () => ({
+      conversation_type: "existing_job",
+      intent: "service_issue",
+      lead_decision: "existing",
+      recommended_action: "CREATE_INTERNAL_TASK",
+      task: { title, due: "today", detail: null },
+      operational_context: { ref: `lead:${leadId}`, reason: "Same site as the existing keypad issue." },
+      facts: [{ key: "site_address", value: site.split(",")[0], evidence: site.split(",")[0], confidence: 0.9 }],
+      confidence: 0.88,
+      reason: "The keypad at this site is beeping again.",
+    });
+    const e = await email({ from: `zavier+${RUN}@example.com`, name: "Zavier", subject: "Keypad", text: `Hi, the keypad at ${site.split(",")[0]} is beeping again. Zavier` });
+    const out = (await inspect("email", e.id))!;
+    const ins = (await latestFor(e.id))!;
+    expect(ins.leadId).toBe(leadId);
+    expect(await db.query.tasks.findFirst({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.title, title)) })).toBeTruthy();
+    // Filed on the work, but the sender is not linked to the customer.
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ leadId, contactId: null });
+    // Facts from an unverified sender are proposed, never filled in.
+    expect((await db.query.facts.findMany({ where: and(eq(S.facts.sourceId, e.id)) })).every((f) => f.state !== "applied")).toBe(true);
+    expect(JSON.stringify(ins.validation)).toContain("sender_unverified");
+    expect(out.status === "analysed" || out.status === "needs_review").toBe(true);
+
+    // A context the message does not show (here: another lead, by name only) is not used.
+    const { leadId: other } = await customerWithLead("Elsewhere");
+    script = () => ({ conversation_type: "existing_job", intent: "service_issue", lead_decision: "existing", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Other ${RUN}`, due: null, detail: null }, operational_context: { ref: `lead:${other}`, reason: "Sounds like them." }, confidence: 0.9, reason: "?" });
+    const e2 = await email({ from: `nobody+${RUN}@example.com`, name: "Nobody", subject: "Help", text: "Our alarm is beeping." });
+    await inspect("email", e2.id);
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Other ${RUN}`) })).toBeUndefined();
+    expect((await latestFor(e2.id))!.leadId).toBeNull();
   });
 
   it("Andre: an open task to arrange the site visit already exists, so another is not offered", async () => {
@@ -824,57 +915,6 @@ describe("real-data follow-ups: lifecycle-aware 'no action', nothing offered twi
     expect(await db.query.inspectorActions.findFirst({ where: and(eq(S.inspectorActions.inspectionId, out.inspectionId), eq(S.inspectorActions.status, "awaiting_approval")) })).toBeUndefined();
     const open = await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) });
     expect(open).toHaveLength(1);
-  });
-
-  it("Aphichart: commitments the completed, invoiced job proves were kept are closed; 'no action' stands", async () => {
-    const { contactId, leadId } = await customerWithLead("Aphichart");
-    const said = new Date(Date.now() - 40 * 86400_000);
-    const done = new Date(Date.now() - 30 * 86400_000);
-    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV install", contactId, leadId, status: "invoiced", doneAt: done, invoicedAt: done }).returning();
-    made.jobs.push(j.id);
-    script = () => ({
-      intent: "booking_request",
-      recommended_action: "NO_ACTION",
-      confidence: 0.9,
-      reason: `J-${j.number} has been completed and invoiced.`,
-      commitments: [
-        { owner: "get_secure", owner_name: "Chris", action: "book the installation visit", action_key: "visit", due_text: "next week", due_at: null, evidence: "I'll book the installation visit for next week" },
-        { owner: "customer", owner_name: "Aphichart", action: "be available tomorrow", action_key: "confirm", due_text: "tomorrow", due_at: null, evidence: "I'll be available tomorrow" },
-      ],
-    });
-    const e = await emailOn(leadId, "Chris: I'll book the installation visit for next week. Aphichart: I'll be available tomorrow.", `aphichart+${RUN}@example.com`);
-    await db.update(S.emails).set({ receivedAt: said }).where(eq(S.emails.id, e.id));
-    const out = (await inspect("email", e.id))!;
-    expect(out.status).toBe("analysed");
-    const acts = await actionsOf(out.inspectionId);
-    expect(acts.map((a) => a.type)).not.toContain("OUTSTANDING");
-    expect(acts.map((a) => a.type)).not.toContain("NEEDS_REVIEW");
-    const ins = (await latestFor(e.id))!;
-    expect((ins.validation as { headline: { final: string } }).headline.final).toBe("NO_ACTION");
-    expect(JSON.stringify(ins.validation)).toContain(`J-${j.number} completed`);
-    // Both commitments are closed, with the evidence on the lead.
-    const cs = await db.query.commitments.findMany({ where: eq(S.commitments.sourceId, e.id) });
-    expect(cs.map((c) => c.status).sort()).toEqual(["done", "done"]);
-    const kept = await db.query.activityLog.findMany({ where: and(eq(S.activityLog.entityId, leadId), eq(S.activityLog.action, "commitment_kept")) });
-    expect(kept).toHaveLength(2);
-  });
-
-  it("Nympha: the quote cannot be finished only because of pricing → a costing task (once), not a generic review", async () => {
-    const { leadId } = await customerWithLead("Nympha");
-    await db.insert(S.cctvAssessments).values({ leadId, input: {}, packet: { siteVisit: { required: false }, costing: { complete: false, unpriced: ["RES_STANDARD 4-cam: labour hours not set", "RES_STANDARD 4-cam: customer sell allowance not set"] } }, engineVersion: "test", actor: "system" });
-    const [q] = await db.insert(S.quotes).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV", leadId, status: "ai_prepared", origin: "brain" }).returning();
-    script = () => ({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "NEEDS_REVIEW", confidence: 0.9, reason: `Q-${q.number} cannot be finished: the internal labour and allowance inputs are not set.` });
-    const e = await emailOn(leadId, "Hi, any update on the quote for the cameras?", `nympha+${RUN}@example.com`);
-    const out = (await inspect("email", e.id))!;
-    expect(out.status).toBe("analysed");
-    const t = (await actionsOf(out.inspectionId)).find((a) => a.type === "CREATE_INTERNAL_TASK")!;
-    expect(t).toMatchObject({ status: "done", rule: "pricing_only_blocker" });
-    const title = `Price the quote / complete costing for Q-${q.number}`;
-    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.title, title), eq(S.tasks.status, "open")) })).toHaveLength(1);
-    // Read again: the open task is surfaced, never a second one.
-    const again = (await inspect("email", e.id, { force: true }))!;
-    expect((await actionsOf(again.inspectionId)).find((a) => a.type === "CREATE_INTERNAL_TASK")!.result).toMatchObject({ inHand: `Already open: ${title}.` });
-    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) })).toHaveLength(1);
   });
 
   it("accepting a proposal after a task to arrange it was added does not create a second task", async () => {

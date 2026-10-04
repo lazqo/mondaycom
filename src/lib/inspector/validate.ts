@@ -1,23 +1,23 @@
 /**
- * The validation + policy layer between Hermes and the CRM. Hermes understands and recommends;
- * this decides what may actually happen, in three tiers:
+ * The guardrail layer between Hermes and the CRM. Hermes is the operational judgement: what a
+ * message means, whether it is a lead, which work it belongs to, whether it is resolved or waiting,
+ * which commitments were kept, and the next step. This layer does not re-decide any of that. It
+ * asks only: is Hermes authorised to do this safely?
  *
- *   HARD GUARDRAILS (Hermes cannot override): identity is decided by the CRM's signals, never by a
- *   name or by Hermes; facts are only accepted with evidence found in the source and a sane value;
- *   conflicting facts are flagged, never overwritten (facts.ts); a prepared reply may not quote a
- *   price, a discount or a promised date; nothing customer-facing is executed, only prepared; an
- *   acceptance never accepts terms; a real enquiry is never silently "no action" (only when the CRM
- *   shows it has moved on with nothing outstanding; an outstanding commitment or task is surfaced
- *   instead); low confidence goes to Chris.
+ *   GUARDRAILS (authority, safety, data integrity): a fact needs the source's own words and a sane
+ *   value (a conflicting one is flagged, never overwritten: facts.ts); a commitment needs the
+ *   source's words; a commitment marked kept, or an enquiry closed, must cite CRM records from the
+ *   context pack; a person's identity is never decided by Hermes or a name alone (work may continue
+ *   in an evidenced operational context while the sender stays unverified); a reply may not quote a
+ *   price, a discount or a promised date; an acceptance never accepts terms; nothing customer-facing
+ *   is executed, only prepared for Chris; low confidence waits for Chris.
  *
- *   BUSINESS RULES (deterministic, authoritative): commercial CCTV and customer-requested visits go
- *   to a site visit; only CCTV has a Business Brain; the Brain needs its inputs (home or business,
- *   cameras or areas, storeys) before it runs; one prepared quote at a time; a revised quote after a
- *   sent one needs Chris. After it runs, the Brain itself decides site visit / priced / unpriced.
+ *   BUSINESS BRAIN AUTHORITY: commercial CCTV is designed from a site visit; only CCTV has a Brain;
+ *   the Brain runs only with its inputs; one prepared quote at a time; a revised quote after a sent
+ *   one waits for Chris. After it runs, the Brain itself decides site visit / priced / unpriced.
  *
- *   ADVISORY CHECKS (logged, never blocking): two-storey complexity, unknown upgrade cabling,
- *   non-blocking gaps, low-confidence facts, where the old rules read it differently, and Hermes's
- *   own advisories.
+ *   ADVISORIES (shown, never deciding): two-storey complexity, unknown upgrade cabling, where the old
+ *   rules read it differently, and Hermes's own notes.
  *
  * Pure: everything it needs is passed in.
  */
@@ -25,12 +25,11 @@ import type { HermesAction, HermesResult } from "@/lib/hermes/contract";
 import { resolveDue } from "./dates";
 import { normalisePhone, toNumber } from "./text";
 import type { Known } from "./missing";
-import { satisfiedBy, type Lifecycle } from "./lifecycle";
 import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, MissingInfo, PlannedAction, Understanding } from "./types";
 
 export type ValidateContext = {
   input: InspectorInput;
-  /** Decided by the CRM's identity rules before Hermes is asked. */
+  /** Who the SENDER is, decided by the CRM's guarded identity rules before Hermes is asked. */
   identity: IdentityResult;
   /** What the CRM already holds for this lead/customer (applied facts and record fields). */
   known: Known;
@@ -42,12 +41,15 @@ export type ValidateContext = {
     recordingLinked: boolean;
     customerEmail: string | null;
     customerPhone: string | null;
-    /** Where the enquiry stands now (jobs, visits, accepted quotes, open tasks and commitments). */
-    lifecycle?: Lifecycle;
-    /** The Business Brain's latest result for the lead (null when it has not run). */
-    brain?: { fullyPriced: boolean; unpriced: string[]; siteVisitRequired: boolean; quoteNumber: number | null } | null;
   };
   minConfidence: number;
+  /** CRM records (refs from the context pack) Hermes may cite as evidence or choose as the work. */
+  citable?: string[];
+  /**
+   * The operational context Hermes chose (operational_context.ref), as checked by the CRM: the record
+   * exists and the source itself shows it (its site address, job or quote number, the thread).
+   */
+  context?: { ref: string; label: string; leadId: string | null; jobId: string | null; contactId: string | null; accepted: boolean; why: string } | null;
   /** The old deterministic reading, for the comparison advisory only. */
   rules?: { primaryIntent: string; firstAction: string | null; urgency: string } | null;
 };
@@ -64,6 +66,10 @@ export type Validation = {
   reviewKind: "identity" | "hermes_low_confidence" | "hermes_flagged" | null;
   /** Hermes's recommendation, and the action the CRM ends up taking. */
   headline: { recommended: HermesAction; final: string; changedBy: string | null };
+  /** The work actions run against when the sender is not (yet) a verified customer. */
+  workContext: { ref: string; label: string; leadId: string | null; jobId: string | null; contactId: string | null } | null;
+  /** True when the sender's identity is verified by the CRM (facts may then be filled in). */
+  personVerified: boolean;
 };
 
 const act = (type: PlannedAction["type"], mode: PlannedAction["mode"], rule: string, reason: string, payload: Record<string, unknown> = {}): PlannedAction => ({ type, mode, rule, reason, payload });
@@ -179,6 +185,7 @@ export function replyProblem(body: string): string | null {
 // ---------------- the validator ----------------
 
 const has = (k: Known, key: FactKey) => k[key] !== undefined && k[key] !== null && k[key] !== "";
+const ENQUIRY_INTENTS = ["new_enquiry", "quote_request", "site_visit_request", "booking_request"];
 
 export function validateHermes(h: HermesResult, ctx: ValidateContext): Validation {
   const hard: Check[] = [];
@@ -187,8 +194,9 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const rejectedFacts: Validation["rejectedFacts"] = [];
   const { input, identity, crm } = ctx;
   const hay = sourceHaystack(input);
+  const citable = new Set(ctx.citable ?? []);
 
-  // ---- HARD: facts need evidence in the source and a usable value ----
+  // ---- GUARDRAIL: facts need evidence in the source and a usable value ----
   const facts: ExtractedFact[] = [];
   for (const f of h.facts) {
     if (!evidenceFound(f.evidence, hay)) {
@@ -215,7 +223,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const service = (known.service as string | undefined) ?? h.service ?? null;
   const property = (known.property_type as string | undefined) ?? h.property_type ?? null;
 
-  // ---- HARD: commitments only with evidence; the CRM works out the due time where it can ----
+  // ---- GUARDRAIL: commitments only with evidence; the CRM works out the due time where it can ----
   const commitments: Commitment[] = [];
   for (const c of h.commitments) {
     if (!evidenceFound(c.evidence, hay)) {
@@ -228,18 +236,25 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
     commitments.push({ owner: c.owner, ownerName: c.owner_name, action: c.action.charAt(0).toUpperCase() + c.action.slice(1), actionKey: c.action_key, dueAt: due ? due.toISOString() : null, dueText: c.due_text, evidence: c.evidence.slice(0, 500), confidence: Math.min(h.confidence, 0.95) });
   }
 
-  // Missing information: Hermes's judgement, minus anything the CRM already holds.
-  const missing: MissingInfo[] = [];
-  for (const m of h.missing) {
-    const key = m.field as FactKey;
-    if (has(known, key)) {
-      advisories.push({ rule: "already_known", message: `Not asked: the CRM already has ${m.label.toLowerCase()}.` });
+  // ---- GUARDRAIL: a kept/void commitment and a resolution must cite real CRM records ----
+  const resolveCommitments: PlannedAction[] = [];
+  for (const u of h.commitment_updates) {
+    const ref = u.id.startsWith("commitment:") ? u.id : `commitment:${u.id}`;
+    if (!citable.has(ref) || !citable.has(u.evidence_ref) || u.evidence_ref === ref) {
+      hard.push({ rule: "commitment_update_evidence", message: `Commitment update not used: ${!citable.has(ref) ? "that commitment is not in this record" : "its evidence is not a CRM record in this context"}.`, effect: "update rejected" });
       continue;
     }
-    missing.push({ field: key, label: m.label, blocking: m.blocking, for: m.for, reason: m.reason });
+    resolveCommitments.push(act("RESOLVE_COMMITMENT", "auto", "hermes_commitment_update", u.note || `Hermes: the CRM shows this was ${u.status === "done" ? "kept" : "made void"}.`, { commitmentId: ref.slice("commitment:".length), status: u.status, evidenceRef: u.evidence_ref }));
   }
+  const evidence = h.resolution.evidence.filter((e) => citable.has(e.ref));
+  if (evidence.length < h.resolution.evidence.length) advisories.push({ rule: "resolution_evidence", message: "Some of Hermes's evidence refs were not CRM records in this context and were ignored." });
+
+  // Missing information is Hermes's judgement.
+  const missing: MissingInfo[] = h.missing.map((m) => ({ field: m.field as FactKey, label: m.label, blocking: m.blocking, for: m.for, reason: m.reason }));
   const nonBlocking = missing.filter((m) => !m.blocking);
-  if (nonBlocking.length) advisories.push({ rule: "non_blocking_gaps", message: `Not asked (does not block progress): ${nonBlocking.map((m) => m.label).join(", ")}.` });
+  if (nonBlocking.length) advisories.push({ rule: "non_blocking_gaps", message: `Not blocking progress: ${nonBlocking.map((m) => m.label).join(", ")}.` });
+  const alreadyKnown = h.missing.filter((m) => has(known, m.field as FactKey));
+  if (alreadyKnown.length) advisories.push({ rule: "already_known", message: `The CRM already has: ${alreadyKnown.map((m) => m.label.toLowerCase()).join(", ")}.` });
 
   const understanding: Understanding = {
     service: (service as Understanding["service"]) ?? null,
@@ -259,84 +274,96 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
     summary: h.summary,
   };
 
-  // ---- Advisories that never block ----
+  // ---- Advisories: shown, never deciding ----
   if (Number(known.storeys) >= 2 && service === "cctv") advisories.push({ rule: "two_storey_complexity", message: "Two-storey installation may increase cabling complexity; the Brain's two-storey package allows for it." });
   if (known.job_type === "upgrade" && !has(known, "existing_cabling")) advisories.push({ rule: "upgrade_cabling_unknown", message: "Upgrade with unknown cabling: the Brain will not assume reusable cable or cheaper upgrade labour." });
   if (ctx.rules && ctx.rules.primaryIntent !== h.intent) advisories.push({ rule: "rules_disagree", message: `The old rules read this as "${ctx.rules.primaryIntent.replace(/_/g, " ")}"${ctx.rules.firstAction ? ` (${ctx.rules.firstAction})` : ""}; Hermes's reading is used.` });
-  if (ctx.rules && (ctx.rules.urgency === "urgent" || ctx.rules.urgency === "high") && h.urgency !== "urgent" && h.urgency !== "high") advisories.push({ rule: "possible_urgency", message: `The old rules saw urgency (${ctx.rules.urgency}); Hermes rated it ${h.urgency}.` });
   for (const a of h.advisories) advisories.push({ rule: "hermes", message: a });
 
   const recommended = h.recommended_action;
   const headline: Validation["headline"] = { recommended, final: recommended, changedBy: null };
   const base: PlannedAction[] = [];
   const out: PlannedAction[] = [];
+  const result = (plan: PlannedAction[], reviewKind: Validation["reviewKind"], workContext: Validation["workContext"], personVerified: boolean): Validation => ({ understanding, hard, business, advisories, rejectedFacts, plan, reviewKind, headline, workContext, personVerified });
 
-  // ---- HARD: identity is the CRM's, never Hermes's ----
-  if (identity.status === "needs_review") {
+  // Hermes is sure this is not a lead and nothing needs doing: no sender to identify, nothing to file.
+  if (h.lead_decision === "not_lead" && recommended === "NO_ACTION" && h.confidence >= ctx.minConfidence && identity.status !== "matched") {
+    advisories.push({ rule: "not_a_lead", message: "Hermes: not a lead, nothing to do. Nothing filed." });
+    return result([], null, null, false);
+  }
+
+  // ---- GUARDRAIL: the sender's identity is the CRM's; the work can still go on in an evidenced context ----
+  let workContext: Validation["workContext"] = null;
+  const personVerified = identity.status === "matched";
+  const identityReview: PlannedAction[] = [];
+  if (identity.status === "needs_review" || identity.status === "new") {
     const suggestion = h.identity.suggestion === "candidate" && h.identity.candidate_key ? { key: h.identity.candidate_key, reason: h.identity.reason } : h.identity.suggestion === "new" ? { key: "new", reason: h.identity.reason } : null;
-    hard.push({ rule: "identity_uncertain", message: `${identity.reason}${suggestion ? ` Hermes suggests ${suggestion.key === "new" ? "a new customer" : suggestion.key}; that cannot file it on its own.` : ""}`, effect: "nothing written to a customer until Chris confirms" });
-    out.push(act("NEEDS_REVIEW", "approval", "identity_uncertain", identity.reason, { kind: "identity", hermesSuggestion: suggestion, candidates: identity.candidates.slice(0, 5).map((c) => ({ leadId: c.leadId, contactId: c.contactId, label: c.label, score: c.score, signals: c.signals })) }));
-    if (input.sourceType === "recording") out.push(act("LINK_RECORDING", "approval", "identity_uncertain", "File the recording once Chris confirms who it is with."));
-    headline.final = "NEEDS_REVIEW";
-    headline.changedBy = "identity_uncertain";
-    return { understanding, hard, business, advisories, rejectedFacts, plan: out, reviewKind: "identity", headline };
+    const c = ctx.context;
+    if (c?.accepted) {
+      workContext = { ref: c.ref, label: c.label, leadId: c.leadId, jobId: c.jobId, contactId: c.contactId };
+      hard.push({ rule: "sender_unverified", message: `The sender is not a verified customer (${identity.reason}). Hermes places this in ${c.label} (${c.why}); work continues there, and nothing about the person is written until Chris links them.`, effect: "work continues; sender unlinked" });
+    } else if (c) {
+      advisories.push({ rule: "context_not_evidenced", message: `Hermes placed this in ${c.label}, but ${c.why}, so the work is not filed there.` });
+    }
+    if (identity.status === "needs_review" || !workContext) {
+      if (identity.status === "needs_review") {
+        hard.push({ rule: "identity_uncertain", message: `${identity.reason}${suggestion ? ` Hermes suggests ${suggestion.key === "new" ? "a new customer" : suggestion.key}; that cannot link the person on its own.` : ""}`, effect: workContext ? "Chris links the sender" : "nothing written to a customer until Chris confirms" });
+        identityReview.push(act("NEEDS_REVIEW", "approval", "identity_uncertain", identity.reason, { kind: "identity", hermesSuggestion: suggestion, workContext: workContext?.label ?? null, candidates: identity.candidates.slice(0, 5).map((x) => ({ leadId: x.leadId, contactId: x.contactId, label: x.label, score: x.score, signals: x.signals })) }));
+        if (input.sourceType === "recording") identityReview.push(act("LINK_RECORDING", "approval", "identity_uncertain", "File the recording once Chris confirms who it is with."));
+      }
+      if (!workContext) {
+        if (identity.status === "needs_review") {
+          headline.final = "NEEDS_REVIEW";
+          headline.changedBy = "identity_uncertain";
+          return result(identityReview, "identity", null, false);
+        }
+      }
+    }
   }
   if (identity.status === "matched" && h.identity.suggestion === "candidate" && h.identity.candidate_key && identity.chosen) {
     const chosenKey = identity.chosen.leadId ? `lead:${identity.chosen.leadId}` : `customer:${identity.chosen.contactId}`;
     if (h.identity.candidate_key !== chosenKey) advisories.push({ rule: "identity_disagreement", message: `Hermes suggested ${h.identity.candidate_key}; the CRM matched ${identity.chosen.label} on ${identity.chosen.signals.map((s) => s.detail).join(", ")}, which stands.` });
   }
+  const onWork = personVerified || !!workContext;
 
   // Internal record keeping happens whatever the recommendation.
   if (identity.status !== "not_applicable") base.push(act("ADD_INTERNAL_NOTE", "auto", "always_note", "What Hermes understood.", { summary: h.summary }));
-  if (input.sourceType === "recording" && identity.status === "matched" && !crm.recordingLinked) base.push(act("LINK_RECORDING", "auto", "identity_matched", identity.reason));
-  if (identity.status === "matched" && facts.length) base.push(act("PROPOSE_LEAD_FACT_UPDATE", "auto", "new_facts", "Facts from this source with their evidence. Blank fields are filled; anything that differs from the CRM is flagged for Chris, never overwritten."));
+  if (input.sourceType === "recording" && personVerified && !crm.recordingLinked) base.push(act("LINK_RECORDING", "auto", "identity_matched", identity.reason));
+  if (onWork && facts.length)
+    base.push(
+      act(
+        "PROPOSE_LEAD_FACT_UPDATE",
+        "auto",
+        "new_facts",
+        personVerified ? "Facts from this source with their evidence. Blank fields are filled; anything that differs from the CRM is flagged for Chris, never overwritten." : "Facts from an unverified sender: proposed for Chris, not filled in.",
+        { proposeOnly: !personVerified },
+      ),
+    );
+  if (onWork) base.push(...resolveCommitments);
   if (input.direction === "outbound" || identity.status === "not_applicable") {
     // Our own email: commitments and the note only; nothing is ever sent from here.
-    return { understanding, hard, business, advisories, rejectedFacts, plan: base, reviewKind: null, headline: { ...headline, final: "NO_ACTION", changedBy: recommended === "NO_ACTION" ? null : "outbound_email" } };
+    return result(base, null, null, personVerified);
   }
 
-  const isEnquiry = ["new_enquiry", "quote_request", "site_visit_request", "booking_request"].includes(h.intent) || h.conversation_type === "new_enquiry";
+  const isEnquiry = ENQUIRY_INTENTS.includes(h.intent) || h.conversation_type === "new_enquiry";
+  const reviewKind = identityReview.length ? ("identity" as const) : null;
 
-  // ---- HARD: a real enquiry is never silently "no action"; Hermes's doubt and low confidence go to Chris ----
-  // Lifecycle-aware: on an older conversation the CRM may show the enquiry has long moved on (job
-  // done or scheduled, visit held, quote accepted with work). Then "no action" stands, unless
-  // something is still outstanding, in which case that specific item is what needs doing.
+  // ---- GUARDRAIL: closing an enquiry needs evidence; Hermes's own doubt and low confidence go to Chris ----
   let action: HermesAction = recommended;
-  if (action === "NO_ACTION" && isEnquiry) {
-    const lc = crm.lifecycle;
-    const { items, satisfied } = outstandingItems(commitments, lc, input.at.toISOString());
-    if (items.length) {
-      hard.push({ rule: "enquiry_outstanding_item", message: `Hermes said no action on an enquiry, but this is not closed: ${items.join("; ")}.`, effect: "OUTSTANDING" });
-      headline.final = "OUTSTANDING";
-      headline.changedBy = "enquiry_outstanding_item";
-      const surfaced = act("OUTSTANDING", "auto", "enquiry_outstanding_item", items[0], { items });
-      return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, surfaced], reviewKind: null, headline };
-    }
-    if (lc?.progressed.length) {
-      hard.push({
-        rule: "enquiry_already_progressed",
-        message: `Hermes said no action on an enquiry; allowed because the CRM shows it has moved on (${lc.progressed.join("; ")}) and nothing is outstanding.${satisfied.length ? ` Kept, as the CRM shows: ${satisfied.join("; ")}.` : ""}`,
-      });
+  if (action === "NO_ACTION" && isEnquiry && h.lead_decision !== "not_lead") {
+    if (h.resolution.status === "resolved" && evidence.length) {
+      hard.push({ rule: "enquiry_closed_with_evidence", message: `Hermes closed this enquiry, citing ${evidence.map((e) => `${e.ref}${e.note ? ` (${e.note})` : ""}`).join("; ")}.` });
     } else {
-      hard.push({ rule: "enquiry_never_no_action", message: "Hermes said no action, but it reads as an enquiry and the CRM shows no progress since. Sent to Chris instead.", effect: "NEEDS_REVIEW" });
+      hard.push({ rule: "enquiry_close_needs_evidence", message: "Hermes said no action on an enquiry without citing CRM records that show it was dealt with. Sent to Chris instead.", effect: "NEEDS_REVIEW" });
       action = "NEEDS_REVIEW";
     }
   }
   const plan = (a: HermesAction): PlannedAction[] => planFor(a, h, ctx, { known, missing, service, property, commitments, business, hard });
   if (action === "NEEDS_REVIEW") {
-    // BUSINESS: when the only thing in the way is pricing the Brain already knows is missing, that
-    // is a concrete job for Chris (enter the costs), not an interpretation for him to make.
-    const pricing = pricingOnlyTask(h, ctx, missing);
-    if (pricing) {
-      business.push({ rule: "pricing_only_blocker", message: `Hermes asked for a review, but the only thing in the way is costing the Business Brain cannot finish: ${pricing.gaps.join("; ")}. A task to complete it instead.`, effect: "CREATE_INTERNAL_TASK" });
-      headline.final = "CREATE_INTERNAL_TASK";
-      headline.changedBy = "pricing_only_blocker";
-      return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, pricing.action], reviewKind: null, headline };
-    }
-    out.push(act("NEEDS_REVIEW", "approval", recommended === "NEEDS_REVIEW" ? "hermes_flagged" : "enquiry_never_no_action", h.reason, { kind: "hermes_flagged", hermesRecommendation: recommended, confidence: h.confidence }));
+    out.push(act("NEEDS_REVIEW", "approval", recommended === "NEEDS_REVIEW" ? "hermes_flagged" : "enquiry_close_needs_evidence", h.reason, { kind: "hermes_flagged", hermesRecommendation: recommended, confidence: h.confidence }));
     headline.final = "NEEDS_REVIEW";
-    if (recommended !== "NEEDS_REVIEW") headline.changedBy = "enquiry_never_no_action";
-    return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, ...out], reviewKind: "hermes_flagged", headline };
+    if (recommended !== "NEEDS_REVIEW") headline.changedBy = "enquiry_close_needs_evidence";
+    return result([...base, ...identityReview, ...out], reviewKind ?? "hermes_flagged", workContext, personVerified);
   }
   if (h.confidence < ctx.minConfidence) {
     const proposed = plan(action);
@@ -344,14 +371,14 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
     out.push(act("NEEDS_REVIEW", "approval", "low_confidence", h.reason, { kind: "hermes_low_confidence", hermesRecommendation: recommended, confidence: h.confidence, plan: proposed }));
     headline.final = "NEEDS_REVIEW";
     headline.changedBy = "low_confidence";
-    return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, ...out], reviewKind: "hermes_low_confidence", headline };
+    return result([...base, ...identityReview, ...out], reviewKind ?? "hermes_low_confidence", workContext, personVerified);
   }
 
   const planned = plan(action);
   if (h.run_business_brain && !planned.some((p) => p.type === "RUN_BUSINESS_BRAIN") && !planned.some((p) => p.type === "PROPOSE_SITE_VISIT" || p.type === "DRAFT_EMAIL" || p.type === "CREATE_INTERNAL_TASK")) {
     planned.push(...plan("RUN_BUSINESS_BRAIN"));
   }
-  // ---- HARD: an acceptance never accepts anything: Chris confirms ----
+  // ---- GUARDRAIL: an acceptance never accepts anything: Chris confirms ----
   if (h.intent === "acceptance" && !planned.some((p) => p.type === "CREATE_INTERNAL_TASK")) {
     hard.push({ rule: "no_autonomous_acceptance", message: "The customer wants to go ahead: Chris confirms the terms; the CRM never accepts them itself.", effect: "task for Chris" });
     planned.push(act("CREATE_INTERNAL_TASK", "auto", "customer_accepted", "The customer says they want to go ahead. Chris confirms and marks the quote accepted.", { title: "Customer wants to go ahead: confirm and mark the quote accepted", kind: "task", due: "today" }));
@@ -359,43 +386,9 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const meaningful = planned.filter((p) => !["ADD_INTERNAL_NOTE", "LINK_RECORDING", "PROPOSE_LEAD_FACT_UPDATE"].includes(p.type));
   const first = meaningful.find((p) => p.type === "PREPARE_QUOTE") ?? meaningful[0];
   headline.final = first?.type ?? "NO_ACTION";
-  const override = business.find((b) => b.effect) ?? hard.find((x) => x.effect && x.rule !== "fact_evidence" && x.rule !== "commitment_evidence");
+  const override = business.find((b) => b.effect) ?? hard.find((x) => x.effect && !["fact_evidence", "commitment_evidence", "commitment_update_evidence", "sender_unverified", "identity_uncertain"].includes(x.rule));
   if (override) headline.changedBy = override.rule;
-  return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, ...planned], reviewKind: null, headline };
-}
-
-const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
-
-/**
- * What is still open on an enquiry Hermes would close: commitments from this conversation that the
- * CRM does not show as done, commitments still outstanding on the lead or customer, and open tasks.
- * Ours first: "We said we'd prepare and send the camera plan (later that day)". A commitment that a
- * later CRM event clearly proves was kept (the visit or job took place, the quote was accepted or
- * sent) is not open: it is listed under `satisfied` with that evidence.
- */
-export function outstandingItems(fromSource: Commitment[], lc: Lifecycle | undefined, saidAt: string): { items: string[]; satisfied: string[] } {
-  const settled = new Set(lc?.settledFromSource ?? []);
-  const said = [
-    ...fromSource.filter((c) => !settled.has(`${c.owner}:${c.actionKey}`)).map((c) => ({ owner: c.owner as string, action: c.action, actionKey: c.actionKey as string, dueText: c.dueText, at: saidAt })),
-    ...(lc?.outstanding ?? []),
-  ];
-  const seen = new Set<string>();
-  const line = (c: { owner: string; action: string; dueText: string | null }) =>
-    `${c.owner === "customer" ? "Waiting on the customer to" : "We said we'd"} ${lowerFirst(c.action)}${c.dueText ? ` (${c.dueText})` : ""}`;
-  const unique = [...said.filter((c) => c.owner !== "customer"), ...said.filter((c) => c.owner === "customer")].filter((c) => {
-    const k = `${c.owner === "customer" ? "c" : "g"}:${norm(c.action)}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  const items: string[] = [];
-  const satisfied: string[] = [];
-  for (const c of unique) {
-    const by = satisfiedBy(c, lc?.events ?? []);
-    if (by) satisfied.push(`“${c.action}” (${by.label})`);
-    else items.push(line(c));
-  }
-  return { items: [...items, ...(lc?.openTasks ?? []).map((t) => `Open task: ${t}`)], satisfied };
+  return result([...base, ...identityReview, ...planned], reviewKind, workContext, personVerified);
 }
 
 /**
@@ -410,34 +403,7 @@ export function pricingGaps(unpriced: string[]): string[] | null {
 
 export const pricingTaskTitle = (quoteNumber: number | null, who: string | null) => `Price the quote / complete costing for ${quoteNumber ? `Q-${quoteNumber}` : (who ?? "this lead")}`;
 
-/**
- * Hermes wants Chris to look, but the CRM can show the only blocker is pricing the Brain cannot
- * finish: the task to complete it. Only when nothing else needs a decision: no site visit, no
- * blocking question, no objection or conflict, not an acceptance, a change or a problem, and Hermes
- * itself was heading for a quote or names pricing as the reason.
- */
-function pricingOnlyTask(h: HermesResult, ctx: ValidateContext, missing: MissingInfo[]): { action: PlannedAction; gaps: string[] } | null {
-  const b = ctx.crm.brain;
-  if (!b || b.fullyPriced || b.siteVisitRequired) return null;
-  const gaps = pricingGaps(b.unpriced);
-  if (!gaps) return null;
-  if (missing.some((m) => m.blocking) || h.objections.length || h.conflicts.length) return null;
-  if (["acceptance", "objection", "service_issue", "quote_change", "not_relevant"].includes(h.intent)) return null;
-  const aboutPricing = /\b(pric|cost|labour|labor|allowance|unpriced|rate|margin)/i.test([h.reason, ...h.advisories].join(" "));
-  if (!aboutPricing && !["PREPARE_QUOTE", "RUN_BUSINESS_BRAIN"].includes(h.recommended_action)) return null;
-  const title = pricingTaskTitle(b.quoteNumber, null);
-  return {
-    gaps,
-    action: act("CREATE_INTERNAL_TASK", "auto", "pricing_only_blocker", `The Business Brain cannot finish the costing: ${gaps.join("; ")}.`, {
-      title,
-      kind: "quote",
-      due: "today",
-      detail: `The Business Brain cannot finish the costing${b.quoteNumber ? ` for Q-${b.quoteNumber}` : ""} until these are entered or approved: ${gaps.join("; ")}. Then re-run the Brain.`,
-    }),
-  };
-}
-
-/** One recommended action, turned into the router's actions under the business rules. */
+/** One recommended action, turned into the router's actions under the Business Brain's authority. */
 function planFor(
   action: HermesAction,
   h: HermesResult,
@@ -447,13 +413,11 @@ function planFor(
   const { known, service, property } = s;
   const timing = (known.timing as string | undefined) ?? null;
   const address = (known.site_address as string | undefined) ?? null;
-  const siteVisitAsked = known.site_visit_requested === true || h.intent === "site_visit_request";
-  const blockingQuestions = (forWhat?: string) =>
-    s.missing.filter((m) => m.blocking && (!forWhat || m.for === forWhat)).map((m) => h.missing.find((x) => x.field === m.field)?.question ?? m.label);
+  const questionsFrom = (list: MissingInfo[]) => list.map((m) => h.missing.find((x) => x.field === m.field)?.question ?? m.label);
   const ask = (questions: string[], rule: string, why: string): PlannedAction[] => {
     const phone = ctx.crm.customerPhone ?? (known.phone as string | undefined) ?? null;
     if (phone && (h.urgency === "urgent" || h.urgency === "high")) return [act("CALL_CUSTOMER", "auto", rule, `${why} Quicker to ask by phone: ${questions.join("; ")}.`, { ask: questions })];
-    return [act("DRAFT_EMAIL", "auto", rule, `${why} Only this is asked: ${questions.join("; ")}.`, { ask: questions })];
+    return [act("DRAFT_EMAIL", "auto", rule, `${why} Asked: ${questions.join("; ")}.`, { ask: questions })];
   };
   const siteVisit = (rule: string, reason: string): PlannedAction[] => {
     const out = [act("PROPOSE_SITE_VISIT", "approval", rule, reason, { address, timing })];
@@ -465,26 +429,22 @@ function planFor(
     case "RUN_BUSINESS_BRAIN":
     case "PREPARE_QUOTE": {
       const what = action === "PREPARE_QUOTE" ? "Prepare quote" : "Run the Business Brain";
-      // BUSINESS: commercial CCTV, or a customer who asked for a visit, is seen first.
+      // BRAIN POLICY: commercial CCTV is designed from a site visit.
       if (service === "cctv" && property === "commercial") {
-        s.business.push({ rule: "commercial_cctv_site_visit", message: `Hermes recommended "${what}"; commercial CCTV is always designed from a site visit.`, effect: "PROPOSE_SITE_VISIT" });
+        s.business.push({ rule: "commercial_cctv_site_visit", message: `Hermes recommended "${what}"; Business Brain policy: commercial CCTV is always designed from a site visit.`, effect: "PROPOSE_SITE_VISIT" });
         return siteVisit("commercial_cctv_site_visit", "Commercial CCTV is always designed from a site visit.");
       }
-      if (siteVisitAsked) {
-        s.business.push({ rule: "explicit_site_visit_request", message: `Hermes recommended "${what}"; the customer asked for a site visit.`, effect: "PROPOSE_SITE_VISIT" });
-        return siteVisit("explicit_site_visit_request", "The customer asked for a site visit.");
-      }
-      // BUSINESS: only CCTV has a Business Brain.
+      // BRAIN AUTHORITY: only CCTV has a Business Brain.
       if (service !== "cctv") {
         const svc = service ? service.replace(/_/g, " ") : null;
         if (!svc) {
-          s.business.push({ rule: "brain_needs_service", message: `Hermes recommended "${what}" but the service is not known.`, effect: "ASK_CUSTOMER" });
+          s.business.push({ rule: "brain_needs_service", message: `Hermes recommended "${what}" but the service is not known; the Brain only designs CCTV.`, effect: "ASK_CUSTOMER" });
           return ask(["Could you tell me a bit more about what you're after (cameras, alarm, access control…)?"], "ask_service", "The service decides how it is quoted.");
         }
         s.business.push({ rule: "manual_quote_service", message: `Hermes recommended "${what}"; there is no Business Brain for ${svc}, so it is quoted by hand.`, effect: "CREATE_INTERNAL_TASK" });
         return [act("CREATE_INTERNAL_TASK", "auto", "manual_quote_service", `${svc} enquiry: quote it manually (only CCTV has a Business Brain).`, { title: `Quote ${svc} enquiry manually`, kind: "quote", due: "next_business_day" })];
       }
-      // BUSINESS: the Brain's inputs. It never guesses them.
+      // BRAIN AUTHORITY: the Brain's inputs. It never guesses them.
       const need: string[] = [];
       if (!property) need.push("Is this for your home or for a business?");
       if (!has(known, "camera_count") && !has(known, "areas")) need.push("Roughly how many cameras are you after, or which areas would you like covered?");
@@ -493,18 +453,12 @@ function planFor(
         s.business.push({ rule: "brain_inputs_missing", message: `Hermes recommended "${what}"; the Business Brain still needs: ${need.join(" ")}`, effect: "ASK_CUSTOMER" });
         return ask(need, "ask_blocking_only", "Before a quote the Business Brain needs a little more.");
       }
-      // BUSINESS: one prepared quote at a time; a sent quote is only revised with Chris.
+      // AUTHORITY: one prepared quote at a time; a sent quote is only revised with Chris.
       if (action === "PREPARE_QUOTE" && ctx.crm.hasSentQuote) {
         s.business.push({ rule: "revised_quote_needs_chris", message: "A quote was already sent: a revised one waits for Chris (no automatic discount).", effect: "PREPARE_REVISED_QUOTE" });
         return [act("PREPARE_REVISED_QUOTE", "approval", "revised_quote_needs_chris", h.reason, { objections: h.objections })];
       }
       if (action === "PREPARE_QUOTE" && ctx.crm.hasOpenBrainQuote) {
-        // The prepared quote cannot be finished only because of pricing: say exactly that.
-        const pricing = pricingOnlyTask(h, ctx, s.missing);
-        if (pricing) {
-          s.business.push({ rule: "pricing_only_blocker", message: `A quote is already prepared, but its costing cannot be finished: ${pricing.gaps.join("; ")}.`, effect: "CREATE_INTERNAL_TASK" });
-          return [pricing.action];
-        }
         s.business.push({ rule: "quote_already_prepared", message: "A quote is already prepared and waiting in Approvals; another is not made.", effect: "NO_ACTION" });
         return [act("NO_ACTION", "auto", "quote_already_prepared", "A quote is already prepared for this lead and waits in Approvals.")];
       }
@@ -513,12 +467,10 @@ function planFor(
       return out;
     }
     case "ASK_CUSTOMER": {
-      const qs = blockingQuestions();
-      if (!qs.length) {
-        s.business.push({ rule: "nothing_blocking", message: "Hermes recommended asking the customer, but nothing it listed blocks progress.", effect: "NEEDS_REVIEW" });
-        return [act("NEEDS_REVIEW", "approval", "nothing_blocking", "Hermes wanted to ask the customer, but nothing blocking is missing.", { kind: "hermes_flagged", hermesRecommendation: action })];
-      }
-      return ask(qs, "ask_blocking_only", "Hermes: information that blocks progress is missing.");
+      const blocking = s.missing.filter((m) => m.blocking);
+      const qs = questionsFrom(blocking.length ? blocking : s.missing);
+      if (!qs.length) return [act("CREATE_INTERNAL_TASK", "auto", "hermes_recommendation", `${h.reason} (Hermes listed no question to ask.)`, { title: h.task?.title ?? "Ask the customer what is needed", kind: "task", due: "next_business_day" })];
+      return ask(qs, "hermes_recommendation", "Hermes:");
     }
     case "PROPOSE_SITE_VISIT":
       return siteVisit("hermes_recommendation", h.reason);
@@ -532,7 +484,7 @@ function planFor(
       return [act("DRAFT_EMAIL", "auto", "hermes_recommendation", `${h.reason} The reply waits for Chris's approval.`, { subject: h.reply_draft?.subject ?? null, body })];
     }
     case "CREATE_INTERNAL_TASK":
-      return [act("CREATE_INTERNAL_TASK", "auto", "hermes_recommendation", h.reason, { title: h.task?.title ?? h.summary.slice(0, 120), kind: "task", due: h.task?.due ?? "next_business_day", detail: h.task?.detail ?? h.reason })];
+      return [act("CREATE_INTERNAL_TASK", "auto", "hermes_recommendation", h.reason, { title: h.task?.title ?? h.summary.slice(0, 120), kind: /\b(price|costing|quote)\b/i.test(h.task?.title ?? "") ? "quote" : "task", due: h.task?.due ?? "next_business_day", detail: h.task?.detail ?? h.reason })];
     case "FOLLOW_UP":
       return [act("PREPARE_FOLLOW_UP", "auto", "hermes_recommendation", h.reason, { title: h.task?.title ?? null, due: h.task?.due ?? null, inDays: 3 })];
     case "WAITING_ON_CUSTOMER": {

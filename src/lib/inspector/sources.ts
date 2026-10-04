@@ -4,14 +4,13 @@
  */
 import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { cctvAssessments, commitments, contacts, emails, events, facts, inspections, jobs, leads, quotes, recordings, tasks, users } from "@/db/schema";
+import { contacts, emails, events, facts, jobs, leads, quotes, recordings, users } from "@/db/schema";
 import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { stripQuotedReply } from "@/lib/email/parse";
 import { parseWebsiteLead } from "@/lib/email/website-lead";
 import { datePartsIn, zonedToUtc } from "@/lib/calendar/ics";
 import { TZ } from "./dates";
 import { SIGNAL_WEIGHTS } from "./identity";
-import type { Lifecycle, LifecycleEvent } from "./lifecycle";
 import type { Known } from "./missing";
 import { normalisePhone, parseTranscript, phonesIn } from "./text";
 import type { FactKey, IdentitySignal, InspectorInput, Understanding } from "./types";
@@ -205,101 +204,7 @@ export async function crmState(leadId: string | null, contactId: string | null, 
     recordingLinked: !!rec && rec.status === "attached" && !!(rec.leadId || rec.contactId) && /^chosen by|^Inspector/.test(rec.matchedBy ?? ""),
     customerEmail: lead?.email ?? contact?.email ?? null,
     customerPhone: lead?.phone ?? contact?.phone ?? null,
-    lifecycle: await lifecycle(leadId, cid, input),
-    brain: await brainState(leadId),
   };
-}
-
-export type { Lifecycle } from "./lifecycle";
-
-const day = (d: Date) => new Intl.DateTimeFormat("en-NZ", { timeZone: TZ, day: "numeric", month: "short", year: "numeric" }).format(d);
-
-/** Where the enquiry stands in the CRM now, so "no action" on an old conversation can be judged. */
-async function lifecycle(leadId: string | null, contactId: string | null, input: InspectorInput): Promise<Lifecycle> {
-  const empty: Lifecycle = { progressed: [], events: [], openTasks: [], outstanding: [], settledFromSource: [] };
-  const settled = await db.query.commitments.findMany({ where: and(eq(commitments.sourceType, input.sourceType), eq(commitments.sourceId, input.sourceId), inArray(commitments.status, ["done", "cancelled"])), columns: { owner: true, actionKey: true } });
-  empty.settledFromSource = settled.map((c) => `${c.owner}:${c.actionKey}`);
-  if (!leadId && !contactId) return empty;
-  const jobRows = await db.query.jobs.findMany({
-    where: or(leadId ? eq(jobs.leadId, leadId) : undefined, contactId ? eq(jobs.contactId, contactId) : undefined),
-    columns: { id: true, number: true, status: true, doneAt: true, invoicedAt: true, statusChangedAt: true, createdAt: true },
-  });
-  const progressed: string[] = [];
-  const evts: LifecycleEvent[] = [];
-  const ev = (kind: LifecycleEvent["kind"], at: Date, label: string) => evts.push({ kind, at: at.toISOString(), label });
-  for (const j of jobRows) {
-    if (j.status === "cancelled") continue;
-    ev("job_created", j.createdAt, `J-${j.number} created on ${day(j.createdAt)}`);
-    if (j.status === "invoiced") {
-      progressed.push(`J-${j.number} invoiced`);
-      const done = j.doneAt ?? j.invoicedAt ?? j.statusChangedAt;
-      if (done) ev("job_done", done, `J-${j.number} completed on ${day(done)}`);
-      if (j.invoicedAt) ev("job_invoiced", j.invoicedAt, `J-${j.number} invoiced on ${day(j.invoicedAt)}`);
-    } else if (j.status === "done") {
-      progressed.push(`J-${j.number} completed`);
-      const done = j.doneAt ?? j.statusChangedAt;
-      if (done) ev("job_done", done, `J-${j.number} completed on ${day(done)}`);
-    } else if (["scheduled", "en_route", "on_site"].includes(j.status)) progressed.push(`J-${j.number} scheduled`);
-  }
-  const jobIds = jobRows.filter((j) => j.status !== "cancelled").map((j) => j.id);
-  // A job appointment that has already happened: someone attended.
-  if (jobIds.length) {
-    const attended = await db.query.events.findMany({ where: and(eq(events.kind, "job"), inArray(events.jobId, jobIds), lt(events.endsAt, new Date())), columns: { startsAt: true, jobId: true }, orderBy: [desc(events.startsAt)], limit: 5 });
-    for (const a of attended) {
-      const j = jobRows.find((x) => x.id === a.jobId)!;
-      ev("job_attended", a.startsAt, `J-${j.number} attended on ${day(a.startsAt)}`);
-    }
-  }
-  const visits = await db.query.events.findMany({
-    where: and(eq(events.kind, "site_visit"), lt(events.endsAt, new Date()), or(leadId ? eq(events.leadId, leadId) : undefined, contactId ? eq(events.contactId, contactId) : undefined)),
-    columns: { startsAt: true },
-    orderBy: [desc(events.startsAt)],
-    limit: 5,
-  });
-  if (visits[0]) progressed.push(`Site visit held on ${day(visits[0].startsAt)}`);
-  for (const v of visits) ev("visit_held", v.startsAt, `Site visit held on ${day(v.startsAt)}`);
-  if (leadId) {
-    const qs = await db.query.quotes.findMany({ where: and(eq(quotes.leadId, leadId), inArray(quotes.status, ["sent", "accepted"])), columns: { number: true, status: true, sentAt: true, acceptedAt: true } });
-    for (const q of qs) {
-      if (q.sentAt) ev("quote_sent", q.sentAt, `Q-${q.number} sent on ${day(q.sentAt)}`);
-      if (q.status === "accepted" && q.acceptedAt) ev("quote_accepted", q.acceptedAt, `Q-${q.number} accepted on ${day(q.acceptedAt)}`);
-    }
-    const accepted = qs.find((q) => q.status === "accepted");
-    const work = jobRows.find((j) => j.status !== "cancelled");
-    if (accepted && work) progressed.push(`Q-${accepted.number} accepted and J-${work.number} created`);
-  }
-  const open = await db.query.tasks.findMany({
-    where: and(eq(tasks.status, "open"), or(leadId ? eq(tasks.leadId, leadId) : undefined, contactId ? eq(tasks.contactId, contactId) : undefined, jobIds.length ? inArray(tasks.jobId, jobIds) : undefined)),
-    columns: { title: true },
-    limit: 10,
-  });
-  const rows = await db.query.commitments.findMany({
-    where: and(eq(commitments.status, "outstanding"), or(leadId ? eq(commitments.leadId, leadId) : undefined, contactId ? eq(commitments.contactId, contactId) : undefined)),
-    columns: { id: true, owner: true, action: true, actionKey: true, dueText: true, inspectionId: true, sourceId: true, createdAt: true },
-    limit: 20,
-  });
-  // When each was said: the conversation's time (its inspection's source time), not when it was stored.
-  const insIds = [...new Set(rows.map((r) => r.inspectionId).filter((x): x is string => !!x))];
-  const saidAt = new Map((insIds.length ? await db.query.inspections.findMany({ where: inArray(inspections.id, insIds), columns: { id: true, sourceAt: true } }) : []).map((i) => [i.id, i.sourceAt]));
-  const outstanding = rows.map((r) => ({
-    id: r.id,
-    owner: r.owner,
-    action: r.action,
-    actionKey: r.actionKey,
-    dueText: r.dueText,
-    at: (r.inspectionId ? saidAt.get(r.inspectionId) : null)?.toISOString() ?? (r.sourceId === input.sourceId ? input.at.toISOString() : null),
-  }));
-  return { progressed, events: evts, openTasks: [...new Set(open.map((t) => t.title))], outstanding, settledFromSource: empty.settledFromSource };
-}
-
-/** The Business Brain's latest result for the lead: what still stops the costing being finished. */
-async function brainState(leadId: string | null) {
-  if (!leadId) return null;
-  const a = await db.query.cctvAssessments.findFirst({ where: eq(cctvAssessments.leadId, leadId), orderBy: [desc(cctvAssessments.createdAt)], columns: { packet: true } });
-  if (!a) return null;
-  const p = a.packet as { siteVisit?: { required?: boolean }; costing?: { complete?: boolean; unpriced?: string[] } };
-  const q = await db.query.quotes.findFirst({ where: and(eq(quotes.leadId, leadId), eq(quotes.origin, "brain"), inArray(quotes.status, ["ai_prepared", "needs_review", "approved"])), orderBy: [desc(quotes.createdAt)], columns: { number: true } });
-  return { fullyPriced: !!p.costing?.complete, unpriced: p.costing?.unpriced ?? [], siteVisitRequired: !!p.siteVisit?.required, quoteNumber: q?.number ?? null };
 }
 
 /** First names of staff, to recognise Get Secure in transcripts. */

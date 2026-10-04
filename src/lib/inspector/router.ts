@@ -15,7 +15,7 @@
 import { and, desc, eq, gte, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { drafts, emails, events, inspections, inspectorActions, leads, quotes, recordings, tasks, users } from "@/db/schema";
+import { commitments, drafts, emails, events, inspections, inspectorActions, leads, quotes, recordings, tasks, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
@@ -42,6 +42,7 @@ export const AUTO_ALLOWED: ActionType[] = [
   "DRAFT_EMAIL",
   "NO_ACTION",
   "OUTSTANDING",
+  "RESOLVE_COMMITMENT",
 ];
 
 export type RouteContext = {
@@ -54,6 +55,8 @@ export type RouteContext = {
   actor?: Actor;
   /** Called for the fact update action (kept in inspect.ts, which has the diff). */
   applyFacts?: () => Promise<Record<string, unknown>>;
+  /** The sender is not a verified customer (work runs in Hermes's context): replies go to the sender. */
+  senderUnverified?: boolean;
 };
 
 function businessDay(from: Date, add: number): string {
@@ -183,6 +186,18 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
   switch (a.type) {
     case "NO_ACTION":
       return { status: "done", result: {} };
+    case "RESOLVE_COMMITMENT": {
+      // Only a commitment of this same work, still outstanding. Reversible: Chris can reopen it.
+      const id = String(a.payload.commitmentId ?? "");
+      const c = await db.query.commitments.findFirst({ where: eq(commitments.id, id), columns: { id: true, action: true, status: true, leadId: true, contactId: true } });
+      const ours = !!c && ((!!ctx.leadId && c.leadId === ctx.leadId) || (!!ctx.contactId && c.contactId === ctx.contactId));
+      if (!c || !ours) return { status: "blocked", result: { reason: "That commitment does not belong to this work." } };
+      if (c.status !== "outstanding") return { status: "done", result: { commitmentId: id, note: `already ${c.status}` } };
+      const status = a.payload.status === "cancelled" ? "cancelled" : "done";
+      await db.update(commitments).set({ status, completedAt: new Date(), completedById: null, updatedAt: new Date() }).where(and(eq(commitments.id, id), eq(commitments.status, "outstanding")));
+      if (ctx.leadId) await logActivity({ entity: "lead", entityId: ctx.leadId, actorId: null, action: "commitment_resolved", detail: { commitmentId: id, action: c.action, status, evidence: a.payload.evidenceRef ?? null, reason: a.reason, by: "Hermes" } });
+      return { status: "done", result: { commitmentId: id, action: c.action, resolvedAs: status, evidenceRef: a.payload.evidenceRef ?? null } };
+    }
     case "OUTSTANDING":
       // Nothing new is created: the commitment or task is already in the CRM (Today, the lead page).
       return { status: "outstanding", result: { items: a.payload.items ?? [] } };
@@ -241,7 +256,8 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
     }
     case "DRAFT_EMAIL": {
       const lead = ctx.leadId ? await db.query.leads.findFirst({ where: eq(leads.id, ctx.leadId) }) : null;
-      const to = lead?.email ?? ctx.input.from.email;
+      // An unverified sender in an existing job's context is answered at their own address.
+      const to = ctx.senderUnverified ? ctx.input.from.email : (lead?.email ?? ctx.input.from.email);
       if (!to) return { status: "blocked", result: { reason: "No email address to reply to." } };
       // One reply waiting at a time: a re-read never stacks a second draft on the first.
       const waiting = ctx.leadId ? await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, ctx.leadId), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } }) : null;
@@ -251,7 +267,7 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       const mail =
         typeof a.payload.body === "string"
           ? { subject: String(a.payload.subject ?? (src?.subject ? (/^re:/i.test(src.subject) ? src.subject : `Re: ${src.subject}`) : "Your enquiry")), body: a.payload.body }
-          : composeQuestionsEmail(lead?.name ?? ctx.input.from.name, (a.payload.ask as string[]) ?? [], src?.subject ?? null);
+          : composeQuestionsEmail(ctx.senderUnverified ? ctx.input.from.name : (lead?.name ?? ctx.input.from.name), (a.payload.ask as string[]) ?? [], src?.subject ?? null);
       const d = await createDraft({ kind: "email", leadId: ctx.leadId, contactId: ctx.contactId, threadId: src?.threadId ?? null, to: [to], subject: mail.subject, body: mail.body }, actor, { submit: true });
       return { status: "done", result: { draftId: d.id } };
     }

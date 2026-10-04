@@ -1,13 +1,16 @@
 /**
- * What Hermes must return for each email or conversation it inspects. Hermes understands the
- * language and recommends; the validator (src/lib/inspector/validate.ts) decides what may happen.
- * Nothing here is trusted until it has been parsed against this schema and validated. Plain module.
+ * What Hermes must return for each email or conversation it inspects. Hermes is the operational
+ * judgement: what it is, whether it is a lead, which work it belongs to, whether it is resolved or
+ * waiting, which commitments are kept, and the next step. The validator
+ * (src/lib/inspector/validate.ts) only checks Hermes is authorised to do that safely; the Business
+ * Brain stays the technical and commercial authority. Nothing here is trusted until it has been
+ * parsed against this schema and validated. Plain module.
  */
 import { z } from "zod";
 import { COMMITMENT_KEYS, FACT_KEYS, INTENTS } from "@/lib/inspector/types";
 
 /** Bump when the prompt or the contract changes: every run records it. */
-export const HERMES_INSPECTOR_VERSION = "hermes-inspector-1";
+export const HERMES_INSPECTOR_VERSION = "hermes-inspector-2";
 
 /** The controlled next actions Hermes may recommend. Nothing outside this list is ever executed. */
 export const HERMES_ACTIONS = [
@@ -92,7 +95,7 @@ export const hermesResultSchema = z.object({
   task: opt(z.object({ title: text(200), due: opt(text(40)), detail: opt(text(1000)) })),
   /** For DRAFT_REPLY: the reply Chris will review. It must not quote prices, dates or discounts. */
   reply_draft: opt(z.object({ subject: opt(text(200)), body: text(4000) })),
-  /** Who Hermes thinks this is. Advisory only: identity is decided by the CRM's hard rules. */
+  /** Who Hermes thinks the sender is. Advisory only: a person's identity is decided by the CRM's guarded rules. */
   identity: z
     .object({
       suggestion: z.enum(["candidate", "new", "unknown"]),
@@ -100,6 +103,27 @@ export const hermesResultSchema = z.object({
       reason: text(300).default(""),
     })
     .default({ suggestion: "unknown", candidate_key: null, reason: "" }),
+  /** Hermes's decision on an email: a new lead, not a lead, or part of existing work. */
+  lead_decision: z.enum(["lead", "not_lead", "existing", "undecided"]).catch("undecided").default("undecided"),
+  /**
+   * The work this is about, as a ref from the context pack ("lead:<id>", "job:<id>", "customer:<id>"),
+   * even when the sender is someone new. Separate from who the sender is: that stays the CRM's call.
+   */
+  operational_context: z
+    .object({ ref: opt(text(80)), reason: text(300).default("") })
+    .default({ ref: null, reason: "" }),
+  /** Where the matter stands, with the CRM records (refs from the pack) that show it. */
+  resolution: z
+    .object({
+      status: z.enum(["open", "waiting_on_us", "waiting_on_customer", "resolved"]).catch("open"),
+      evidence: z.array(z.object({ ref: text(80), note: text(300).default("") })).max(10).default([]),
+    })
+    .default({ status: "open", evidence: [] }),
+  /** Outstanding commitments (by id from the pack) that the CRM record shows were kept or are void. */
+  commitment_updates: z
+    .array(z.object({ id: text(80), status: z.enum(["done", "cancelled"]), evidence_ref: text(80), note: text(300).default("") }))
+    .max(10)
+    .default([]),
   conflicts: z
     .array(z.object({ key: text(40), crm_value: opt(z.union([z.string(), z.number(), z.boolean()])), new_value: z.union([z.string(), z.number(), z.boolean()]), evidence: text(500) }))
     .max(10)
