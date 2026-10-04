@@ -72,6 +72,12 @@ export async function acceptEmailAsLead(emailId: string, input: unknown): Promis
 export async function rejectEmailAsLead(emailId: string): Promise<ActionResult<undefined>> {
   const user = await requireUser();
   await markEmailNotLead(emailId, user.id);
+  try {
+    const { closeReviews } = await import("@/lib/inspector/inspect");
+    await closeReviews("email", [emailId], humanFromUser(user));
+  } catch (err) {
+    console.error(`[inspector] email ${emailId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
   const e = await db.query.emails.findFirst({ where: eq(emails.id, emailId), columns: { threadId: true } });
   revalidateInbox(e?.threadId);
   return ok(undefined);
@@ -92,6 +98,12 @@ export async function linkThreadTo(
   const user = await requireUser();
   try {
     await linkThread(threadId, target, user.id);
+    try {
+      const { reinspectThread } = await import("@/lib/inspector/inspect");
+      await reinspectThread(threadId);
+    } catch (err) {
+      console.error(`[inspector] thread ${threadId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
     revalidateInbox(threadId);
     return ok(undefined);
   } catch (err) {

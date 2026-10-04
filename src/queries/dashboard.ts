@@ -64,12 +64,21 @@ export async function getDashboard(userId: string) {
       orderBy: [asc(quotes.sentAt)],
       limit: 20,
     }),
-    db.query.tasks.findMany({
-      where: and(eq(tasks.status, "open"), or(lte(tasks.dueAt, today), isNull(tasks.dueAt))),
-      with: { assignedTo: { columns: { id: true, name: true } } },
-      orderBy: [asc(tasks.dueAt), asc(tasks.createdAt)],
-      limit: 50,
-    }),
+    // Overdue and due-today are read separately, so a long overdue list never pushes today's off.
+    Promise.all([
+      db.query.tasks.findMany({
+        where: and(eq(tasks.status, "open"), lt(tasks.dueAt, today)),
+        with: { assignedTo: { columns: { id: true, name: true } } },
+        orderBy: [asc(tasks.dueAt), asc(tasks.createdAt)],
+        limit: 50,
+      }),
+      db.query.tasks.findMany({
+        where: and(eq(tasks.status, "open"), or(eq(tasks.dueAt, today), isNull(tasks.dueAt))),
+        with: { assignedTo: { columns: { id: true, name: true } } },
+        orderBy: [desc(tasks.createdAt)],
+        limit: 50,
+      }),
+    ]).then(([a, b]) => [...a, ...b]),
     db.query.emails.findMany({
       where: and(eq(emails.direction, "inbound"), inArray(emails.classification, ["needs_review", "error"])),
       columns: { id: true, threadId: true, fromName: true, fromAddress: true, subject: true, receivedAt: true, classification: true, snippet: true },

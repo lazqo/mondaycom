@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { OFFICE_ROLES } from "@/lib/constants";
 import { Badge, Card, CardHeader, LinkButton } from "@/components/ui";
 import { ContactForm } from "@/components/contacts/contact-form";
+import { InspectorPanel } from "@/components/inspector/panel";
 import { StatusPill } from "@/components/leads/cells";
 import { JOB_STATUS_META, QUOTE_STATUS_META } from "@/lib/constants";
 import { formatDateTime, formatMoney } from "@/lib/utils";
@@ -97,6 +98,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           </Card>
         </div>
         <div className="space-y-4">
+          {user.role !== "field" ? <InspectorPanel contactId={contact.id} canApprove={!!user.canApprove} /> : null}
           <Card>
             <CardHeader title="Details" />
             <div className="p-4">

@@ -13,6 +13,7 @@ import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   activityLog,
+  commitments,
   contacts,
   emailThreads,
   emails,
@@ -32,6 +33,8 @@ import { stripQuotedReply } from "@/lib/email/parse";
 import { zonedToUtc } from "@/lib/calendar/ics";
 import { formatDate, formatDateOnly, formatDateTime, formatMoney, formatTime } from "@/lib/utils";
 import { isWebsiteLeadSender } from "@/lib/email/website-lead";
+import { ACTION_LABELS, FACT_LABELS } from "@/lib/inspector/labels";
+import type { ActionType, FactKey } from "@/lib/inspector/types";
 
 export type TimelineKind =
   | "enquiry"
@@ -47,6 +50,7 @@ export type TimelineKind =
   | "job"
   | "photo"
   | "recording"
+  | "inspector"
   | "activity";
 
 export type TimelineAttachment = { id: string; name: string; href: string; size: number; image: boolean };
@@ -117,6 +121,34 @@ function fmtValue(v: unknown, userNames: Map<string, string>): string {
 
 type Scope = { leadIds: string[]; contactId: string | null; label: boolean };
 
+/**
+ * The Inspector's own steps (read, facts filled in, Brain run, quote prepared, Chris's decisions),
+ * so the timeline reads: conversation → analysed → facts → Brain → quote prepared → approved → sent.
+ * Undefined when the action is not the Inspector's; null when it is shown elsewhere.
+ */
+function inspectorItem(action: string, d: Record<string, unknown>, leadId: string | null): Pick<TimelineItem, "kind" | "title" | "meta" | "body" | "href"> | null | undefined {
+  const fact = (k: unknown) => FACT_LABELS[k as FactKey] ?? String(k).replace(/_/g, " ");
+  switch (action) {
+    case "inspected":
+      return { kind: "inspector", title: `Inspector read the ${d.sourceType === "recording" ? "conversation" : "email"}${d.title ? ` “${String(d.title)}”` : ""}`, body: d.summary ? String(d.summary) : null, href: leadId ? `/leads/${leadId}` : "/inspector" };
+    case "inspector_note":
+      return null; // the same summary as "inspected"
+    case "facts_applied":
+      return { kind: "inspector", title: `Filled in from the ${d.source === "recording" ? "conversation" : "email"}: ${((d.fields as string[]) ?? []).map((f) => FIELD_LABELS[f] ?? f).join(", ")}` };
+    case "fact_applied":
+      return { kind: "inspector", title: `${fact(d.key)} changed to ${fmtPlain(d.value)}`, meta: d.previous != null ? `was ${fmtPlain(d.previous)} · chosen in the Inspector` : "chosen in the Inspector" };
+    case "brain_run_by_inspector":
+      return { kind: "inspector", title: "Business Brain ran", meta: [d.complete ? "fully priced" : "not fully priced", d.siteVisit ? "site visit needed" : null].filter(Boolean).join(" · "), href: leadId ? `/leads/${leadId}/assessment` : null };
+    case "quote_prepared_by_inspector":
+      return { kind: "quote", title: `Quote${d.quoteNumber ? ` Q-${String(d.quoteNumber)}` : ""} prepared for approval`, meta: d.draftId ? "reply drafted too · nothing sent" : "nothing sent", href: d.quoteId ? `/quotes/${String(d.quoteId)}` : null };
+    case "inspector_action_accepted":
+      return { kind: "inspector", title: `Accepted: ${ACTION_LABELS[d.type as ActionType] ?? String(d.type)}`, body: d.reason ? String(d.reason) : null };
+    default:
+      return undefined;
+  }
+}
+const fmtPlain = (v: unknown) => (typeof v === "boolean" ? (v ? "yes" : "no") : v == null ? "—" : String(v));
+
 async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
   const leadRows = scope.leadIds.length
     ? await db.query.leads.findMany({ where: inArray(leads.id, scope.leadIds), with: { contact: { columns: { id: true, name: true } } } })
@@ -166,6 +198,12 @@ async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
     db.select({ id: users.id, name: users.name }).from(users),
   ]);
   const eventIds = eventRows.map((e) => e.id);
+  const commitmentRows = await db.query.commitments.findMany({
+    where: and(
+      sql`${commitments.status} <> 'cancelled'`,
+      or(inArray(commitments.leadId, ids(leadIds)), inArray(commitments.jobId, ids(jobIds)), scope.contactId ? eq(commitments.contactId, scope.contactId) : sql`false`),
+    ),
+  });
   const activity = await db
     .select()
     .from(activityLog)
@@ -340,7 +378,14 @@ async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
         case "archived":
           items.push({ ...base, kind: "status", title: "Lead archived", source: src, href });
           continue;
-        default:
+        default: {
+          const ins = inspectorItem(a.action, d, a.entityId);
+          if (ins === null) continue;
+          if (ins) {
+            items.push({ ...base, ...ins, href: ins.href ?? href, source: src });
+            continue;
+          }
+        }
           items.push({ ...base, kind: "activity", title: a.action.replace(/_/g, " "), source: src, href });
           continue;
       }
@@ -394,6 +439,10 @@ async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
       else if (a.action === "call") items.push({ ...base, kind: "call", title: d.direction === "incoming" ? "Phone call from the customer" : "Phone call to the customer", meta: d.outcome ? String(d.outcome) : null, body: String(d.body ?? "") || null, href });
       else if (a.action === "created") items.push({ ...base, kind: "activity", title: "Customer record created", href });
       else if (a.action === "updated") items.push({ ...base, kind: "activity", title: "Customer details updated", href });
+      else {
+        const ins = inspectorItem(a.action, d, null);
+        if (ins) items.push({ ...base, ...ins, href: ins.href ?? href });
+      }
       continue;
     }
     // "event" entries (created/updated in the calendar screen) are covered by the events themselves.
@@ -488,6 +537,25 @@ async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
   for (const r of recordingRows) {
     const minutes = r.durationSeconds ? `${Math.round(r.durationSeconds / 60)} min` : null;
     items.push({ id: `rec-${r.id}`, at: r.recordedAt ?? r.createdAt, kind: "recording", title: `Recorded conversation: ${r.title}`, meta: [minutes, "Plaud", r.transcriptPolished ? "cleaned-up transcript" : "original transcript"].filter(Boolean).join(" · "), body: r.transcript, source: leadLabel(r.leadId), href: "/recordings" });
+  }
+
+  // ---- Commitments heard on calls and in emails ----
+  for (const c of commitmentRows) {
+    const customer = c.leadId ? leadById.get(c.leadId)?.name.split(" ")[0] : null;
+    const who = c.owner === "get_secure" ? (c.ownerName ?? "Get Secure") : c.owner === "customer" ? (c.ownerName ?? customer ?? "The customer") : "Someone";
+    const open = c.status === "outstanding";
+    const at = open && c.dueAt ? c.dueAt : (c.completedAt ?? c.createdAt);
+    items.push({
+      id: `commit-${c.id}`,
+      at,
+      kind: "inspector",
+      title: `${open ? "" : "Done: "}${who} to ${c.action.charAt(0).toLowerCase()}${c.action.slice(1)}`,
+      meta: [c.dueText ? `“${c.dueText}”` : null, open ? (c.dueAt && c.dueAt < new Date() ? "overdue" : "outstanding") : "done", c.sourceType === "recording" ? "from a Plaud conversation" : "from an email"].filter(Boolean).join(" · "),
+      body: c.evidence,
+      upcoming: open && !!c.dueAt && c.dueAt > new Date(),
+      source: leadLabel(c.leadId) ?? (c.jobId && jobById.has(c.jobId) ? jobLabel(c.jobId) : null),
+      href: c.leadId ? `/leads/${c.leadId}` : c.jobId ? `/jobs/${c.jobId}` : null,
+    });
   }
 
   // Oldest first; ties keep the order they were added (enquiry before the emails that follow it).

@@ -33,6 +33,8 @@ Production runs the built-in offline classifier. There is no Anthropic account o
 | `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Auto-create leads at or above this; below goes to Needs review. Raise to `0.9` to be cautious. |
 | `ANTHROPIC_API_KEY` | `sk-ant-…` | Only if you ever switch `AI_PROVIDER` away from `rules`. From console.anthropic.com; costs roughly 2 US cents per email classified. |
 | `AI_MODEL` | `claude-opus-5` | Only used when the provider is Anthropic. |
+| `JEV_SHADOW` | `off` | Leave off. `on` (together with `ANTHROPIC_API_KEY`) runs Jev beside the Inspector's rules in shadow mode: it classifies only, never drives an action, and sends the email or transcript text to Anthropic. See section 17 of `docs/DEPLOYMENT_HANDOFF.md`. |
+| `JEV_MODEL` | `claude-opus-5-5` | Only used when Jev is on. |
 
 Note: forwarded enquiries lose their details during extraction whichever classifier is active — see
 section 9 of `docs/DEPLOYMENT_HANDOFF.md`.

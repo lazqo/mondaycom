@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks, users } from "@/db/schema";
 import { env } from "@/lib/env";
@@ -31,7 +31,8 @@ export async function runAutomations(now = new Date()): Promise<RunSummary> {
   }
 
   const existing = await db.query.tasks.findMany({
-    where: and(eq(tasks.status, "open"), isNotNull(tasks.ruleKey)),
+    // Only this runner's reminders: tasks the Inspector made (rule keys "inspector:…") are not its to resolve.
+    where: and(eq(tasks.status, "open"), isNotNull(tasks.ruleKey), sql`${tasks.ruleKey} not like 'inspector:%'`),
     columns: { id: true, ruleKey: true, entityId: true, assignedToId: true },
   });
   const openKey = (r: string, e: string) => `${r}:${e}`;
@@ -79,11 +80,10 @@ export async function runAutomations(now = new Date()): Promise<RunSummary> {
       .where(
         and(
           eq(tasks.status, "open"),
-          notInArray(
+          inArray(
             tasks.id,
-            existing.filter((t) => wanted.has(openKey(t.ruleKey!, t.entityId!))).map((t) => t.id).concat(["00000000-0000-0000-0000-000000000000"]),
+            stale.map((t) => t.id),
           ),
-          isNotNull(tasks.ruleKey),
         ),
       );
   }

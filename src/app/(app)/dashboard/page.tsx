@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getDashboard } from "@/queries/dashboard";
+import { appDay, getDashboard } from "@/queries/dashboard";
+import { getOutstandingCommitments, inspectorReviewCount } from "@/queries/inspector";
+import { CommitmentLine } from "@/components/inspector/views";
 import { listActiveUsers } from "@/queries";
 import { runAutomationsIfDue } from "@/lib/automations/runner";
 import { getSetupSteps } from "@/lib/setup";
@@ -52,8 +54,20 @@ export default async function DashboardPage() {
   const user = await requireUser();
   if (user.role === "field") redirect("/my-day");
   await runAutomationsIfDue(5);
-  const [d, users, setup] = await Promise.all([getDashboard(user.id), listActiveUsers(), user.role === "admin" ? getSetupSteps() : Promise.resolve(null)]);
-  const attention = d.overdueTasks.length + d.needsReview.length + d.newLeads.length;
+  const [d, users, setup, commitmentItems, inspectorCount] = await Promise.all([
+    getDashboard(user.id),
+    listActiveUsers(),
+    user.role === "admin" ? getSetupSteps() : Promise.resolve(null),
+    getOutstandingCommitments(),
+    inspectorReviewCount(),
+  ]);
+  const now = new Date();
+  // Ours: anything overdue, due by the end of today, or with no date. Theirs: what customers said they'd do.
+  const endOfToday = appDay(now).end;
+  const ours = commitmentItems.filter((c) => c.commitment.owner !== "customer" && (!c.commitment.dueAt || c.commitment.dueAt <= endOfToday || c.commitment.dueAt < now));
+  const oursOverdue = ours.filter((c) => c.commitment.dueAt && c.commitment.dueAt < now).length;
+  const theirs = commitmentItems.filter((c) => c.commitment.owner === "customer");
+  const attention = d.overdueTasks.length + d.needsReview.length + d.newLeads.length + oursOverdue + inspectorCount;
   const hour = Number(new Intl.DateTimeFormat("en-NZ", { hour: "numeric", hour12: false, timeZone: process.env.APP_TIMEZONE ?? "Pacific/Auckland" }).format(new Date()));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = user.name.split(" ")[0];
@@ -93,6 +107,19 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="space-y-4">
+          <Section title="Our commitments" count={ours.length} tone={oursOverdue ? "alert" : "warn"} empty="Nothing promised for today. When Chris says “I'll send the quote tonight” on a call, it shows up here.">
+            {ours.slice(0, MAX_ROWS).map((c) => (
+              <CommitmentLine key={c.commitment.id} item={c} now={now} />
+            ))}
+          </Section>
+          {inspectorCount > 0 ? (
+            <Link href="/inspector" className="flex items-center justify-between rounded-md border border-[#ffcb00] bg-[#fff8db] px-4 py-2.5 text-sm text-gray-900 hover:bg-[#fff2b8]" data-testid="inspector-callout">
+              <span>
+                <span className="font-medium">Inspector:</span> {inspectorCount} {inspectorCount === 1 ? "thing waits" : "things wait"} for you (who a conversation is with, site visits, conflicting facts)
+              </span>
+              <span className="text-brand-700">Review →</span>
+            </Link>
+          ) : null}
           <Section title="Overdue reminders" count={d.overdueTasks.length} tone="alert" empty="Nothing overdue. Nice.">
             <TaskList tasks={d.overdueTasks} />
           </Section>
@@ -131,6 +158,11 @@ export default async function DashboardPage() {
                 </Link>
               );
             })}
+          </Section>
+          <Section title="Waiting on customers" count={theirs.length} empty="No customer has said they'll send anything.">
+            {theirs.slice(0, MAX_ROWS).map((c) => (
+              <CommitmentLine key={c.commitment.id} item={c} now={now} />
+            ))}
           </Section>
           <Section title="Jobs not yet scheduled" count={d.unassignedJobs.length} href="/calendar?view=week" tone="warn" empty="Every job has a time on the calendar.">
             {d.unassignedJobs.slice(0, MAX_ROWS).map((j) => (

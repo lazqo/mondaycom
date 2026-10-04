@@ -37,7 +37,15 @@ export default defineConfig({
     : {
         command: `pnpm next start -p ${PORT}`,
         // The supplier pricing connector logs in to the IT Plus stand-in from global-setup, never the real site.
-        env: { AI_PROVIDER: "rules", ITPLUS_BASE_URL: "http://127.0.0.1:3199", SUPPLIER_SYNC_DELAY_MS: "0" },
+        // Plaud is read through a stand-in CLI whose recordings the Inspector e2e test writes.
+        env: {
+          AI_PROVIDER: "rules",
+          ITPLUS_BASE_URL: "http://127.0.0.1:3199",
+          SUPPLIER_SYNC_DELAY_MS: "0",
+          PLAUD_ENABLED: "true",
+          PLAUD_CLI: `${process.cwd()}/tests/support/fake-plaud.mjs`,
+          FAKE_PLAUD_STATE: `${process.cwd()}/test-results/e2e-plaud.json`,
+        },
         url: `${baseURL}/api/health`,
         reuseExistingServer: !process.env.CI,
         timeout: 60_000,

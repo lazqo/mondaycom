@@ -839,6 +839,98 @@ alarm panels, keypads, intercoms and access controllers.
 
 ---
 
+## 17. Lead + Conversation Inspector
+
+Every new email and every Plaud conversation is read by the Inspector. Both go through the same
+pipeline:
+
+```
+email / Plaud conversation
+  → who is it? (several signals, never a name alone)
+  → what does it say? (facts with the words they came from, intent, urgency, objections,
+    decisions, commitments, what is missing: blocking or not)
+  → recommended actions (fixed rules, each with its rule name)
+  → Unified Action Router: internal work is done now; anything for the customer waits for Chris
+  → timeline: read → facts → Brain run → quote prepared → Chris approved → PDF → email sent
+```
+
+It is deterministic: no AI service is involved unless Jev is switched on (see below), and Jev only
+ever observes.
+
+**What it does on its own** (as `system:inspector`, which the guard refuses for anything
+customer-facing):
+- adds an internal note and fills **blank** lead fields from what the customer said;
+- files a recording against a lead/customer when the evidence is strong (see "Who is it?");
+- creates tasks: call the customer, follow up, service case, price a quote, reply to a question;
+- for a residential CCTV enquiry with nothing blocking: runs the Business Brain on the lead and
+  prepares the quote and reply, which wait in **Approvals**;
+- for a vague enquiry: prepares a reply asking **only** what blocks a quote (home or business, how
+  many cameras or which areas, storeys). It never asks for something just because a field is blank.
+
+**What waits for Chris** (Inspector → *Waiting for you*):
+- site visits and bookings: accepting makes Chris's task to arrange it. It never books or confirms
+  anything with the customer;
+- revised quotes (after a price/scope objection or a change request): accepting re-runs the Brain and
+  prepares a revised quote for Approvals. No discount is applied automatically.
+
+**What it never does:** send an email or a quote, confirm a booking or site visit, promise a price or
+a date, discount, or accept terms. These are enforced in code by the actor guard, not just by the
+rules. A prepared quote or email never changes the lead's status or "last contact": prepared is not
+sent.
+
+**Business Brain rules still decide.** Commercial CCTV, or a customer asking for a site visit, goes to
+a site visit, not a quote. If the Brain says a site visit is needed, the quote is not prepared and a
+site-visit proposal waits for Chris. If nothing in the design has an approved price, no quote or reply
+is prepared and Chris gets a "Price the quote" task instead. An upgrade with unknown cabling never gets
+the cheaper upgrade labour. The Inspector routes; the Brain designs and prices.
+
+**Who is it?** Signals are scored together: the email thread or Chris's own choice (authoritative), the
+email address, a phone number, a quote number, an appointment the conversation was recorded during
+(30 minutes before it to an hour after), and, as supporting evidence only, address, company and name.
+A name on its own is **never** enough. When the evidence is weak or two people are too close, it goes
+to Inspector → **Who is this?**, showing the possible matches and why. Nothing customer-specific (facts,
+filing, commitments against a lead) is written until Chris chooses. Choosing "Not a customer" there
+also clears the email from the Inbox's Needs review; "Not a lead" in the Inbox, or Dismiss on the
+Recordings page, closes the matching review in the Inspector.
+
+*Change from before:* importing a Plaud recording used to file it automatically on a name match. It
+now files automatically only on a phone number match; a name-only match waits for Chris.
+
+**Facts and conflicts.** Each fact keeps where it came from (email or recording, which one, when), the
+words, a confidence and its state (applied, proposed, conflict, rejected). A new value that disagrees
+with the CRM is **never** written over it: it appears under *Conflicting facts* with both values, and
+Chris picks "Use new value" or "Keep current". The same street written with or without the suburb is
+not a conflict.
+
+**Commitments.** "I'll send the quote tonight" from Chris on a call becomes *Chris: Send the quote
+tonight*, due 9pm today, outstanding. "I'll send the photos tomorrow" from the customer becomes theirs,
+due 5pm tomorrow. They show on:
+- **Today:** *Our commitments* (overdue, due today, or undated) and *Waiting on customers*;
+- the lead, customer and job pages (Inspector panel);
+- the lead and customer timelines.
+
+Mark one Done (or ✕ if no longer needed) on Today or the lead page.
+
+**Where to look:**
+- **Inspector** (main menu, with a count): Who is this?, Waiting for you, Conflicting facts, and
+  Recently read: what it understood from each email or conversation, every action it took and why
+  (rule name), with links to the quote or draft. "Read again" re-reads a source after a correction.
+- **Lead, customer and job pages:** the Inspector panel, plus Inspector entries on the timeline.
+
+**Jev (shadow mode, off by default).** Jev is a Claude classifier that answers a small fixed set of
+questions beside the rules (intent, conversation type, urgency, quote readiness, call vs quote vs
+ask, objection type, site-visit probability, confidence). It never drives an action, a design, a
+price, an HDD choice, a supplier cost or anything sent. Its answers are stored with the rules' answer
+and with what Chris actually did, and compared at the bottom of the Inspector page. To switch it on,
+set `JEV_SHADOW=on` and `ANTHROPIC_API_KEY` (optionally `JEV_MODEL`). Note that this sends the email or
+transcript text to Anthropic. It never sends supplier credentials or prices. With either variable
+unset, nothing leaves the server.
+
+**Deploying:** migration `0017_inspector` adds the Inspector tables (inspections, facts, commitments,
+inspector actions, Jev observations) and a `kind` column on tasks. `./deploy/update.sh` runs it.
+Nothing is backfilled: only new emails and conversations are read. To read an existing one, use "Read
+again" from the Inspector, or re-run classification on an email in the Inbox.
+
 ## Keeping secrets out of GitHub
 
 Rules, and what enforces them:

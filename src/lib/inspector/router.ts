@@ -157,6 +157,9 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       const lead = ctx.leadId ? await db.query.leads.findFirst({ where: eq(leads.id, ctx.leadId) }) : null;
       const to = lead?.email ?? ctx.input.from.email;
       if (!to) return { status: "blocked", result: { reason: "No email address to reply to." } };
+      // One reply waiting at a time: a re-read never stacks a second draft on the first.
+      const waiting = ctx.leadId ? await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, ctx.leadId), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } }) : null;
+      if (waiting) return { status: "done", result: { draftId: waiting.id, note: "a reply is already waiting for review" } };
       const src = ctx.input.sourceType === "email" ? await db.query.emails.findFirst({ where: eq(emails.id, ctx.input.sourceId), columns: { threadId: true, subject: true } }) : null;
       const mail = composeQuestionsEmail(lead?.name ?? ctx.input.from.name, (a.payload.ask as string[]) ?? [], src?.subject ?? null);
       const d = await createDraft({ kind: "email", leadId: ctx.leadId, contactId: ctx.contactId, threadId: src?.threadId ?? null, to: [to], subject: mail.subject, body: mail.body }, actor, { submit: true });

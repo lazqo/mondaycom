@@ -6,6 +6,7 @@ import { getLeadTimeline, toTimelineEntries } from "@/queries/timeline";
 import { Timeline } from "@/components/timeline/timeline";
 import { requireOffice } from "@/lib/auth";
 import { getThreadForLead } from "@/queries/email";
+import { InspectorPanel } from "@/components/inspector/panel";
 import { LeadEmailCard } from "@/components/leads/lead-email-card";
 import { SiteVisitCard } from "@/components/leads/site-visit-card";
 import { JourneyBar } from "@/components/journey/journey-bar";
@@ -21,7 +22,7 @@ import { formatDateOnly, formatDateTime, formatMoney } from "@/lib/utils";
 export const metadata: Metadata = { title: "Lead profile" };
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireOffice();
+  const user = await requireOffice();
   const { id } = await params;
   const [lead, users] = await Promise.all([getLead(id), listActiveUsers()]);
   if (!lead) notFound();
@@ -104,6 +105,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="space-y-4">
+          <InspectorPanel leadId={lead.id} canApprove={!!user.canApprove} />
           <SiteVisitCard lead={{ id: lead.id, name: lead.name, site: lead.site }} events={lead.events} users={users} />
           <Card>
             <CardHeader title="Details" />

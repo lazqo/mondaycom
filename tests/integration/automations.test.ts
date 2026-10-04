@@ -103,6 +103,13 @@ describe("runAutomations", () => {
     const again = (await openTasksFor()).find((x) => x.ruleKey === "quote_no_response" && x.entityId === quoteId);
     expect(again).toBeFalsy();
   });
+
+  it("leaves the Inspector's tasks alone: they are not reminders it made", async () => {
+    const [t] = await db.insert(tasks).values({ title: `Price the quote ${RUN}`, leadId: leadIds[1], ruleKey: "inspector:PREPARE_QUOTE:quote_ready", entityId: leadIds[1], kind: "quote" }).returning({ id: tasks.id });
+    await runAutomations();
+    expect((await db.query.tasks.findFirst({ where: eq(tasks.id, t.id) }))!.status).toBe("open");
+    await db.delete(tasks).where(eq(tasks.id, t.id));
+  });
 });
 
 describe("notifyJobScheduled", () => {

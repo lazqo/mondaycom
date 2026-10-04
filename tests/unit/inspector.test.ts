@@ -59,6 +59,7 @@ describe("emails: understanding and blocking information", () => {
     expect(fact(u, "storeys")).toBe(1);
     expect(fact(u, "site_address")).toBe("12 Kauri Street, Grey Lynn");
     expect(fact(u, "remote_viewing")).toBe(true);
+    expect(fact(u, "areas")).toBeUndefined(); // "Kauri Street" is the address, not a camera on the street
     expect(u.missing.filter((m) => m.blocking)).toEqual([]);
     expect(types(actions)).toEqual(["ADD_INTERNAL_NOTE", "PROPOSE_LEAD_FACT_UPDATE", "RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]);
     expect(actions.find((a) => a.type === "PREPARE_QUOTE")!.mode).toBe("auto"); // prepared, waits in Approvals
@@ -156,10 +157,11 @@ describe("Plaud conversations: speakers and commitments", () => {
   it("Chris's promise and the customer's promise become commitments with due times", () => {
     const { u } = run(call(transcript));
     const chris = u.commitments.find((c) => c.owner === "get_secure")!;
-    expect(chris).toMatchObject({ actionKey: "send_quote", dueText: "tonight" });
+    // Plaud's "Speaker 1" is named from how they introduced themselves; the promise is in the words used.
+    expect(chris).toMatchObject({ actionKey: "send_quote", dueText: "tonight", ownerName: "Chris", action: "Send the quote tonight" });
     expect(nz(chris.dueAt)).toBe(nz("2026-10-07T08:00:00Z")); // 9pm the same day in Auckland
     const cust = u.commitments.find((c) => c.owner === "customer")!;
-    expect(cust).toMatchObject({ actionKey: "send_photos", dueText: "tomorrow" });
+    expect(cust).toMatchObject({ actionKey: "send_photos", dueText: "tomorrow", ownerName: null, action: "Send the photos of the garage tomorrow" });
     expect(nz(cust.dueAt)).toBe(nz("2026-10-08T04:00:00Z")); // 5pm the next day
   });
 
@@ -170,6 +172,11 @@ describe("Plaud conversations: speakers and commitments", () => {
     expect(fact(u, "areas")).toBe("driveway, front door, side gate");
     expect(fact(u, "brand")).toBeUndefined(); // "VIGI" was Chris's suggestion
     expect(types(actions)).toEqual(expect.arrayContaining(["LINK_RECORDING", "RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]));
+  });
+
+  it("a camera on the street is still an area when it is not part of the address", () => {
+    const { u } = run(email("Hi, quote please for 3 cameras at 5 Rata Road, Ponsonby: the driveway, the front door and one looking at the street."));
+    expect(fact(u, "areas")).toBe("driveway, front door, street");
   });
 
   it("an undecided caller gets a follow-up, not a quote", () => {

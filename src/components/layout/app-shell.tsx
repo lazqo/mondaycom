@@ -12,12 +12,14 @@ import { GlobalSearch } from "./global-search";
 export function AppShell({
   user,
   needsReview = 0,
+  inspectorReview = 0,
   notifications = [],
   unread = 0,
   children,
 }: {
   user: SessionUser;
   needsReview?: number;
+  inspectorReview?: number;
   notifications?: Notification[];
   unread?: number;
   children: React.ReactNode;
@@ -36,7 +38,7 @@ export function AppShell({
         <div className="px-3 pt-3">
           <GlobalSearch />
         </div>
-        <SidebarNav role={user.role} needsReview={needsReview} />
+        <SidebarNav role={user.role} badges={{ "/inbox": needsReview, "/inspector": inspectorReview }} />
         <div className="mt-auto border-t border-gray-200 p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium text-gray-500">Notifications</span>

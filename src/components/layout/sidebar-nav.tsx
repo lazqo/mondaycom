@@ -6,7 +6,10 @@ import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/constants";
 import { navItemsFor, type NavItem as Item } from "@/lib/nav";
 
-export function SidebarNav({ role, needsReview = 0 }: { role: UserRole; needsReview?: number }) {
+const BADGE_TITLES: Record<string, string> = { "/inbox": "Emails needing review", "/inspector": "Waiting for review in the Inspector" };
+
+/** `badges`: a count per nav href (emails needing review, Inspector items waiting). */
+export function SidebarNav({ role, badges = {} }: { role: UserRole; badges?: Record<string, number> }) {
   const pathname = usePathname();
   const { main, settings } = navItemsFor(role);
   const render = (items: Item[]) =>
@@ -23,9 +26,9 @@ export function SidebarNav({ role, needsReview = 0 }: { role: UserRole; needsRev
         >
           <Icon className="h-4 w-4" />
           {label}
-          {href === "/inbox" && needsReview > 0 ? (
-            <span className="ml-auto rounded-full bg-[#ffcb00] px-1.5 text-[10px] font-semibold text-gray-900" title="Emails needing review">
-              {needsReview}
+          {(badges[href] ?? 0) > 0 ? (
+            <span className="ml-auto rounded-full bg-[#ffcb00] px-1.5 text-[10px] font-semibold text-gray-900" title={BADGE_TITLES[href]}>
+              {badges[href]}
             </span>
           ) : null}
         </Link>

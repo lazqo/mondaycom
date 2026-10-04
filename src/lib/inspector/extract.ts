@@ -71,14 +71,30 @@ function words(s: string) {
   return s.length > 220 ? `${s.slice(0, 217)}…` : s;
 }
 
+/** Plaud's labels when it does not know who is talking. */
+const GENERIC_SPEAKER = /^speaker\s*\d+$/i;
+
+/** "Hi, it's Chris from Get Secure" / "Hemi Walker here": the name each generic speaker gave. */
+function introducedNames(utterances: InspectorInput["utterances"]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const u of utterances) {
+    if (!u.speaker || out.has(u.speaker)) continue;
+    const m = /\b(?:this is|it'?s|i'?m|my name is)\s+([A-Z][a-z']+(?:\s[A-Z][a-z']+)?)/.exec(u.text) ?? /(?:^|[.,!]\s*)([A-Z][a-z']+(?:\s[A-Z][a-z']+)?)\s+here\b/.exec(u.text);
+    if (m) out.set(u.speaker, m[1].replace(/\s+(from|on|here)$/i, ""));
+  }
+  return out;
+}
+
 /** Sentences with who said them (Get Secure, the customer, or unknown). */
 export function speakerSentences(input: InspectorInput, staffNames: string[]): Sentence[] {
   if (input.sourceType === "recording" && input.utterances.length) {
     const gs = getSecureSpeaker(input.utterances, staffNames);
+    const named = introducedNames(input.utterances);
     const out: Sentence[] = [];
     for (const u of input.utterances) {
       const who: Sentence["speaker"] = !u.speaker || !gs ? "unknown" : u.speaker === gs ? "get_secure" : "customer";
-      for (const t of sentences(u.text)) out.push({ text: t, speaker: who, speakerName: u.speaker });
+      const name = u.speaker && GENERIC_SPEAKER.test(u.speaker) ? (named.get(u.speaker) ?? null) : u.speaker;
+      for (const t of sentences(u.text)) out.push({ text: t, speaker: who, speakerName: name });
     }
     return out;
   }
@@ -194,7 +210,11 @@ export function extract(input: InspectorInput, ctx: ExtractContext): Understandi
     add({ key: "existing_cabling", value: coax ? "coax" : /cat ?6/i.test(cab) ? "cat6" : "cat5e", display: coax ? "Coax (analogue)" : /cat ?6/i.test(cab) ? "Cat6" : "Cat5e", evidence: cab, confidence: 0.8 });
   }
   // Areas to cover: from what the customer wants, not from their own promises ("photos of the garage").
-  const wantText = customerSide.filter((s) => !COMMITMENT.test(s.text)).map((s) => s.text).join(" ");
+  // Addresses are taken out first, so "12 Kauri Street" is not a camera on the street.
+  const wantText = customerSide
+    .filter((s) => !COMMITMENT.test(s.text))
+    .map((s) => s.text.replace(new RegExp(ADDRESS.source, "g"), " "))
+    .join(" ");
   const areas = AREA_WORDS.filter((a) => new RegExp(`\\b${a}\\b`, "i").test(wantText));
   const uniqueAreas = areas.filter((a) => !areas.some((b) => b !== a && b.includes(a)));
   if (uniqueAreas.length) add({ key: "areas", value: uniqueAreas.join(", "), display: uniqueAreas.map((a) => a[0].toUpperCase() + a.slice(1)).join(", "), evidence: find(new RegExp(`\\b${uniqueAreas[0]}\\b`, "i")) ?? uniqueAreas.join(", "), confidence: 0.75 });
@@ -299,8 +319,10 @@ export function extract(input: InspectorInput, ctx: ExtractContext): Understandi
   };
 }
 
+/** The promise in the words used: "send the quote tonight" → "Send the quote tonight". */
 function actionText(key: Commitment["actionKey"], fallback: string, rest: string): string {
-  const r = rest.replace(/\s+/g, " ").trim();
+  const r = rest.replace(/\s+/g, " ").trim().replace(/[,;:]+$/, "");
+  if (key === "other" || r.length < 4) return fallback;
   const short = r.length > 80 ? `${r.slice(0, 77)}…` : r;
-  return key === "other" ? fallback : `${fallback}: ${short}`;
+  return short.charAt(0).toUpperCase() + short.slice(1);
 }

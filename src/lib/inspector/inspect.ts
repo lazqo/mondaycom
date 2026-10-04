@@ -11,6 +11,7 @@ import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { commitments, emails, emailThreads, facts, inspections, inspectorActions, leads, recordings, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { markEmailNotLead } from "@/lib/email/pipeline";
 import { type Actor, assertApprover, GuardrailError } from "@/lib/guard/actor";
 import { analyse } from "./analyse";
 import { decideFact, diffFacts, storeFacts } from "./facts";
@@ -161,6 +162,11 @@ export async function confirmIdentity(inspectionId: string, choice: { leadId?: s
     await db.update(inspections).set({ status: "superseded", reviewedById: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(inspections.id, inspectionId));
     await db.update(inspectorActions).set({ status: "dismissed", decidedById: actor.userId, decidedAt: new Date() }).where(and(eq(inspectorActions.inspectionId, inspectionId), eq(inspectorActions.status, "awaiting_approval")));
     if (ins.sourceType === "recording") await db.update(recordings).set({ status: "dismissed", updatedAt: new Date() }).where(eq(recordings.id, ins.sourceId));
+    else {
+      // The same decision clears the email from the Inbox's Needs review.
+      const e = await db.query.emails.findFirst({ where: eq(emails.id, ins.sourceId), columns: { classification: true } });
+      if (e?.classification === "needs_review") await markEmailNotLead(ins.sourceId, actor.userId);
+    }
     await recordDecision(inspectionId, { identity: "not_a_customer" });
     return null;
   }
@@ -248,4 +254,22 @@ export async function setCommitmentStatus(id: string, status: "done" | "cancelle
     .update(commitments)
     .set({ status, completedAt: status === "outstanding" ? null : new Date(), completedById: status === "outstanding" ? null : humanId(actor), updatedAt: new Date() })
     .where(eq(commitments.id, id));
+}
+
+/**
+ * Chris decided elsewhere (Inbox "Not a lead", Recordings "Dismiss"): any "Who is this?" still open
+ * for these sources is closed the same way, so he never decides twice.
+ */
+export async function closeReviews(sourceType: SourceType, sourceIds: string[], actor: Actor): Promise<void> {
+  if (!sourceIds.length || actor.kind !== "human") return;
+  const open = await db.query.inspections.findMany({ where: and(eq(inspections.sourceType, sourceType), inArray(inspections.sourceId, sourceIds), eq(inspections.status, "needs_review")), columns: { id: true } });
+  for (const i of open) await confirmIdentity(i.id, "not_a_customer", actor);
+}
+
+/** A thread was filed against someone in the Inbox: read its waiting emails again with that link. */
+export async function reinspectThread(threadId: string): Promise<void> {
+  const ids = (await db.select({ id: emails.id }).from(emails).where(eq(emails.threadId, threadId))).map((e) => e.id);
+  if (!ids.length) return;
+  const open = await db.query.inspections.findMany({ where: and(eq(inspections.sourceType, "email"), inArray(inspections.sourceId, ids), eq(inspections.status, "needs_review")), columns: { sourceId: true } });
+  for (const i of open) await inspect("email", i.sourceId, { force: true });
 }

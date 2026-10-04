@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { recordings, contacts, leads } from "@/db/schema";
 import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { humanFromUser } from "@/lib/guard/actor";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { importRecentRecordings } from "@/lib/recordings/import";
 import { plaudConfigured } from "@/lib/recordings/plaud";
@@ -77,9 +78,15 @@ async function reinspect(recordingId: string) {
 
 /** Not about a customer: a note to self, a mis-fire. Keeps the transcript, clears the queue. */
 export async function dismissRecording(recordingId: string): Promise<ActionResult> {
-  await requireUser();
+  const user = await requireUser();
   if (!id.safeParse(recordingId).success) return fail("Invalid recording");
   await db.update(recordings).set({ status: "dismissed", updatedAt: new Date() }).where(eq(recordings.id, recordingId));
+  try {
+    const { closeReviews } = await import("@/lib/inspector/inspect");
+    await closeReviews("recording", [recordingId], humanFromUser(user));
+  } catch (err) {
+    console.error(`[inspector] recording ${recordingId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
   revalidatePath("/recordings");
   return ok(undefined);
 }

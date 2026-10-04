@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { eq, inArray, like } from "drizzle-orm";
+import { and, desc, eq, inArray, like, ne } from "drizzle-orm";
 
 const RUN = `ri${Date.now().toString(36)}`;
 const STATE = resolve(`test-results/fake-plaud-${RUN}.json`);
@@ -15,7 +15,7 @@ process.env.PLAUD_CLI = resolve("tests/support/fake-plaud.mjs");
 process.env.FAKE_PLAUD_STATE = STATE;
 
 const { db } = await import("@/db");
-const { recordings, contacts } = await import("@/db/schema");
+const { recordings, contacts, commitments, inspections } = await import("@/db/schema");
 const { importRecentRecordings } = await import("@/lib/recordings/import");
 
 type Rec = { id: string; title: string; date: string; duration: string; original: string; polished: string | null };
@@ -49,6 +49,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The Inspector reads each imported recording; its inspections and commitments go too.
+  const ids = (await db.select({ id: recordings.id }).from(recordings).where(like(recordings.externalId, `%${RUN}`))).map((r) => r.id);
+  if (ids.length) {
+    await db.delete(commitments).where(inArray(commitments.sourceId, ids));
+    await db.delete(inspections).where(inArray(inspections.sourceId, ids));
+  }
   await db.delete(recordings).where(like(recordings.externalId, `%${RUN}`));
   await db.delete(contacts).where(eq(contacts.id, contactId));
 });
@@ -87,6 +93,9 @@ describe("importing Plaud recordings", () => {
     expect(b.transcript).toContain("021 555 8812");
     expect(b.status).toBe("attached");
     expect(b.contactId).toBe(contactId);
+    // The Inspector read it again with the cleaned-up words, now against that customer.
+    const ins = (await db.query.inspections.findFirst({ where: and(eq(inspections.sourceId, b.id), ne(inspections.status, "superseded")), orderBy: [desc(inspections.createdAt)] }))!;
+    expect(ins).toMatchObject({ status: "analysed", contactId });
   });
 
   it("upgrades a recording imported before cleaned-up transcripts were fetched", async () => {

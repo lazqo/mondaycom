@@ -1,6 +1,6 @@
 // Starts an SMTP sink so "reply from the CRM" has somewhere to deliver during e2e runs, and a
 // stand-in for the IT Plus website so the supplier pricing connector has something to log in to.
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { startSmtpSink } from "../support/smtp-sink";
 import { startItPlusMock } from "../support/itplus-mock";
 
@@ -11,8 +11,13 @@ export const ITPLUS_MOCK_LOGIN = { username: "e2e-trade@getsecure.test", passwor
 export const SMTP_SINK_PORT = 2525;
 export const SMTP_OUT_DIR = "test-results/smtp-out";
 
+/** What the Plaud stand-in lists (see playwright.config.ts); the Inspector e2e test fills it. */
+export const PLAUD_STATE = "test-results/e2e-plaud.json";
+
 export default async function globalSetup() {
   rmSync(SMTP_OUT_DIR, { recursive: true, force: true });
+  mkdirSync("test-results", { recursive: true });
+  writeFileSync(PLAUD_STATE, JSON.stringify({ recordings: [] }));
   const sink = await startSmtpSink(SMTP_SINK_PORT, SMTP_OUT_DIR);
   const itplus = await startItPlusMock(
     {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
+  ScanSearch,
   ArrowDownUp,
   BellRing,
   Briefcase,
@@ -58,6 +59,7 @@ const ICON: Record<TimelineKind, React.ComponentType<{ className?: string }>> = 
   job: Briefcase,
   photo: Camera,
   recording: Mic,
+  inspector: ScanSearch,
   activity: Activity,
 };
 
@@ -75,6 +77,7 @@ const COLOR: Record<TimelineKind, string> = {
   job: "bg-[#00c875] text-white",
   photo: "bg-[#784bd1] text-white",
   recording: "bg-[#e2445c] text-white",
+  inspector: "bg-[#037f4c] text-white",
   activity: "bg-gray-300 text-gray-800",
 };
 
@@ -82,7 +85,7 @@ type Filter = "all" | "email" | "talk" | "visits" | "work" | "status";
 const FILTERS: { key: Filter; label: string; kinds: TimelineKind[] }[] = [
   { key: "all", label: "Everything", kinds: [] },
   { key: "email", label: "Emails", kinds: ["enquiry", "email_in", "email_out"] },
-  { key: "talk", label: "Notes & calls", kinds: ["note", "call", "recording"] },
+  { key: "talk", label: "Notes & calls", kinds: ["note", "call", "recording", "inspector"] },
   { key: "visits", label: "Visits & appointments", kinds: ["site_visit", "appointment"] },
   { key: "work", label: "Quotes & jobs", kinds: ["quote", "job", "photo"] },
   { key: "status", label: "Status & reminders", kinds: ["enquiry", "status", "follow_up", "activity"] },

@@ -7,6 +7,8 @@ import { JobForm } from "@/components/jobs/job-form";
 import { ScheduleJobCard } from "@/components/jobs/schedule-job-card";
 import { JobStatusActions } from "@/components/jobs/job-status-actions";
 import { JobNotesPhotos } from "@/components/jobs/job-notes-photos";
+import { InspectorPanel } from "@/components/inspector/panel";
+import { requireUser } from "@/lib/auth";
 import { ActivityFeed } from "@/components/activity-feed";
 import { JOB_STATUS_META } from "@/lib/constants";
 import { formatMoney } from "@/lib/utils";
@@ -17,6 +19,7 @@ import { getJourneyForJob } from "@/queries/journey";
 export const metadata: Metadata = { title: "Job" };
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser();
   const { id } = await params;
   const [job, contacts, users, activity] = await Promise.all([getJob(id), listContacts(), listActiveUsers(), getActivity("job", id)]);
   if (!job) notFound();
@@ -71,6 +74,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <JobNotesPhotos jobId={job.id} notes={job.noteEntries} photos={job.photos} />
         </div>
         <div className="space-y-4">
+          {user.role !== "field" ? <InspectorPanel jobId={job.id} canApprove={!!user.canApprove} /> : null}
           <ScheduleJobCard job={job} users={users} />
           <Card>
             <CardHeader title="Activity" />

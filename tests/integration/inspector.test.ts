@@ -15,7 +15,7 @@ const { db } = await import("@/db");
 const S = await import("@/db/schema");
 const { setClassifier } = await import("@/lib/ai");
 const { processEmail } = await import("@/lib/email/pipeline");
-const { inspect, confirmIdentity, acceptAction, dismissAction, resolveFact, setCommitmentStatus } = await import("@/lib/inspector/inspect");
+const { inspect, confirmIdentity, acceptAction, dismissAction, resolveFact, setCommitmentStatus, closeReviews } = await import("@/lib/inspector/inspect");
 const { setJev } = await import("@/lib/inspector/jev");
 const { encryptSecret } = await import("@/lib/crypto");
 const { sendDraft } = await import("@/lib/drafts/workflow");
@@ -82,7 +82,9 @@ afterAll(async () => {
   setJev(undefined);
   const leadRows = await db.select({ id: S.leads.id }).from(S.leads).where(inArray(S.leads.email, [`aroha+${RUN}@example.com`, `vague+${RUN}@example.com`, `biz+${RUN}@example.com`, `unpriced+${RUN}@example.com`]));
   leadIds.push(...leadRows.map((l) => l.id));
-  const ins = await db.select({ id: S.inspections.id }).from(S.inspections).where(inArray(S.inspections.sourceId, [...recordingIds]));
+  const emailIds = (await db.select({ id: S.emails.id }).from(S.emails).where(eq(S.emails.mailboxId, mailboxId))).map((e) => e.id);
+  const ins = await db.select({ id: S.inspections.id }).from(S.inspections).where(inArray(S.inspections.sourceId, [...recordingIds, ...emailIds]));
+  if (emailIds.length) await db.delete(S.commitments).where(inArray(S.commitments.sourceId, emailIds));
   if (ins.length) await db.delete(S.inspections).where(inArray(S.inspections.id, ins.map((i) => i.id)));
   if (leadIds.length) {
     await db.delete(S.quotes).where(inArray(S.quotes.leadId, leadIds));
@@ -290,6 +292,16 @@ describe("Plaud recordings → commitments, identity from signals", () => {
     // The same words at a time with no appointment: only a name, so Chris decides.
     const other = (await inspect("recording", (await recording("Site visit chat", words, new Date(visit.getTime() + 6 * 3600000))).id))!;
     expect(other.status).toBe("needs_review");
+  });
+
+  it("dismissing the recording on the Recordings page closes its “Who is this?” too", async () => {
+    const r = await recording("Note to self", "Speaker 1: Remember to order more cable for Tuesday.");
+    const out = (await inspect("recording", r.id))!;
+    expect(out.status).toBe("needs_review");
+    await closeReviews("recording", [r.id], chris);
+    expect((await db.query.inspections.findFirst({ where: eq(S.inspections.id, out.inspectionId) }))!.status).toBe("superseded");
+    expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!.status).toBe("dismissed");
+    expect((await actionsOf(out.inspectionId)).every((a) => a.status !== "awaiting_approval")).toBe(true);
   });
 
   it("dismissing a recommendation is recorded as Chris's decision", async () => {
