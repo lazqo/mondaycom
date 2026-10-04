@@ -7,8 +7,9 @@ import { updateLead, archiveLead } from "@/actions/leads";
 import { Button, Field, FormError, Input, Select, Textarea } from "@/components/ui";
 import { LEAD_SOURCES, LEAD_SOURCE_LABELS, LEAD_STATUSES, LEAD_STATUS_META, LEAD_URGENCIES, LEAD_URGENCY_META, SERVICE_SUGGESTIONS } from "@/lib/constants";
 import type { UserOption } from "./cells";
+import { typedNextAction } from "@/lib/leads/next-action";
 
-export function LeadForm({ lead, users }: { lead: Lead; users: UserOption[] }) {
+export function LeadForm({ lead, users, suggestion }: { lead: Lead; users: UserOption[]; /** The stage's suggested next action, shown when none is typed. */ suggestion?: string | null }) {
   const router = useRouter();
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
@@ -116,7 +117,10 @@ export function LeadForm({ lead, users }: { lead: Lead; users: UserOption[] }) {
           </Select>
         </Field>
         <Field label="Next action" htmlFor="l-next">
-          <Input id="l-next" name="nextAction" defaultValue={lead.nextAction ?? ""} />
+          <Input id="l-next" name="nextAction" defaultValue={typedNextAction(lead) ?? ""} placeholder={suggestion ?? undefined} />
+        </Field>
+        <Field label="Lost reason" htmlFor="l-lost">
+          <Input id="l-lost" name="lostReason" defaultValue={lead.lostReason ?? ""} placeholder="If lost: why (price, went elsewhere, no reply…)" />
         </Field>
         <Field label="Notes" htmlFor="l-notes" className="sm:col-span-2">
           <Textarea id="l-notes" name="notes" defaultValue={lead.notes ?? ""} />

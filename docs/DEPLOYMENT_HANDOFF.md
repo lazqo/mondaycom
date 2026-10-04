@@ -931,6 +931,28 @@ inspector actions, Jev observations) and a `kind` column on tasks. `./deploy/upd
 Nothing is backfilled: only new emails and conversations are read. To read an existing one, use "Read
 again" from the Inspector, or re-run classification on an email in the Inbox.
 
+## 18. Leads: Next action and Lost reason
+
+The Leads table has a **Next action** column beside Status (also shown on Kanban cards and the lead
+page). Each stage has a default worked out from what the CRM knows, shown in grey:
+
+| Status | Default next action |
+| --- | --- |
+| New | Contact the customer |
+| Contacted | Follow up (with the follow-up date; red when overdue) |
+| Site Visit | Site visit 6 Oct (when booked) · Book the site visit · Prepare the quote (after the visit) |
+| Quote Required | Prepare the quote · Review and approve Q-123 · Send quote Q-123 |
+| Quote Sent | Follow up on the quote (with the follow-up date) |
+| Won | Convert to a job · Job J-12 created |
+
+Click the cell to write your own; it shows in black. A typed next action belongs to the stage it was
+written for: when the lead moves to another status, the new stage's default shows instead, so the
+column never shows an old step. In the **Lost** group the column is **Lost reason** ("Add the reason"
+until one is entered). Both are also on the lead page's Details form.
+
+Migration `0018_lead_next_action` adds the two columns. Existing data is not changed: next actions
+already on leads (from email classification) keep showing while the lead is New.
+
 ## Keeping secrets out of GitHub
 
 Rules, and what enforces them:

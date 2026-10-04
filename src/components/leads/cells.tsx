@@ -197,3 +197,67 @@ export function DateCell({
     />
   );
 }
+
+/**
+ * Next action beside the status: Chris's own words, or the stage's suggestion in grey (click to
+ * type over it). In the Lost group the same cell holds the lost reason.
+ */
+export function NextActionCell({
+  action,
+  value,
+  onCommit,
+  ariaLabel,
+}: {
+  action: { text: string; kind: "typed" | "suggested" | "missing"; overdue?: boolean };
+  /** What is stored and edited (the typed next action or the lost reason); null shows the suggestion. */
+  value: string | null;
+  onCommit: (v: string | null) => void;
+  ariaLabel: string;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(value ?? "");
+  React.useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+  function commit() {
+    setEditing(false);
+    const next = draft.trim() === "" ? null : draft.trim();
+    if (next !== (value ?? null)) onCommit(next);
+  }
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        aria-label={ariaLabel}
+        placeholder={action.kind === "typed" ? undefined : action.text}
+        className="h-9 w-full border-2 border-brand-500 bg-white px-2 text-sm text-gray-900 outline-none"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value ?? "");
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      data-kind={action.kind}
+      onClick={() => setEditing(true)}
+      className={cn(
+        cellBase,
+        "hover:bg-gray-50",
+        action.kind === "typed" ? "text-gray-900" : action.overdue ? "font-medium text-red-600" : action.kind === "missing" ? "italic text-gray-400" : "text-gray-500",
+      )}
+      title={action.kind === "suggested" ? `${action.text} (suggested — click to write your own)` : action.text}
+    >
+      {action.text}
+    </button>
+  );
+}

@@ -19,14 +19,17 @@ import { CSS } from "@dnd-kit/utilities";
 import type { LeadRow } from "@/queries";
 import { LEAD_STATUSES, LEAD_STATUS_META, type LeadStatus } from "@/lib/constants";
 import { cn, formatDateOnly } from "@/lib/utils";
+import { nextActionFor } from "@/lib/leads/next-action";
 import { Avatar } from "@/components/ui";
 
 export function LeadsKanban({
   rows,
   onStatusChange,
+  today,
 }: {
   rows: LeadRow[];
   onStatusChange: (id: string, status: LeadStatus) => void;
+  today: string;
 }) {
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const sensors = useSensors(
@@ -51,15 +54,15 @@ export function LeadsKanban({
     <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
       <div className="flex gap-3 overflow-x-auto pb-2">
         {LEAD_STATUSES.map((status) => (
-          <Column key={status} status={status} rows={rows.filter((r) => r.status === status)} />
+          <Column key={status} status={status} rows={rows.filter((r) => r.status === status)} today={today} />
         ))}
       </div>
-      <DragOverlay>{active ? <LeadCard row={active} overlay /> : null}</DragOverlay>
+      <DragOverlay>{active ? <LeadCard row={active} today={today} overlay /> : null}</DragOverlay>
     </DndContext>
   );
 }
 
-function Column({ status, rows }: { status: LeadStatus; rows: LeadRow[] }) {
+function Column({ status, rows, today }: { status: LeadStatus; rows: LeadRow[]; today: string }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = LEAD_STATUS_META[status];
   return (
@@ -77,14 +80,14 @@ function Column({ status, rows }: { status: LeadStatus; rows: LeadRow[] }) {
       </div>
       <div className="flex min-h-24 flex-1 flex-col gap-2 p-2">
         {rows.map((r) => (
-          <DraggableCard key={r.id} row={r} />
+          <DraggableCard key={r.id} row={r} today={today} />
         ))}
       </div>
     </div>
   );
 }
 
-function DraggableCard({ row }: { row: LeadRow }) {
+function DraggableCard({ row, today }: { row: LeadRow; today: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: row.id });
   return (
     <div
@@ -94,12 +97,13 @@ function DraggableCard({ row }: { row: LeadRow }) {
       {...attributes}
       {...listeners}
     >
-      <LeadCard row={row} />
+      <LeadCard row={row} today={today} />
     </div>
   );
 }
 
-function LeadCard({ row, overlay }: { row: LeadRow; overlay?: boolean }) {
+function LeadCard({ row, overlay, today }: { row: LeadRow; overlay?: boolean; today: string }) {
+  const action = nextActionFor(row, { today, siteVisits: row.events, quotes: row.quotes, jobs: row.jobs });
   return (
     <div
       className={cn(
@@ -117,6 +121,13 @@ function LeadCard({ row, overlay }: { row: LeadRow; overlay?: boolean }) {
       {row.company ? <p className="mt-0.5 truncate text-xs text-gray-500">{row.company}</p> : null}
       {row.service ? <p className="mt-1 text-xs text-gray-700">{row.service}</p> : null}
       {row.followUpAt ? <p className="mt-2 text-xs text-gray-500">Follow-up {formatDateOnly(row.followUpAt)}</p> : null}
+      <p
+        className={cn("mt-2 border-t border-gray-100 pt-1.5 text-xs", action.kind === "typed" ? "text-gray-800" : action.overdue ? "font-medium text-red-600" : "text-gray-500", action.kind === "missing" && "italic text-gray-400")}
+        data-testid="kanban-next-action"
+      >
+        {row.status === "lost" ? "Lost: " : "Next: "}
+        {action.text}
+      </p>
     </div>
   );
 }

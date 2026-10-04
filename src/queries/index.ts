@@ -21,7 +21,14 @@ export async function listActiveUsers() {
 export async function listLeads() {
   return db.query.leads.findMany({
     where: isNull(leads.archivedAt),
-    with: { assignedTo: { columns: { id: true, name: true } }, contact: { columns: { id: true, name: true } } },
+    with: {
+      assignedTo: { columns: { id: true, name: true } },
+      contact: { columns: { id: true, name: true } },
+      // For the Next action column: visits booked, quotes and jobs.
+      events: { where: eq(events.kind, "site_visit"), columns: { startsAt: true } },
+      quotes: { columns: { number: true, status: true }, orderBy: [desc(quotes.createdAt)] },
+      jobs: { columns: { number: true }, orderBy: [desc(jobs.createdAt)] },
+    },
     orderBy: [asc(leads.position), asc(leads.createdAt)],
   });
 }

@@ -127,6 +127,13 @@
       "when": 1791070667830,
       "tag": "0017_inspector",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791085613711,
+      "tag": "0018_lead_next_action",
+      "breakpoints": true
     }
   ]
 }

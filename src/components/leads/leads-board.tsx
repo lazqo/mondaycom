@@ -28,6 +28,8 @@ export type LeadPatch = Partial<
     | "followUpAt"
     | "lastContactAt"
     | "source"
+    | "nextAction"
+    | "lostReason"
   >
 >;
 
@@ -35,10 +37,13 @@ export function LeadsBoard({
   leads,
   users,
   view,
+  today,
 }: {
   leads: LeadRow[];
   users: UserOption[];
   view: "table" | "kanban";
+  /** YYYY-MM-DD in the business's time zone. */
+  today: string;
 }) {
   const router = useRouter();
   const [rows, setRows] = React.useState(leads);
@@ -60,6 +65,8 @@ export function LeadsBoard({
           if (patch.assignedToId !== undefined) {
             next.assignedTo = patch.assignedToId ? (users.find((u) => u.id === patch.assignedToId) ?? null) : null;
           }
+          // As on the server: a typed next action belongs to the stage it was written for.
+          if (patch.nextAction !== undefined) next.nextActionFor = patch.nextAction ? next.status : null;
           return next;
         }),
       );
@@ -120,9 +127,9 @@ export function LeadsBoard({
           </Button>
         </div>
       ) : view === "kanban" ? (
-        <LeadsKanban rows={rows} onStatusChange={setStatus} />
+        <LeadsKanban rows={rows} onStatusChange={setStatus} today={today} />
       ) : (
-        <LeadsTable rows={rows} users={users} onPatch={patchLead} />
+        <LeadsTable rows={rows} users={users} onPatch={patchLead} today={today} />
       )}
 
       <NewLeadDialog

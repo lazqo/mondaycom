@@ -9,6 +9,7 @@ import { contacts, jobs, leads, quotes } from "@/db/schema";
 import { requireOffice as requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { LEAD_SOURCES, LEAD_STATUSES, LEAD_URGENCIES } from "@/lib/constants";
+import { typedNextAction } from "@/lib/leads/next-action";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
 import { isWebsiteLeadSender, WEBSITE_SENDER_MESSAGE } from "@/lib/email/website-lead";
@@ -63,7 +64,20 @@ const leadInput = z.object({
     .pipe(z.enum(LEAD_URGENCIES).nullable())
     .nullable()
     .optional(),
-  nextAction: z.string().trim().max(500).optional(),
+  nextAction: z
+    .string()
+    .trim()
+    .max(500)
+    .transform((v) => (v === "" ? null : v))
+    .nullable()
+    .optional(),
+  lostReason: z
+    .string()
+    .trim()
+    .max(500)
+    .transform((v) => (v === "" ? null : v))
+    .nullable()
+    .optional(),
 });
 export type LeadInput = z.infer<typeof leadInput>;
 
@@ -86,6 +100,7 @@ export async function createLead(input: unknown): Promise<ActionResult<{ id: str
     .values({
       ...parsed.data,
       status: parsed.data.status ?? "new",
+      nextActionFor: parsed.data.nextAction ? (parsed.data.status ?? "new") : null,
       source: parsed.data.source ?? "other",
       position: (maxPos ?? 0) + 1,
       createdById: user.id,
@@ -103,8 +118,17 @@ export async function updateLead(id: string, input: unknown): Promise<ActionResu
   const existing = await db.query.leads.findFirst({ where: eq(leads.id, id) });
   if (!existing) return fail("Lead not found");
 
+  const data: Record<string, unknown> = { ...parsed.data };
+  // A typed next action belongs to the stage it was written for: moving the lead on (even with the
+  // form sending the same words back) leaves it with the old stage, and the new stage's default shows.
+  if (data.nextAction !== undefined) {
+    // Only a change to the next action currently showing counts (an old stage's text is not showing).
+    if ((data.nextAction ?? null) === typedNextAction(existing)) delete data.nextAction;
+    else data.nextActionFor = data.nextAction ? (parsed.data.status ?? existing.status) : null;
+  }
   const changes: Record<string, { from: unknown; to: unknown }> = {};
-  for (const [key, value] of Object.entries(parsed.data)) {
+  for (const [key, value] of Object.entries(data)) {
+    if (key === "nextActionFor") continue;
     const before = (existing as Record<string, unknown>)[key];
     if (value !== undefined && before !== value) changes[key] = { from: before, to: value };
   }
@@ -112,7 +136,7 @@ export async function updateLead(id: string, input: unknown): Promise<ActionResu
 
   await db
     .update(leads)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(leads.id, id));
   await logActivity({
     entity: "lead",

@@ -101,6 +101,10 @@ export const leads = pgTable(
     summary: text("summary"), // short enquiry summary (AI or manual)
     urgency: leadUrgencyEnum("urgency"),
     nextAction: text("next_action"),
+    /** The stage a typed next action was written for; once the lead moves on, the stage default shows instead. */
+    nextActionFor: leadStatusEnum("next_action_for"),
+    /** Why a lost lead was lost (shown in the Lost group's Next action column). */
+    lostReason: text("lost_reason"),
     aiConfidence: numeric("ai_confidence", { precision: 4, scale: 3 }),
     emailThreadId: uuid("email_thread_id"), // FK added below via relations (no circular import)
     sourceEmailId: uuid("source_email_id"),

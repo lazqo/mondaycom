@@ -6,7 +6,8 @@ import { ChevronDown, ChevronRight, Mail } from "lucide-react";
 import type { LeadRow } from "@/queries";
 import { LEAD_STATUSES, LEAD_STATUS_META, type LeadStatus } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { DateCell, EditableText, PersonCell, SourceCell, StatusCell, type UserOption } from "./cells";
+import { nextActionFor, typedNextAction } from "@/lib/leads/next-action";
+import { DateCell, EditableText, NextActionCell, PersonCell, SourceCell, StatusCell, type UserOption } from "./cells";
 import type { LeadPatch } from "./leads-board";
 
 const COLUMNS: { key: string; label: string; width: string }[] = [
@@ -17,6 +18,7 @@ const COLUMNS: { key: string; label: string; width: string }[] = [
   { key: "service", label: "Service", width: "min-w-[130px]" },
   { key: "site", label: "Site address", width: "min-w-[170px]" },
   { key: "status", label: "Status", width: "w-[130px] min-w-[130px]" },
+  { key: "nextAction", label: "Next action", width: "min-w-[190px]" },
   { key: "assignedToId", label: "Assigned To", width: "min-w-[130px]" },
   { key: "followUpAt", label: "Follow-up", width: "min-w-[135px]" },
   { key: "lastContactAt", label: "Last Contact", width: "min-w-[135px]" },
@@ -27,10 +29,13 @@ export function LeadsTable({
   rows,
   users,
   onPatch,
+  today,
 }: {
   rows: LeadRow[];
   users: UserOption[];
   onPatch: (id: string, patch: LeadPatch) => void;
+  /** YYYY-MM-DD in the business's time zone. */
+  today: string;
 }) {
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
   const groups = LEAD_STATUSES.map((status) => ({
@@ -65,7 +70,7 @@ export function LeadsTable({
                       <th className="w-1.5 p-0" style={{ backgroundColor: meta.color }} />
                       {COLUMNS.map((c) => (
                         <th key={c.key} className={cn("border-l border-gray-200 px-2 py-2 text-left font-medium", c.width)}>
-                          {c.label}
+                          {c.key === "nextAction" && status === "lost" ? "Lost reason" : c.label}
                         </th>
                       ))}
                     </tr>
@@ -79,7 +84,7 @@ export function LeadsTable({
                         </td>
                       </tr>
                     ) : (
-                      groupRows.map((r) => <LeadTableRow key={r.id} row={r} users={users} onPatch={onPatch} color={meta.color} />)
+                      groupRows.map((r) => <LeadTableRow key={r.id} row={r} users={users} onPatch={onPatch} color={meta.color} today={today} />)
                     )}
                   </tbody>
                 </table>
@@ -97,13 +102,17 @@ function LeadTableRow({
   users,
   onPatch,
   color,
+  today,
 }: {
   row: LeadRow;
   users: UserOption[];
   onPatch: (id: string, patch: LeadPatch) => void;
   color: string;
+  today: string;
 }) {
   const p = (patch: LeadPatch) => onPatch(row.id, patch);
+  const action = nextActionFor(row, { today, siteVisits: row.events, quotes: row.quotes, jobs: row.jobs });
+  const lost = row.status === "lost";
   return (
     <tr className="border-t border-gray-200 hover:bg-gray-50/60" data-testid={`lead-row-${row.id}`}>
       <td className="w-1.5 p-0" style={{ backgroundColor: color }} />
@@ -140,6 +149,14 @@ function LeadTableRow({
       </td>
       <td className="border-l border-gray-200 p-0">
         <StatusCell value={row.status} onChange={(v: LeadStatus) => p({ status: v })} />
+      </td>
+      <td className="border-l border-gray-200 p-0" data-testid="next-action">
+        <NextActionCell
+          ariaLabel={lost ? "Lost reason" : "Next action"}
+          action={action}
+          value={lost ? row.lostReason : typedNextAction(row)}
+          onCommit={(v) => p(lost ? { lostReason: v } : { nextAction: v })}
+        />
       </td>
       <td className="border-l border-gray-200 p-0">
         <PersonCell value={row.assignedToId} users={users} onChange={(v) => p({ assignedToId: v })} />

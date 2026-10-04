@@ -107,6 +107,7 @@ const FIELD_LABELS: Record<string, string> = {
   summary: "summary",
   urgency: "urgency",
   nextAction: "next action",
+  lostReason: "lost reason",
   title: "title",
   siteAddress: "site address",
   address: "address",
