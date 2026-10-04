@@ -316,18 +316,16 @@ export default async function InspectorPage() {
         </div>
       </Card>
 
-      <Card data-testid="inspector-jev">
-        <CardHeader title="Jev (shadow mode)" />
-        {jev.rows.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-gray-500">
-            Jev is not switched on, so there is nothing to compare yet. In
-            shadow mode it only classifies; the rules above decide everything.
-          </p>
-        ) : (
+      {/* Jev is redundant now that Hermes is the primary Inspector: shown only if it ever ran. */}
+      {jev.rows.length === 0 ? null : (
+        <Card data-testid="inspector-jev">
+          <CardHeader title="Jev (redundant, comparison only)" />
           <div className="space-y-3 p-4 text-sm">
             <p className="text-gray-600">
-              Jev&apos;s answers beside the rules&apos; and what you actually
-              did. It never drives an action, a price or a design.
+              Hermes is now the primary Inspector. Jev is redundant and off by
+              default; these are its earlier shadow answers beside the
+              rules&apos; and what you actually did. It never drove an action, a
+              price or a design.
             </p>
             <p className="flex flex-wrap gap-2 text-xs">
               {jev.fields.map((f) => (
@@ -398,8 +396,8 @@ export default async function InspectorPage() {
               </table>
             </div>
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

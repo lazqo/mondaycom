@@ -154,6 +154,8 @@ export const ACTION_TYPES = [
   "LINK_RECORDING",
   "NO_ACTION",
   "NEEDS_REVIEW",
+  /** Something already open (a commitment we or the customer made, an open task) is what needs doing. */
+  "OUTSTANDING",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 

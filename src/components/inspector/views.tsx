@@ -15,6 +15,8 @@ const STATUS_TONE: Record<string, string> = {
   dismissed: "bg-gray-200 text-gray-600",
   blocked: "bg-[#fdab3d] text-white",
   failed: "bg-[#e2445c] text-white",
+  outstanding: "bg-[#ff9900] text-white",
+  already_in_hand: "bg-gray-200 text-gray-700",
 };
 export function ActionStatus({ status }: { status: string }) {
   return <Badge className={STATUS_TONE[status] ?? "bg-gray-200 text-gray-700"}>{status === "awaiting_approval" ? "Waiting for Chris" : status.replace(/_/g, " ")}</Badge>;

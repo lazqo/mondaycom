@@ -7,7 +7,7 @@
  *
  * The old deterministic rules no longer decide what a customer means: they find identity signals,
  * provide the fallback when Hermes is unavailable, and are kept beside Hermes's reading for
- * comparison. Jev, when switched on, still classifies in shadow and never drives anything.
+ * comparison. Jev is redundant (off by default); if switched on it only classifies in shadow.
  */
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
@@ -21,7 +21,7 @@ import { decideIdentity, mergeCandidates } from "./identity";
 import { recordDecision, shadow } from "./jev";
 import { recordFeedback } from "./feedback";
 import { planActions } from "./plan";
-import { routeActions, type RoutedAction } from "./router";
+import { alreadyInHand, routeActions, type RoutedAction } from "./router";
 import { validateHermes, type Validation } from "./validate";
 import { askHermes, type HermesStatus } from "@/lib/hermes/inspector";
 import { hermesMinConfidence } from "@/lib/hermes/runtime";
@@ -124,7 +124,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       input,
       identity,
       known,
-      crm: { leadId, contactId, hasOpenBrainQuote: state.hasOpenBrainQuote, hasSentQuote: state.hasSentQuote, recordingLinked: state.recordingLinked, customerEmail: state.customerEmail, customerPhone: state.customerPhone },
+      crm: { leadId, contactId, hasOpenBrainQuote: state.hasOpenBrainQuote, hasSentQuote: state.hasSentQuote, recordingLinked: state.recordingLinked, customerEmail: state.customerEmail, customerPhone: state.customerPhone, lifecycle: state.lifecycle },
       minConfidence: hermesMinConfidence(),
       rules: { primaryIntent: rulesView.primaryIntent, firstAction: rulesView.firstAction, urgency: rulesView.urgency },
     });
@@ -390,8 +390,11 @@ export async function acceptAction(actionId: string, actor: Actor): Promise<Reco
     default:
       throw new Error(`${a.type} is decided elsewhere.`);
   }
-  const done = await routeActions(follow, { inspectionId: ins.id, input, leadId: a.leadId, contactId: a.contactId, jobId: a.jobId, actor });
-  result = { followUp: done };
+  const routeCtx = { inspectionId: ins.id, input, leadId: a.leadId, contactId: a.contactId, jobId: a.jobId, actor };
+  // An open task to arrange it already exists (made since this was proposed): no second one.
+  const inHand = a.type === "PROPOSE_SITE_VISIT" || a.type === "PROPOSE_BOOKING" ? await alreadyInHand({ type: a.type }, routeCtx, { ignoreWaiting: true }) : null;
+  const done = inHand ? [] : await routeActions(follow, routeCtx);
+  result = inHand ? { followUp: [], ...inHand } : { followUp: done };
   await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result }).where(eq(inspectorActions.id, actionId));
   await recordDecision(ins.id, { [`action:${a.type}`]: "accepted" });
   await recordFeedback({ inspectionId: ins.id, kind: "action_accepted", subject: a.type, value: { rule: a.rule, followUp: done.map((d) => ({ type: d.type, status: d.status })) }, userId: actor.userId });

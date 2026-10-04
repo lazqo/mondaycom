@@ -23,6 +23,7 @@ import { type Actor, assertAgentMay, GuardrailError, type AgentCapability } from
 import { enquiryWithFacts } from "@/lib/inspector/brain";
 import { normaliseFact, replyProblem } from "@/lib/inspector/validate";
 import { crmKnown, serviceKey } from "@/lib/inspector/sources";
+import { alreadyInHand, openTaskTitled } from "@/lib/inspector/router";
 import { FACT_KEYS, type FactKey } from "@/lib/inspector/types";
 import { dateInAppTz } from "@/lib/email/pipeline";
 import { findPeople, readBrainOutcome, readCommitments, readCustomer, readEmailThread, readFacts, readInspection, readLead, readOpenTasks, readQuotes, readRecording, readTimeline, readVisitsAndJobs } from "./crm-read";
@@ -121,6 +122,9 @@ export const TOOLS: Tool[] = [
     input: z.object({ lead_id: uuid.optional(), customer_id: uuid.optional(), title: z.string().min(1).max(200), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), detail: z.string().max(2000).optional() }).refine((v) => v.lead_id || v.customer_id, "lead_id or customer_id is required"),
     run: async (a) => {
       const today = dateInAppTz(new Date());
+      // Never a second open task with the same title on the same lead or customer.
+      const same = await openTaskTitled({ leadId: a.lead_id ?? null, contactId: a.customer_id ?? null }, a.title);
+      if (same) return { taskId: same.id, alreadyOpen: true };
       const [t] = await db.insert(tasks).values({ title: a.title, detail: a.detail ? `${a.detail}\n(From Hermes)` : "From Hermes", dueAt: a.due && a.due >= today ? a.due : today, kind: "task", leadId: a.lead_id ?? null, contactId: a.customer_id ?? null, assignedToId: await chrisId() }).returning({ id: tasks.id });
       return { taskId: t.id };
     },
@@ -213,6 +217,9 @@ export const TOOLS: Tool[] = [
       const lead = await requireLead(a.lead_id);
       const ins = await db.query.inspections.findFirst({ where: eq(inspections.leadId, lead.id), orderBy: [desc(inspections.createdAt)], columns: { id: true } });
       if (!ins) throw new Error("This lead has no Inspector record to attach a proposal to; use crm_request_review or crm_create_internal_task.");
+      // Already in hand (an open task to arrange it, or the same proposal waiting): not offered again.
+      const inHand = await alreadyInHand({ type: a.type }, { leadId: lead.id, contactId: lead.contactId, inspectionId: null });
+      if (inHand) return { proposalId: null, ...inHand };
       const [row] = await db.insert(inspectorActions).values({ inspectionId: ins.id, type: a.type, mode: "approval", status: "awaiting_approval", rule: "hermes_mcp", reason: `Hermes: ${a.reason}`, payload: {}, leadId: lead.id, contactId: lead.contactId }).returning({ id: inspectorActions.id });
       return { proposalId: row.id, waitsFor: "Chris in the Inspector" };
     },

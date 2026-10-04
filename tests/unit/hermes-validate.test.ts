@@ -90,6 +90,50 @@ describe("hard guardrails", () => {
     expect((low.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.plan as { type: string }[]).map((p) => p.type)).toEqual(["CREATE_INTERNAL_TASK"]);
   });
 
+  describe("an enquiry Hermes would close ('no action') — lifecycle-aware", () => {
+    const lc = (over: Partial<NonNullable<ValidateContext["crm"]["lifecycle"]>> = {}) => ({ progressed: [], openTasks: [], outstanding: [], settledFromSource: [], ...over });
+    const withLc = (i: InspectorInput, l: ReturnType<typeof lc>) => ctx(i, { crm: { ...ctx(i).crm, lifecycle: l } });
+    const old = input("Hi, we'd like a quote for cameras at the house.");
+
+    it("allowed when the CRM shows it has moved on and nothing is outstanding", () => {
+      for (const progressed of [["Job #12 invoiced"], ["Job #12 completed"], ["Site visit held on 3 Sept 2026"], ["Job #14 scheduled"], ["Quote Q-1004 accepted and job #14 created"]]) {
+        const v = validateHermes(H({ recommended_action: "NO_ACTION" }), withLc(old, lc({ progressed })));
+        expect(v.reviewKind).toBeNull();
+        expect(v.headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
+        expect(v.hard.find((c) => c.rule === "enquiry_already_progressed")!.message).toContain(progressed[0]);
+      }
+    });
+
+    it("no progress in the CRM: still sent to Chris", () => {
+      const v = validateHermes(H({ recommended_action: "NO_ACTION" }), withLc(old, lc()));
+      expect(v.reviewKind).toBe("hermes_flagged");
+      expect(v.headline.changedBy).toBe("enquiry_never_no_action");
+    });
+
+    it("our unresolved commitment from the conversation is the outstanding action, not a generic review", () => {
+      const call = input("Chris: I'll prepare and send the camera plan later that day.", { sourceType: "recording" });
+      const h = H({ recommended_action: "NO_ACTION", commitments: [{ owner: "get_secure", owner_name: "Chris", action: "prepare and send the camera plan", action_key: "send_info", due_text: "later that day", due_at: null, evidence: "I'll prepare and send the camera plan later that day" }] });
+      const v = validateHermes(h, withLc(call, lc({ progressed: ["Site visit held on 3 Sept 2026"] })));
+      expect(v.reviewKind).toBeNull();
+      expect(types(v)).toContain("OUTSTANDING");
+      expect(types(v)).not.toContain("NEEDS_REVIEW");
+      const o = v.plan.find((p) => p.type === "OUTSTANDING")!;
+      expect(o.reason).toBe("We said we'd prepare and send the camera plan (later that day)");
+      expect(v.headline).toMatchObject({ final: "OUTSTANDING", changedBy: "enquiry_outstanding_item" });
+      // Marked done in the CRM: then "no action" stands.
+      const done = validateHermes(h, withLc(call, lc({ progressed: ["Site visit held on 3 Sept 2026"], settledFromSource: ["get_secure:send_info"] })));
+      expect(done.headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
+    });
+
+    it("open tasks and outstanding CRM commitments are surfaced too (ours first, no duplicates)", () => {
+      const v = validateHermes(
+        H({ recommended_action: "NO_ACTION" }),
+        withLc(old, lc({ progressed: ["Job #12 completed"], openTasks: ["Send the invoice"], outstanding: [{ owner: "customer", action: "Send photos of the eaves", dueText: null }, { owner: "get_secure", action: "Email the warranty", dueText: "Friday" }] })),
+      );
+      expect(v.plan.find((p) => p.type === "OUTSTANDING")!.payload.items).toEqual(["We said we'd email the warranty (Friday)", "Waiting on the customer to send photos of the eaves", "Open task: Send the invoice"]);
+    });
+  });
+
   it("not asked: anything the CRM already has", () => {
     const v = validateHermes(
       H({ recommended_action: "ASK_CUSTOMER", missing: [{ field: "storeys", label: "Storeys", blocking: true, for: "quote", reason: "", question: "Single or double?" }, { field: "camera_count", label: "Cameras", blocking: true, for: "quote", reason: "", question: "How many cameras?" }] }),

@@ -73,6 +73,9 @@ describe("acting: prepare and propose only", () => {
     const t = await call("crm_create_internal_task", { lead_id: leadId, title: `Ring Kiri ${RUN}` });
     expect(t.isError).toBe(false);
     expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Ring Kiri ${RUN}`) })).toBeTruthy();
+    // The same task again: the open one is returned, never a second.
+    expect((await call("crm_create_internal_task", { lead_id: leadId, title: `Ring Kiri ${RUN}` })).isError).toBe(false);
+    expect(await db.query.tasks.findMany({ where: eq(S.tasks.title, `Ring Kiri ${RUN}`) })).toHaveLength(1);
     const audit = await db.query.agentAudit.findFirst({ where: and(eq(S.agentAudit.leadId, leadId), eq(S.agentAudit.tool, "crm_create_internal_task")) });
     expect(audit).toMatchObject({ access: "write", status: "ok" });
   });

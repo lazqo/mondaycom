@@ -68,10 +68,15 @@ export type AwaitingItem = { action: InspectorActionRow; source: SourceRef | nul
 export type ConflictItem = { fact: Fact; source: SourceRef | null; subject: Subject };
 export type CommitmentItem = { commitment: CommitmentRow; source: SourceRef | null; subject: Subject };
 
+const liveSource = sql`((${inspections.sourceType} = 'email' and exists (select 1 from emails e where e.id = ${inspections.sourceId}))
+  or (${inspections.sourceType} = 'recording' and exists (select 1 from recordings r where r.id = ${inspections.sourceId} and r.status <> 'dismissed')))`;
+
 /** Everything waiting for Chris in the Inspector. */
 export async function getInspectorQueue() {
   const [review, awaiting, conflicts] = await Promise.all([
-    db.query.inspections.findMany({ where: eq(inspections.status, "needs_review"), orderBy: [desc(inspections.sourceAt)], limit: 50 }),
+    // Only reviews whose email or recording still exists (as the badge counts them), so that
+    // orphans left by a removed mailbox can never push a real review out of the first 50.
+    db.query.inspections.findMany({ where: and(eq(inspections.status, "needs_review"), liveSource), orderBy: [desc(inspections.sourceAt)], limit: 50 }),
     db.query.inspectorActions.findMany({ where: and(eq(inspectorActions.status, "awaiting_approval"), notInArray(inspectorActions.type, IDENTITY_ACTIONS)), orderBy: [desc(inspectorActions.createdAt)], limit: 50 }),
     db.query.facts.findMany({ where: inArray(facts.state, ["conflict", "proposed"]), orderBy: [desc(facts.createdAt)], limit: 50 }),
   ]);

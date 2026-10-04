@@ -753,3 +753,89 @@ describe("rules 'not a lead' is a first signal, not the final word", () => {
     expect(await latestFor(e.id)).toBeUndefined();
   });
 });
+
+describe("real-data follow-ups: lifecycle-aware 'no action', nothing offered twice", () => {
+  const made: { jobs: string[]; contacts: string[] } = { jobs: [], contacts: [] };
+  afterAll(async () => {
+    if (made.jobs.length) await db.delete(S.jobs).where(inArray(S.jobs.id, made.jobs));
+    if (made.contacts.length) await db.delete(S.contacts).where(inArray(S.contacts.id, made.contacts));
+  });
+  async function customerWithLead(name: string) {
+    const [c] = await db.insert(S.contacts).values({ name: `${name} ${RUN}` }).returning();
+    made.contacts.push(c.id);
+    const [l] = await db.insert(S.leads).values({ name: `${name} ${RUN}`, email: `${name.toLowerCase()}+${RUN}@example.com`, contactId: c.id, status: "won", source: "email", service: "CCTV" }).returning();
+    leadIds.push(l.id);
+    return { contactId: c.id, leadId: l.id };
+  }
+  async function emailOn(leadId: string, text: string, from: string) {
+    const e = await email({ from, name: "Customer", subject: "Cameras", text });
+    await db.update(S.emails).set({ leadId }).where(eq(S.emails.id, e.id));
+    return e;
+  }
+
+  it("an old enquiry whose job is completed: Hermes's 'no action' stands, nothing for Chris", async () => {
+    const { contactId, leadId } = await customerWithLead("Finished");
+    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV install", contactId, leadId, status: "invoiced" }).returning();
+    made.jobs.push(j.id);
+    script = () => ({ intent: "quote_request", recommended_action: "NO_ACTION", confidence: 0.9, reason: "Historical enquiry: the job has been done." });
+    const e = await emailOn(leadId, "Hi, could we get a quote for cameras at the house?", `finished+${RUN}@example.com`);
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const ins = (await latestFor(e.id))!;
+    expect((ins.validation as { headline: { final: string; changedBy: string | null } }).headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
+    expect(JSON.stringify(ins.validation)).toContain(`Job #${j.number} invoiced`);
+    expect((await actionsOf(out.inspectionId)).map((a) => a.type)).not.toContain("NEEDS_REVIEW");
+  });
+
+  it("Campbell: a promise not shown as done is the outstanding action, not a generic review", async () => {
+    const { leadId } = await customerWithLead("Campbell");
+    await db.insert(S.events).values({ title: "Site visit", kind: "site_visit", leadId, startsAt: new Date(Date.now() - 3 * 86400_000), endsAt: new Date(Date.now() - 3 * 86400_000 + 3600_000) });
+    script = () => ({
+      intent: "site_visit_request",
+      recommended_action: "NO_ACTION",
+      confidence: 0.85,
+      reason: "The visit has happened.",
+      commitments: [{ owner: "get_secure", owner_name: "Chris", action: "prepare and send the camera plan", action_key: "send_info", due_text: "later that day", due_at: null, evidence: "I'll prepare and send the camera plan later that day" }],
+    });
+    const e = await emailOn(leadId, "Thanks for coming out. Chris said: I'll prepare and send the camera plan later that day.", `campbell+${RUN}@example.com`);
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const acts = await actionsOf(out.inspectionId);
+    expect(acts.map((a) => a.type)).not.toContain("NEEDS_REVIEW");
+    expect(acts.find((a) => a.type === "OUTSTANDING")).toMatchObject({ status: "outstanding", reason: "We said we'd prepare and send the camera plan (later that day)" });
+    const c = (await db.query.commitments.findFirst({ where: eq(S.commitments.sourceId, e.id) }))!;
+    expect(c).toMatchObject({ status: "outstanding", leadId });
+    // Chris marks it done: read again, and "no action" now stands.
+    await setCommitmentStatus(c.id, "done", chris);
+    const again = (await inspect("email", e.id, { force: true }))!;
+    expect((await actionsOf(again.inspectionId)).map((a) => a.type)).not.toContain("OUTSTANDING");
+    expect(((await latestFor(e.id))!.validation as { headline: { final: string } }).headline.final).toBe("NO_ACTION");
+  });
+
+  it("Andre: an open task to arrange the site visit already exists, so another is not offered", async () => {
+    const { leadId } = await customerWithLead("Andre");
+    await db.update(S.leads).set({ status: "site_visit" }).where(eq(S.leads.id, leadId));
+    await db.insert(S.tasks).values({ title: "Arrange commercial CCTV site visit", leadId, status: "open" });
+    script = () => ({ intent: "quote_request", property_type: "commercial", recommended_action: "PREPARE_QUOTE", run_business_brain: true, confidence: 0.9, reason: "Commercial CCTV for the yard." });
+    const e = await emailOn(leadId, "We need cameras for the yard at our depot.", `andre+${RUN}@example.com`);
+    const out = (await inspect("email", e.id))!;
+    const sv = (await actionsOf(out.inspectionId)).find((a) => a.type === "PROPOSE_SITE_VISIT")!;
+    expect(sv).toMatchObject({ status: "already_in_hand", result: { inHand: "Site visit already awaiting arrangement." } });
+    expect(await db.query.inspectorActions.findFirst({ where: and(eq(S.inspectorActions.inspectionId, out.inspectionId), eq(S.inspectorActions.status, "awaiting_approval")) })).toBeUndefined();
+    const open = await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) });
+    expect(open).toHaveLength(1);
+  });
+
+  it("accepting a proposal after a task to arrange it was added does not create a second task", async () => {
+    const { leadId } = await customerWithLead("Twice");
+    script = () => ({ intent: "site_visit_request", recommended_action: "PROPOSE_SITE_VISIT", confidence: 0.9, reason: "Asked for someone to come out.", facts: [{ key: "site_address", value: `3 Twice Road ${RUN}`, evidence: `3 Twice Road ${RUN}`, confidence: 0.9 }] });
+    const e = await emailOn(leadId, `Can someone come and look? We're at 3 Twice Road ${RUN}.`, `twice+${RUN}@example.com`);
+    const out = (await inspect("email", e.id))!;
+    const sv = (await actionsOf(out.inspectionId)).find((a) => a.type === "PROPOSE_SITE_VISIT")!;
+    expect(sv.status).toBe("awaiting_approval");
+    await db.insert(S.tasks).values({ title: "Arrange a site visit", leadId, status: "open" });
+    const r = await acceptAction(sv.id, chris);
+    expect(r).toMatchObject({ inHand: "Site visit already awaiting arrangement." });
+    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) })).toHaveLength(1);
+  });
+});

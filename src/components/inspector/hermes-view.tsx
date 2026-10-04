@@ -140,6 +140,8 @@ export function HermesView({ inspection, actions, compact = false }: { inspectio
                   </Link>
                 ) : null}
                 {a.result && typeof (a.result as { error?: unknown }).error === "string" ? <span className="text-red-600">({String((a.result as { error: string }).error)})</span> : null}
+                {a.result && typeof (a.result as { inHand?: unknown }).inHand === "string" ? <span className="font-medium text-gray-800" data-testid="in-hand">{String((a.result as { inHand: string }).inHand)}</span> : null}
+                {a.result && Array.isArray((a.result as { items?: unknown }).items) && a.type === "OUTSTANDING" ? <span className="text-gray-800">{((a.result as { items: string[] }).items).slice(1).join(" · ")}</span> : null}
               </li>
             ))}
           </ul>

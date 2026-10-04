@@ -12,9 +12,10 @@
  * customer-facing function, so that holds in code, not just here. A prepared draft is never treated
  * as sent: nothing here changes a lead's status or contact date.
  */
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { drafts, emails, inspectorActions, leads, recordings, tasks, users } from "@/db/schema";
+import { drafts, emails, events, inspections, inspectorActions, leads, recordings, tasks, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
@@ -39,6 +40,7 @@ export const AUTO_ALLOWED: ActionType[] = [
   "PREPARE_QUOTE",
   "DRAFT_EMAIL",
   "NO_ACTION",
+  "OUTSTANDING",
 ];
 
 export type RouteContext = {
@@ -73,7 +75,59 @@ async function assignee(leadId: string | null): Promise<string | null> {
   return chris?.id ?? null;
 }
 
+/** Rows about the same lead (or, without one, the same customer). */
+type Subject = Pick<RouteContext, "leadId" | "contactId">;
+
+function sameSubject(cols: { leadId: AnyPgColumn; contactId: AnyPgColumn }, ctx: Subject): SQL | undefined {
+  if (ctx.leadId) return eq(cols.leadId, ctx.leadId);
+  if (ctx.contactId) return eq(cols.contactId, ctx.contactId);
+  return undefined;
+}
+
+/** An open task with the same title on the same lead or customer: never a second one. */
+export async function openTaskTitled(ctx: Subject, title: string) {
+  const subject = sameSubject(tasks, ctx);
+  if (!subject) return null;
+  return db.query.tasks.findFirst({ where: and(eq(tasks.status, "open"), subject, sql`lower(${tasks.title}) = lower(${title.trim()})`), columns: { id: true, title: true } });
+}
+
+const PROPOSAL_MATCH: Partial<Record<ActionType, { task: RegExp; inHand: string }>> = {
+  PROPOSE_SITE_VISIT: { task: /^site visit\b|\b(arrange|book|schedule|organi[sz]e|propose)\b.*\bsite (visit|inspection)\b/i, inHand: "Site visit already awaiting arrangement." },
+  PROPOSE_BOOKING: { task: /\b(arrange|schedule) the (booking|install(ation)?|job)\b|^book(ing)?\b/i, inHand: "Booking already awaiting arrangement." },
+  PREPARE_REVISED_QUOTE: { task: /\brevised quote\b|\brevise the quote\b/i, inHand: "A revised quote is already in hand." },
+};
+
+/**
+ * A proposal Chris has effectively already got: an open task to arrange it, the same proposal still
+ * waiting for him from another email or conversation, or (for a site visit) one already booked.
+ * Then nothing new is offered, and the CRM says what is already in hand.
+ */
+export async function alreadyInHand(a: Pick<PlannedAction, "type">, ctx: Subject & { inspectionId: string | null }, opts: { ignoreWaiting?: boolean } = {}): Promise<Record<string, unknown> | null> {
+  const m = PROPOSAL_MATCH[a.type];
+  if (!m) return null;
+  const taskSubject = sameSubject(tasks, ctx);
+  if (!taskSubject) return null;
+  if (a.type === "PROPOSE_SITE_VISIT") {
+    const booked = await db.query.events.findFirst({ where: and(eq(events.kind, "site_visit"), gte(events.endsAt, new Date()), sameSubject(events, ctx)), columns: { id: true, startsAt: true } });
+    if (booked) return { inHand: `Site visit already booked for ${dateInAppTz(booked.startsAt)}.`, eventId: booked.id };
+  }
+  const open = await db.query.tasks.findMany({ where: and(eq(tasks.status, "open"), taskSubject), columns: { id: true, title: true, ruleKey: true }, limit: 50 });
+  const t = open.find((x) => m.task.test(x.title) || (x.ruleKey ?? "").includes(a.type));
+  if (t) return { inHand: m.inHand, taskId: t.id, taskTitle: t.title };
+  if (opts.ignoreWaiting) return null;
+  const waiting = await db
+    .select({ id: inspectorActions.id })
+    .from(inspectorActions)
+    .innerJoin(inspections, eq(inspections.id, inspectorActions.inspectionId))
+    .where(and(eq(inspectorActions.type, a.type), eq(inspectorActions.status, "awaiting_approval"), ne(inspections.status, "superseded"), ctx.inspectionId ? ne(inspectorActions.inspectionId, ctx.inspectionId) : undefined, sameSubject(inspectorActions, ctx)))
+    .limit(1);
+  if (waiting[0]) return { inHand: "The same proposal is already waiting for your decision.", actionId: waiting[0].id };
+  return null;
+}
+
 async function task(ctx: RouteContext, a: PlannedAction, def: { title: string; kind: string; due: string; detail?: string }) {
+  const same = await openTaskTitled(ctx, def.title);
+  if (same) return { taskId: same.id, note: "an open task with this title already exists", inHand: `Already open: ${same.title}.` };
   const entity = ctx.jobId ?? ctx.leadId ?? ctx.contactId ?? ctx.inspectionId;
   const [row] = await db
     .insert(tasks)
@@ -114,6 +168,9 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
   switch (a.type) {
     case "NO_ACTION":
       return { status: "done", result: {} };
+    case "OUTSTANDING":
+      // Nothing new is created: the commitment or task is already in the CRM (Today, the lead page).
+      return { status: "outstanding", result: { items: a.payload.items ?? [] } };
     case "ADD_INTERNAL_NOTE": {
       const entity = ctx.leadId ? { entity: "lead" as const, id: ctx.leadId } : ctx.contactId ? { entity: "contact" as const, id: ctx.contactId } : null;
       if (entity) await logActivity({ entity: entity.entity, entityId: entity.id, actorId: null, action: "inspector_note", detail: { summary: a.payload.summary, sourceType: ctx.input.sourceType, sourceId: ctx.input.sourceId, inspectionId: ctx.inspectionId } });
@@ -199,7 +256,12 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
     const a = queue.shift()!;
     let status = a.mode === "approval" ? "awaiting_approval" : "done";
     let result: Record<string, unknown> | null = null;
-    if (a.mode === "auto") {
+    // Never offer what is already in hand (an open task to arrange it, the same proposal waiting).
+    const inHand = a.mode === "approval" ? await alreadyInHand(a, ctx) : null;
+    if (inHand) {
+      status = "already_in_hand";
+      result = inHand;
+    } else if (a.mode === "auto") {
       try {
         const r = await execute(a, ctx, earlier);
         status = r.status;

@@ -6,7 +6,9 @@
  *   name or by Hermes; facts are only accepted with evidence found in the source and a sane value;
  *   conflicting facts are flagged, never overwritten (facts.ts); a prepared reply may not quote a
  *   price, a discount or a promised date; nothing customer-facing is executed, only prepared; an
- *   acceptance never accepts terms; a real enquiry is never "no action"; low confidence goes to Chris.
+ *   acceptance never accepts terms; a real enquiry is never silently "no action" (only when the CRM
+ *   shows it has moved on with nothing outstanding; an outstanding commitment or task is surfaced
+ *   instead); low confidence goes to Chris.
  *
  *   BUSINESS RULES (deterministic, authoritative): commercial CCTV and customer-requested visits go
  *   to a site visit; only CCTV has a Business Brain; the Brain needs its inputs (home or business,
@@ -23,6 +25,7 @@ import type { HermesAction, HermesResult } from "@/lib/hermes/contract";
 import { resolveDue } from "./dates";
 import { normalisePhone, toNumber } from "./text";
 import type { Known } from "./missing";
+import type { Lifecycle } from "./sources";
 import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, MissingInfo, PlannedAction, Understanding } from "./types";
 
 export type ValidateContext = {
@@ -39,6 +42,8 @@ export type ValidateContext = {
     recordingLinked: boolean;
     customerEmail: string | null;
     customerPhone: string | null;
+    /** Where the enquiry stands now (jobs, visits, accepted quotes, open tasks and commitments). */
+    lifecycle?: Lifecycle;
   };
   minConfidence: number;
   /** The old deterministic reading, for the comparison advisory only. */
@@ -276,11 +281,27 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
 
   const isEnquiry = ["new_enquiry", "quote_request", "site_visit_request", "booking_request"].includes(h.intent) || h.conversation_type === "new_enquiry";
 
-  // ---- HARD: a real enquiry is never "no action"; Hermes's doubt and low confidence go to Chris ----
+  // ---- HARD: a real enquiry is never silently "no action"; Hermes's doubt and low confidence go to Chris ----
+  // Lifecycle-aware: on an older conversation the CRM may show the enquiry has long moved on (job
+  // done or scheduled, visit held, quote accepted with work). Then "no action" stands, unless
+  // something is still outstanding, in which case that specific item is what needs doing.
   let action: HermesAction = recommended;
   if (action === "NO_ACTION" && isEnquiry) {
-    hard.push({ rule: "enquiry_never_no_action", message: "Hermes said no action, but it reads as an enquiry. Sent to Chris instead.", effect: "NEEDS_REVIEW" });
-    action = "NEEDS_REVIEW";
+    const lc = crm.lifecycle;
+    const items = outstandingItems(commitments, lc);
+    if (items.length) {
+      hard.push({ rule: "enquiry_outstanding_item", message: `Hermes said no action on an enquiry, but this is not closed: ${items.join("; ")}.`, effect: "OUTSTANDING" });
+      headline.final = "OUTSTANDING";
+      headline.changedBy = "enquiry_outstanding_item";
+      const surfaced = act("OUTSTANDING", "auto", "enquiry_outstanding_item", items[0], { items });
+      return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, surfaced], reviewKind: null, headline };
+    }
+    if (lc?.progressed.length) {
+      hard.push({ rule: "enquiry_already_progressed", message: `Hermes said no action on an enquiry; allowed because the CRM shows it has moved on (${lc.progressed.join("; ")}) and nothing is outstanding.` });
+    } else {
+      hard.push({ rule: "enquiry_never_no_action", message: "Hermes said no action, but it reads as an enquiry and the CRM shows no progress since. Sent to Chris instead.", effect: "NEEDS_REVIEW" });
+      action = "NEEDS_REVIEW";
+    }
   }
   const plan = (a: HermesAction): PlannedAction[] => planFor(a, h, ctx, { known, missing, service, property, commitments, business, hard });
   if (action === "NEEDS_REVIEW") {
@@ -313,6 +334,33 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const override = business.find((b) => b.effect) ?? hard.find((x) => x.effect && x.rule !== "fact_evidence" && x.rule !== "commitment_evidence");
   if (override) headline.changedBy = override.rule;
   return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, ...planned], reviewKind: null, headline };
+}
+
+const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+
+/**
+ * What is still open on an enquiry Hermes would close: commitments from this conversation that the
+ * CRM does not show as done, commitments still outstanding on the lead or customer, and open tasks.
+ * Ours first: "We said we'd prepare and send the camera plan (later that day)".
+ */
+export function outstandingItems(fromSource: Commitment[], lc: Lifecycle | undefined): string[] {
+  const settled = new Set(lc?.settledFromSource ?? []);
+  const said = [
+    ...fromSource.filter((c) => !settled.has(`${c.owner}:${c.actionKey}`)).map((c) => ({ owner: c.owner, action: c.action, dueText: c.dueText })),
+    ...(lc?.outstanding ?? []),
+  ];
+  const seen = new Set<string>();
+  const line = (c: { owner: string; action: string; dueText: string | null }) =>
+    `${c.owner === "customer" ? "Waiting on the customer to" : "We said we'd"} ${lowerFirst(c.action)}${c.dueText ? ` (${c.dueText})` : ""}`;
+  const commitmentsOpen = [...said.filter((c) => c.owner !== "customer"), ...said.filter((c) => c.owner === "customer")]
+    .filter((c) => {
+      const k = `${c.owner === "customer" ? "c" : "g"}:${norm(c.action)}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map(line);
+  return [...commitmentsOpen, ...(lc?.openTasks ?? []).map((t) => `Open task: ${t}`)];
 }
 
 /** One recommended action, turned into the router's actions under the business rules. */

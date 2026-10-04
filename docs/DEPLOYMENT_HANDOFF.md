@@ -904,7 +904,17 @@ never as the final interpretation.
     held back and Chris gets a task.
   - Nothing is sent, confirmed, accepted or discounted by the system. This is enforced in code by the
     actor guard, for Hermes and the Inspector alike.
-  - A real enquiry is never "no action".
+  - A real enquiry is never silently "no action". This check looks at where the enquiry stands in
+    the CRM, so older conversations are judged correctly:
+    - If something is still open, that specific item becomes the action, marked **Outstanding**.
+      Examples: "We said we'd prepare and send the camera plan (later that day)", "Waiting on the
+      customer to send photos", "Open task: …". Open items are commitments from the conversation
+      that the CRM does not show as done, commitments still outstanding on the lead or customer, and
+      open tasks. Nothing new is created; the commitment or task is already on Today and the lead.
+    - If nothing is open and the CRM shows the enquiry has moved on, Hermes's "no action" stands and
+      the reason is recorded. Moved on means a job completed, invoiced or scheduled, a site visit
+      held, or a quote accepted with a job created.
+    - Otherwise it goes to Chris as before.
   - Below 60% confidence, Hermes's recommendation waits for Chris instead of being acted on (see
     `HERMES_MIN_CONFIDENCE` below).
 - **Business rules (deterministic, authoritative):**
@@ -931,6 +941,12 @@ outcome, and every action prepared. When a rule stops something, it says so, for
 quote blocked by: Nothing in the design has an approved price yet · Action created: Price the quote
 for …". The lead page's Inspector panel and the timeline ("Hermes read the email · Recommended:
 Prepare quote · 94% sure") show the same.
+
+**Nothing is offered twice.** A site visit, booking or revised quote is not offered again if it is
+already in hand: an open task to arrange it, the same proposal already waiting for Chris, or (for a
+site visit) one already booked. The action is shown as "already in hand", with a note such as
+"Site visit already awaiting arrangement." Accepting a proposal after such a task was added does not
+create a second task. A task is never created twice with the same title on the same lead.
 
 **Needs your review** holds:
 - **Who is this?**: uncertain identity. Hermes's suggestion is shown; you choose.
@@ -1072,8 +1088,9 @@ The CRM records the model name Hermes reports with every run.
 - Earlier inspections are kept as they were, marked "Rules (before Hermes)".
 - Nothing is re-read automatically.
 
-**Jev** (the earlier shadow classifier) is unchanged and still off by default. Hermes now does what
-Jev was meant to prove, so Jev can be removed later.
+**Jev** (the earlier shadow classifier) is redundant and off by default: Hermes is the primary
+interpretation layer. The Inspector page shows a Jev section only if Jev ever produced answers, for
+comparison. Jev can be removed later.
 
 ## 18. Leads: Next action and Lost reason
 
