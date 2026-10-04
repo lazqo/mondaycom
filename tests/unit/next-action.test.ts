@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { nextActionFor, typedNextAction, type NextActionInput } from "@/lib/leads/next-action";
+import { nextActionFor, typedNextAction, type NextActionContext, type NextActionInput } from "@/lib/leads/next-action";
 
 const lead = (over: Partial<NextActionInput> = {}): NextActionInput => ({ status: "new", nextAction: null, nextActionFor: null, lostReason: null, followUpAt: null, ...over });
-const ctx = { today: "2026-10-04", siteVisits: [], quotes: [], jobs: [] };
-const text = (l: Partial<NextActionInput>, c: Partial<typeof ctx> = {}) => nextActionFor(lead(l), { ...ctx, ...c }).text;
+const ctx: NextActionContext = { today: "2026-10-04", siteVisits: [], quotes: [], jobs: [] };
+const text = (l: Partial<NextActionInput>, c: Partial<NextActionContext> = {}) => nextActionFor(lead(l), { ...ctx, ...c }).text;
 
 describe("Next action beside the status", () => {
   it("each stage has a default", () => {
