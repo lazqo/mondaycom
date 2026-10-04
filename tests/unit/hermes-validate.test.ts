@@ -91,7 +91,7 @@ describe("hard guardrails", () => {
   });
 
   describe("an enquiry Hermes would close ('no action') — lifecycle-aware", () => {
-    const lc = (over: Partial<NonNullable<ValidateContext["crm"]["lifecycle"]>> = {}) => ({ progressed: [], openTasks: [], outstanding: [], settledFromSource: [], ...over });
+    const lc = (over: Partial<NonNullable<ValidateContext["crm"]["lifecycle"]>> = {}): NonNullable<ValidateContext["crm"]["lifecycle"]> => ({ progressed: [], events: [], openTasks: [], outstanding: [], settledFromSource: [], ...over });
     const withLc = (i: InspectorInput, l: ReturnType<typeof lc>) => ctx(i, { crm: { ...ctx(i).crm, lifecycle: l } });
     const old = input("Hi, we'd like a quote for cameras at the house.");
 
@@ -125,13 +125,71 @@ describe("hard guardrails", () => {
       expect(done.headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
     });
 
+    it("Aphichart: commitments the later job proves were kept do not hold it open; 'no action' stands", () => {
+      const call = input("Chris: I'll book the installation visit for next week. Aphichart: I'll be available tomorrow.", { sourceType: "recording" });
+      const h = H({
+        recommended_action: "NO_ACTION",
+        commitments: [
+          { owner: "get_secure", owner_name: "Chris", action: "book the installation visit", action_key: "visit", due_text: "next week", due_at: null, evidence: "I'll book the installation visit for next week" },
+          { owner: "customer", owner_name: "Aphichart", action: "be available tomorrow", action_key: "confirm", due_text: "tomorrow", due_at: null, evidence: "I'll be available tomorrow" },
+        ],
+      });
+      const later = new Date(AT.getTime() + 9 * 86400_000).toISOString();
+      const v = validateHermes(h, withLc(call, lc({ progressed: ["J-1008 invoiced"], events: [{ kind: "job_done", at: later, label: "J-1008 completed on 16 Oct 2026" }, { kind: "job_invoiced", at: later, label: "J-1008 invoiced on 16 Oct 2026" }] })));
+      expect(v.headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
+      expect(types(v)).not.toContain("OUTSTANDING");
+      expect(v.hard.find((c) => c.rule === "enquiry_already_progressed")!.message).toMatch(/Kept, as the CRM shows: “Book the installation visit” \(J-1008 completed on 16 Oct 2026\); “Be available tomorrow” \(J-1008 completed/);
+      // A job finished BEFORE the conversation proves nothing about it.
+      const before = new Date(AT.getTime() - 30 * 86400_000).toISOString();
+      const v2 = validateHermes(h, withLc(call, lc({ progressed: ["J-1001 invoiced"], events: [{ kind: "job_done", at: before, label: "J-1001 completed" }] })));
+      expect(v2.headline.final).toBe("OUTSTANDING");
+    });
+
     it("open tasks and outstanding CRM commitments are surfaced too (ours first, no duplicates)", () => {
       const v = validateHermes(
         H({ recommended_action: "NO_ACTION" }),
-        withLc(old, lc({ progressed: ["Job #12 completed"], openTasks: ["Send the invoice"], outstanding: [{ owner: "customer", action: "Send photos of the eaves", dueText: null }, { owner: "get_secure", action: "Email the warranty", dueText: "Friday" }] })),
+        withLc(old, lc({ progressed: ["Job #12 completed"], openTasks: ["Send the invoice"], outstanding: [{ id: "c1", owner: "customer", action: "Send photos of the eaves", actionKey: "send_photos", dueText: null, at: AT.toISOString() }, { id: "c2", owner: "get_secure", action: "Email the warranty", actionKey: "send_info", dueText: "Friday", at: AT.toISOString() }] })),
       );
       expect(v.plan.find((p) => p.type === "OUTSTANDING")!.payload.items).toEqual(["We said we'd email the warranty (Friday)", "Waiting on the customer to send photos of the eaves", "Open task: Send the invoice"]);
     });
+  });
+
+  describe("Nympha: when pricing is the only blocker, a concrete task instead of a generic review", () => {
+    const brain = (unpriced: string[], over = {}) => ({ fullyPriced: false, unpriced, siteVisitRequired: false, quoteNumber: 1006, ...over });
+    const withBrain = (b: ReturnType<typeof brain>) => ctx(input("4 cameras, single storey house"), { crm: { ...ctx(input("x")).crm, hasOpenBrainQuote: true, brain: b } });
+    const flagged = H({ recommended_action: "NEEDS_REVIEW", reason: "Q-1006 cannot be finished: the labour and allowance inputs are not set." });
+
+    it("Hermes flags it, the Brain's gaps are all commercial inputs: Price the quote / complete costing for Q-1006", () => {
+      const v = validateHermes(flagged, withBrain(brain(["RES_STANDARD 4-cam: labour hours not set", "RES_STANDARD 4-cam: customer sell allowance not set"])));
+      expect(v.reviewKind).toBeNull();
+      const t = v.plan.find((p) => p.type === "CREATE_INTERNAL_TASK")!;
+      expect(t).toMatchObject({ rule: "pricing_only_blocker", payload: { title: "Price the quote / complete costing for Q-1006", kind: "quote" } });
+      expect(v.headline).toMatchObject({ final: "CREATE_INTERNAL_TASK", changedBy: "pricing_only_blocker" });
+    });
+
+    it("Hermes wants the quote that already exists: the same task, not 'already prepared'", () => {
+      const v = validateHermes(H({ recommended_action: "PREPARE_QUOTE", facts: [{ key: "camera_count", value: 4, evidence: "4 cameras", confidence: 0.9 }, { key: "storeys", value: 1, evidence: "single storey", confidence: 0.9 }] }), withBrain(brain(["VIGI C340: no approved price"])));
+      expect(types(v)).toContain("CREATE_INTERNAL_TASK");
+      expect(types(v)).not.toContain("NO_ACTION");
+    });
+
+    it("still a review when something needs a decision: a design gap, a site visit, an objection, or a reason that is not pricing", () => {
+      expect(validateHermes(flagged, withBrain(brain(["Camera for driveway: no suitable product"]))).reviewKind).toBe("hermes_flagged");
+      expect(validateHermes(flagged, withBrain(brain(["X: labour hours not set"], { siteVisitRequired: true }))).reviewKind).toBe("hermes_flagged");
+      expect(validateHermes({ ...flagged, objections: [{ kind: "price", evidence: "too dear" }] }, withBrain(brain(["X: labour hours not set"]))).reviewKind).toBe("hermes_flagged");
+      expect(validateHermes(H({ recommended_action: "NEEDS_REVIEW", reason: "The customer sounds unhappy with the installer." }), withBrain(brain(["X: labour hours not set"]))).reviewKind).toBe("hermes_flagged");
+    });
+  });
+
+  it("Andre: a name from the website form is sourced evidence ('Name: Andre Bunton')", () => {
+    const form = { fields: { Property: "Commercial", Service: "CCTV Installation" }, name: "Andre Bunton", email: "andre@example.com", phone: "021 555 0101", service: "CCTV", address: "5 Depot Road, Penrose" };
+    const i = input("New Lead · CCTV Landing\n\nANDRE BUNTON\n\nPhone 021 555 0101 Email andre@example.com", { form });
+    const v = validateHermes(H({ recommended_action: "NO_ACTION", intent: "information", conversation_type: "other", facts: [{ key: "contact_name", value: "Andre Bunton", evidence: "Name: Andre Bunton", confidence: 0.95 }, { key: "site_address", value: "5 Depot Road, Penrose", evidence: "address: 5 Depot Road, Penrose", confidence: 0.9 }] }), ctx(i));
+    expect(v.rejectedFacts).toEqual([]);
+    expect(v.understanding.facts.map((f) => f.key)).toEqual(["contact_name", "site_address"]);
+    // A name the form does not contain is still refused.
+    const bad = validateHermes(H({ facts: [{ key: "contact_name", value: "Hemi Walker", evidence: "Name: Hemi Walker", confidence: 0.9 }] }), ctx(i));
+    expect(bad.rejectedFacts.map((r) => r.key)).toEqual(["contact_name"]);
   });
 
   it("not asked: anything the CRM already has", () => {

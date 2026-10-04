@@ -281,9 +281,9 @@ test.describe("Lead + Conversation Inspector", () => {
     await login(page);
     await syncMail(page);
     const card = page.getByTestId("hermes-review").filter({ hasText: subject });
-    await eventually(page, "/inspector", async () => expect(card).toBeVisible({ timeout: 1000 }));
+    // The inspection is stored a moment before its review action: wait for both.
+    await eventually(page, "/inspector", async () => expect(card).toContainText("The rules classifier said this is not a lead", { timeout: 1000 }));
     await expect(card).toContainText("Hermes thinks this is a lead");
-    await expect(card).toContainText("The rules classifier said this is not a lead");
     await page.goto("/leads");
     await expect(page.getByText(who)).toHaveCount(0);
     await page.goto("/inspector");

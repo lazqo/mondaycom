@@ -151,6 +151,8 @@ function inspectorItem(action: string, d: Record<string, unknown>, leadId: strin
       return { kind: "inspector", title: "Business Brain ran", meta: [d.complete ? "fully priced" : "not fully priced", d.siteVisit ? "site visit needed" : null].filter(Boolean).join(" · "), href: leadId ? `/leads/${leadId}/assessment` : null };
     case "quote_prepared_by_inspector":
       return { kind: "quote", title: `Quote${d.quoteNumber ? ` Q-${String(d.quoteNumber)}` : ""} prepared for approval`, meta: d.draftId ? "reply drafted too · nothing sent" : "nothing sent", href: d.quoteId ? `/quotes/${String(d.quoteId)}` : null };
+    case "commitment_kept":
+      return { kind: "inspector", title: `Commitment kept: ${String(d.action ?? "")}`, meta: d.evidence ? `shown by ${String(d.evidence)}` : null };
     case "inspector_action_accepted":
       return { kind: "inspector", title: `Accepted: ${ACTION_LABELS[d.type as ActionType] ?? String(d.type)}`, body: d.reason ? String(d.reason) : null };
     default:

@@ -25,7 +25,7 @@ import type { HermesAction, HermesResult } from "@/lib/hermes/contract";
 import { resolveDue } from "./dates";
 import { normalisePhone, toNumber } from "./text";
 import type { Known } from "./missing";
-import type { Lifecycle } from "./sources";
+import { satisfiedBy, type Lifecycle } from "./lifecycle";
 import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, MissingInfo, PlannedAction, Understanding } from "./types";
 
 export type ValidateContext = {
@@ -44,6 +44,8 @@ export type ValidateContext = {
     customerPhone: string | null;
     /** Where the enquiry stands now (jobs, visits, accepted quotes, open tasks and commitments). */
     lifecycle?: Lifecycle;
+    /** The Business Brain's latest result for the lead (null when it has not run). */
+    brain?: { fullyPriced: boolean; unpriced: string[]; siteVisitRequired: boolean; quoteNumber: number | null } | null;
   };
   minConfidence: number;
   /** The old deterministic reading, for the comparison advisory only. */
@@ -78,7 +80,21 @@ const norm = (s: string) =>
 /** Everything the source says, as Hermes could have quoted it. */
 export function sourceHaystack(input: InspectorInput): { text: string; tokens: Set<string> } {
   const parts = [input.title, input.text, ...input.utterances.map((u) => u.text)];
-  if (input.form) parts.push(...Object.entries(input.form.fields).map(([k, v]) => `${k}: ${v}`), input.form.name ?? "", input.form.email ?? "", input.form.phone ?? "", input.form.address ?? "", input.form.service ?? "");
+  if (input.form) {
+    const f = input.form;
+    parts.push(...Object.entries(f.fields).map(([k, v]) => `${k}: ${v}`), f.name ?? "", f.email ?? "", f.phone ?? "", f.address ?? "", f.service ?? "");
+    // The form's own parsed details, with the labels Hermes sees them under in the context pack
+    // (name, email, phone, address, service) and the fact names, so "Name: Andre Bunton" quoted
+    // from the form is found. Values come only from the submitted form.
+    const labelled: [string[], string | null][] = [
+      [["name", "contact name", "full name", "customer name"], f.name],
+      [["email", "email address"], f.email],
+      [["phone", "phone number", "mobile"], f.phone],
+      [["address", "site address", "location"], f.address],
+      [["service"], f.service],
+    ];
+    for (const [labels, v] of labelled) if (v) parts.push(...labels.map((l) => `${l}: ${v}`));
+  }
   const text = norm(parts.join(" \n "));
   return { text, tokens: new Set(text.split(" ").filter(Boolean)) };
 }
@@ -288,7 +304,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   let action: HermesAction = recommended;
   if (action === "NO_ACTION" && isEnquiry) {
     const lc = crm.lifecycle;
-    const items = outstandingItems(commitments, lc);
+    const { items, satisfied } = outstandingItems(commitments, lc, input.at.toISOString());
     if (items.length) {
       hard.push({ rule: "enquiry_outstanding_item", message: `Hermes said no action on an enquiry, but this is not closed: ${items.join("; ")}.`, effect: "OUTSTANDING" });
       headline.final = "OUTSTANDING";
@@ -297,7 +313,10 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
       return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, surfaced], reviewKind: null, headline };
     }
     if (lc?.progressed.length) {
-      hard.push({ rule: "enquiry_already_progressed", message: `Hermes said no action on an enquiry; allowed because the CRM shows it has moved on (${lc.progressed.join("; ")}) and nothing is outstanding.` });
+      hard.push({
+        rule: "enquiry_already_progressed",
+        message: `Hermes said no action on an enquiry; allowed because the CRM shows it has moved on (${lc.progressed.join("; ")}) and nothing is outstanding.${satisfied.length ? ` Kept, as the CRM shows: ${satisfied.join("; ")}.` : ""}`,
+      });
     } else {
       hard.push({ rule: "enquiry_never_no_action", message: "Hermes said no action, but it reads as an enquiry and the CRM shows no progress since. Sent to Chris instead.", effect: "NEEDS_REVIEW" });
       action = "NEEDS_REVIEW";
@@ -305,6 +324,15 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   }
   const plan = (a: HermesAction): PlannedAction[] => planFor(a, h, ctx, { known, missing, service, property, commitments, business, hard });
   if (action === "NEEDS_REVIEW") {
+    // BUSINESS: when the only thing in the way is pricing the Brain already knows is missing, that
+    // is a concrete job for Chris (enter the costs), not an interpretation for him to make.
+    const pricing = pricingOnlyTask(h, ctx, missing);
+    if (pricing) {
+      business.push({ rule: "pricing_only_blocker", message: `Hermes asked for a review, but the only thing in the way is costing the Business Brain cannot finish: ${pricing.gaps.join("; ")}. A task to complete it instead.`, effect: "CREATE_INTERNAL_TASK" });
+      headline.final = "CREATE_INTERNAL_TASK";
+      headline.changedBy = "pricing_only_blocker";
+      return { understanding, hard, business, advisories, rejectedFacts, plan: [...base, pricing.action], reviewKind: null, headline };
+    }
     out.push(act("NEEDS_REVIEW", "approval", recommended === "NEEDS_REVIEW" ? "hermes_flagged" : "enquiry_never_no_action", h.reason, { kind: "hermes_flagged", hermesRecommendation: recommended, confidence: h.confidence }));
     headline.final = "NEEDS_REVIEW";
     if (recommended !== "NEEDS_REVIEW") headline.changedBy = "enquiry_never_no_action";
@@ -341,26 +369,72 @@ const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 /**
  * What is still open on an enquiry Hermes would close: commitments from this conversation that the
  * CRM does not show as done, commitments still outstanding on the lead or customer, and open tasks.
- * Ours first: "We said we'd prepare and send the camera plan (later that day)".
+ * Ours first: "We said we'd prepare and send the camera plan (later that day)". A commitment that a
+ * later CRM event clearly proves was kept (the visit or job took place, the quote was accepted or
+ * sent) is not open: it is listed under `satisfied` with that evidence.
  */
-export function outstandingItems(fromSource: Commitment[], lc: Lifecycle | undefined): string[] {
+export function outstandingItems(fromSource: Commitment[], lc: Lifecycle | undefined, saidAt: string): { items: string[]; satisfied: string[] } {
   const settled = new Set(lc?.settledFromSource ?? []);
   const said = [
-    ...fromSource.filter((c) => !settled.has(`${c.owner}:${c.actionKey}`)).map((c) => ({ owner: c.owner, action: c.action, dueText: c.dueText })),
+    ...fromSource.filter((c) => !settled.has(`${c.owner}:${c.actionKey}`)).map((c) => ({ owner: c.owner as string, action: c.action, actionKey: c.actionKey as string, dueText: c.dueText, at: saidAt })),
     ...(lc?.outstanding ?? []),
   ];
   const seen = new Set<string>();
   const line = (c: { owner: string; action: string; dueText: string | null }) =>
     `${c.owner === "customer" ? "Waiting on the customer to" : "We said we'd"} ${lowerFirst(c.action)}${c.dueText ? ` (${c.dueText})` : ""}`;
-  const commitmentsOpen = [...said.filter((c) => c.owner !== "customer"), ...said.filter((c) => c.owner === "customer")]
-    .filter((c) => {
-      const k = `${c.owner === "customer" ? "c" : "g"}:${norm(c.action)}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    })
-    .map(line);
-  return [...commitmentsOpen, ...(lc?.openTasks ?? []).map((t) => `Open task: ${t}`)];
+  const unique = [...said.filter((c) => c.owner !== "customer"), ...said.filter((c) => c.owner === "customer")].filter((c) => {
+    const k = `${c.owner === "customer" ? "c" : "g"}:${norm(c.action)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const items: string[] = [];
+  const satisfied: string[] = [];
+  for (const c of unique) {
+    const by = satisfiedBy(c, lc?.events ?? []);
+    if (by) satisfied.push(`“${c.action}” (${by.label})`);
+    else items.push(line(c));
+  }
+  return { items: [...items, ...(lc?.openTasks ?? []).map((t) => `Open task: ${t}`)], satisfied };
+}
+
+/**
+ * What the Brain lists as stopping the costing, when every item is a commercial input Chris enters
+ * (a price not approved yet, labour hours or an allowance not set); null when anything else is in
+ * the way (no suitable product, nothing selected), which needs a decision.
+ */
+export function pricingGaps(unpriced: string[]): string[] | null {
+  if (!unpriced.length) return null;
+  return unpriced.every((u) => /no approved price|not set\b/i.test(u)) ? unpriced : null;
+}
+
+export const pricingTaskTitle = (quoteNumber: number | null, who: string | null) => `Price the quote / complete costing for ${quoteNumber ? `Q-${quoteNumber}` : (who ?? "this lead")}`;
+
+/**
+ * Hermes wants Chris to look, but the CRM can show the only blocker is pricing the Brain cannot
+ * finish: the task to complete it. Only when nothing else needs a decision: no site visit, no
+ * blocking question, no objection or conflict, not an acceptance, a change or a problem, and Hermes
+ * itself was heading for a quote or names pricing as the reason.
+ */
+function pricingOnlyTask(h: HermesResult, ctx: ValidateContext, missing: MissingInfo[]): { action: PlannedAction; gaps: string[] } | null {
+  const b = ctx.crm.brain;
+  if (!b || b.fullyPriced || b.siteVisitRequired) return null;
+  const gaps = pricingGaps(b.unpriced);
+  if (!gaps) return null;
+  if (missing.some((m) => m.blocking) || h.objections.length || h.conflicts.length) return null;
+  if (["acceptance", "objection", "service_issue", "quote_change", "not_relevant"].includes(h.intent)) return null;
+  const aboutPricing = /\b(pric|cost|labour|labor|allowance|unpriced|rate|margin)/i.test([h.reason, ...h.advisories].join(" "));
+  if (!aboutPricing && !["PREPARE_QUOTE", "RUN_BUSINESS_BRAIN"].includes(h.recommended_action)) return null;
+  const title = pricingTaskTitle(b.quoteNumber, null);
+  return {
+    gaps,
+    action: act("CREATE_INTERNAL_TASK", "auto", "pricing_only_blocker", `The Business Brain cannot finish the costing: ${gaps.join("; ")}.`, {
+      title,
+      kind: "quote",
+      due: "today",
+      detail: `The Business Brain cannot finish the costing${b.quoteNumber ? ` for Q-${b.quoteNumber}` : ""} until these are entered or approved: ${gaps.join("; ")}. Then re-run the Brain.`,
+    }),
+  };
 }
 
 /** One recommended action, turned into the router's actions under the business rules. */
@@ -425,6 +499,12 @@ function planFor(
         return [act("PREPARE_REVISED_QUOTE", "approval", "revised_quote_needs_chris", h.reason, { objections: h.objections })];
       }
       if (action === "PREPARE_QUOTE" && ctx.crm.hasOpenBrainQuote) {
+        // The prepared quote cannot be finished only because of pricing: say exactly that.
+        const pricing = pricingOnlyTask(h, ctx, s.missing);
+        if (pricing) {
+          s.business.push({ rule: "pricing_only_blocker", message: `A quote is already prepared, but its costing cannot be finished: ${pricing.gaps.join("; ")}.`, effect: "CREATE_INTERNAL_TASK" });
+          return [pricing.action];
+        }
         s.business.push({ rule: "quote_already_prepared", message: "A quote is already prepared and waiting in Approvals; another is not made.", effect: "NO_ACTION" });
         return [act("NO_ACTION", "auto", "quote_already_prepared", "A quote is already prepared for this lead and waits in Approvals.")];
       }

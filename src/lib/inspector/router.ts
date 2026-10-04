@@ -15,7 +15,7 @@
 import { and, desc, eq, gte, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { drafts, emails, events, inspections, inspectorActions, leads, recordings, tasks, users } from "@/db/schema";
+import { drafts, emails, events, inspections, inspectorActions, leads, quotes, recordings, tasks, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
@@ -23,6 +23,7 @@ import { type Actor, GuardrailError } from "@/lib/guard/actor";
 import { dateInAppTz } from "@/lib/email/pipeline";
 import { enquiryWithFacts } from "./brain";
 import { composeQuestionsEmail } from "./plan";
+import { pricingGaps, pricingTaskTitle } from "./validate";
 import type { ActionType, InspectorInput, PlannedAction } from "./types";
 
 export const INSPECTOR_ACTOR: Actor = { kind: "system", process: "inspector" };
@@ -125,9 +126,17 @@ export async function alreadyInHand(a: Pick<PlannedAction, "type">, ctx: Subject
   return null;
 }
 
+/** An open pricing task on the same lead ("Price the quote for …", "… complete costing …"). */
+async function openPricingTask(ctx: Subject) {
+  const subject = sameSubject(tasks, ctx);
+  if (!subject) return null;
+  const open = await db.query.tasks.findMany({ where: and(eq(tasks.status, "open"), subject), columns: { id: true, title: true }, limit: 50 });
+  return open.find((t) => /\bprice the quote\b|\bcomplete (the )?costing\b/i.test(t.title)) ?? null;
+}
+
 async function task(ctx: RouteContext, a: PlannedAction, def: { title: string; kind: string; due: string; detail?: string }) {
-  const same = await openTaskTitled(ctx, def.title);
-  if (same) return { taskId: same.id, note: "an open task with this title already exists", inHand: `Already open: ${same.title}.` };
+  const same = (await openTaskTitled(ctx, def.title)) ?? (def.kind === "quote" && /\bprice the quote\b|\bcomplete (the )?costing\b/i.test(def.title) ? await openPricingTask(ctx) : null);
+  if (same) return { taskId: same.id, note: "an open task like this already exists", inHand: `Already open: ${same.title}.` };
   const entity = ctx.jobId ?? ctx.leadId ?? ctx.contactId ?? ctx.inspectionId;
   const [row] = await db
     .insert(tasks)
@@ -156,6 +165,12 @@ function dueDate(due: unknown, today: string): string {
     return d < today ? today : d;
   }
   return businessDay(new Date(), 1);
+}
+
+async function openBrainQuoteNumber(leadId: string | null): Promise<number | null> {
+  if (!leadId) return null;
+  const q = await db.query.quotes.findFirst({ where: and(eq(quotes.leadId, leadId), eq(quotes.origin, "brain"), inArray(quotes.status, ["ai_prepared", "needs_review", "approved"])), orderBy: [desc(quotes.createdAt)], columns: { number: true } });
+  return q?.number ?? null;
 }
 
 const who = async (leadId: string | null) => (leadId ? ((await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { name: true } }))?.name ?? "the customer") : "the customer");
@@ -267,6 +282,21 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
         status = r.status;
         result = r.result;
         earlier.set(a.type, r.result);
+        // The Brain cannot finish the costing only because of pricing Chris enters: a task to do that,
+        // after the quote step (which makes its own "Price the quote" task when nothing is priced).
+        const later = [...queue].some((p) => p.type === "PREPARE_QUOTE");
+        const brainOut = earlier.get("RUN_BUSINESS_BRAIN");
+        const gaps = brainOut && !brainOut.complete && !brainOut.siteVisitRequired ? pricingGaps((brainOut.unpriced as string[] | undefined) ?? []) : null;
+        if (gaps && ((a.type === "RUN_BUSINESS_BRAIN" && !later) || (a.type === "PREPARE_QUOTE" && r.status === "done")) && !queue.some((p) => p.rule === "pricing_only_blocker") && !planned.some((p) => p.rule === "pricing_only_blocker")) {
+          const qn = a.type === "PREPARE_QUOTE" ? ((r.result.quoteNumber as number | null) ?? null) : await openBrainQuoteNumber(ctx.leadId);
+          queue.push({
+            type: "CREATE_INTERNAL_TASK",
+            mode: "auto",
+            rule: "pricing_only_blocker",
+            reason: `The Business Brain cannot finish the costing: ${gaps.join("; ")}.`,
+            payload: { title: pricingTaskTitle(qn, await who(ctx.leadId)), kind: "quote", due: "today", detail: `Enter or approve these, then re-run the Brain: ${gaps.join("; ")}.` },
+          });
+        }
         // The Brain decides a site visit is needed: propose one instead of quoting.
         if ((a.type === "PREPARE_QUOTE" || a.type === "RUN_BUSINESS_BRAIN") && r.result.siteVisitRequired && ![...planned, ...queue].some((p) => p.type === "PROPOSE_SITE_VISIT") && !out.some((o) => o.type === "PROPOSE_SITE_VISIT")) {
           const reasons = (earlier.get("RUN_BUSINESS_BRAIN")?.siteVisitReasons as string[] | undefined) ?? [];

@@ -915,6 +915,20 @@ never as the final interpretation.
       the reason is recorded. Moved on means a job completed, invoiced or scheduled, a site visit
       held, or a quote accepted with a job created.
     - Otherwise it goes to Chris as before.
+    - **A commitment counts as kept when a later CRM event clearly proves that specific commitment
+      happened**, and nothing else is inferred:
+
+      | Commitment | Kept when, after it was said |
+      | --- | --- |
+      | "Book the installation visit" | The installation job was done or invoiced, or its appointment took place |
+      | "Come out for a site visit" | The visit or the job took place |
+      | "The customer will be available" | The visit or the job took place |
+      | "Go ahead with the quote" | The quote was accepted or a job was created |
+      | "Send the quote" | A quote was sent |
+
+      Sending a camera plan, sending photos and paying are never inferred. A job finished before
+      the conversation proves nothing. Commitments proven kept are closed, and the evidence goes on
+      the lead's timeline ("Commitment kept: … shown by J-1008 completed on …").
   - Below 60% confidence, Hermes's recommendation waits for Chris instead of being acted on (see
     `HERMES_MIN_CONFIDENCE` below).
 - **Business rules (deterministic, authoritative):**
@@ -941,6 +955,22 @@ outcome, and every action prepared. When a rule stops something, it says so, for
 quote blocked by: Nothing in the design has an approved price yet · Action created: Price the quote
 for …". The lead page's Inspector panel and the timeline ("Hermes read the email · Recommended:
 Prepare quote · 94% sure") show the same.
+
+**Pricing is a task, not a review.** Sometimes the only thing stopping a quote is costing the
+Business Brain cannot finish, and everything it lists is a commercial input Chris enters (a price not
+yet approved, labour hours or an allowance not set). Then Chris gets a task, "Price the quote /
+complete costing for Q-1006", instead of a generic review.
+- This applies when Hermes asks for a review for that reason, or wants a quote that is already
+  prepared, or the Brain has just run.
+- The task is made only once. If one is already open, it is shown as already open.
+- Needs your review is kept for real decisions: a design gap (no suitable product, nothing
+  selected), a site visit, a blocking question, an objection or conflict, or a review reason that
+  is not pricing.
+
+**Website-form names are evidence.** Hermes quotes the form's details as the CRM shows them to it
+("Name: Andre Bunton"). Those labelled values are accepted as evidence from the source. A name that
+is not in the form is still refused. Who the customer is is still decided only by the CRM's identity
+rules.
 
 **Nothing is offered twice.** A site visit, booking or revised quote is not offered again if it is
 already in hand: an open task to arrange it, the same proposal already waiting for Chris, or (for a

@@ -23,6 +23,7 @@ import { recordFeedback } from "./feedback";
 import { planActions } from "./plan";
 import { alreadyInHand, routeActions, type RoutedAction } from "./router";
 import { validateHermes, type Validation } from "./validate";
+import { satisfiedBy, type Lifecycle } from "./lifecycle";
 import { askHermes, type HermesStatus } from "@/lib/hermes/inspector";
 import { hermesMinConfidence } from "@/lib/hermes/runtime";
 import { collectSignals, crmKnown, crmState, emailInput, recordingInput, staffNames } from "./sources";
@@ -124,7 +125,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       input,
       identity,
       known,
-      crm: { leadId, contactId, hasOpenBrainQuote: state.hasOpenBrainQuote, hasSentQuote: state.hasSentQuote, recordingLinked: state.recordingLinked, customerEmail: state.customerEmail, customerPhone: state.customerPhone, lifecycle: state.lifecycle },
+      crm: { leadId, contactId, hasOpenBrainQuote: state.hasOpenBrainQuote, hasSentQuote: state.hasSentQuote, recordingLinked: state.recordingLinked, customerEmail: state.customerEmail, customerPhone: state.customerPhone, lifecycle: state.lifecycle, brain: state.brain },
       minConfidence: hermesMinConfidence(),
       rules: { primaryIntent: rulesView.primaryIntent, firstAction: rulesView.firstAction, urgency: rulesView.urgency },
     });
@@ -245,6 +246,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     .returning({ id: inspectorRuns.id });
 
   if (storeCommitmentsFor) await storeCommitments(row.id, input, understanding, identity.status === "matched" && !rulesSaidNotLead ? { leadId, contactId, jobId: state.jobId } : { leadId: null, contactId: null, jobId: null });
+  if (storeCommitmentsFor && identity.status === "matched" && !rulesSaidNotLead) await settleKeptCommitments(input, state.lifecycle, leadId);
   const detail = { inspectionId: row.id, sourceType, sourceId, title: input.title, summary: understanding.summary, engine, recommended: hermes.result?.recommended_action ?? null, confidence: hermes.result?.confidence ?? null };
   if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
   else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
@@ -298,6 +300,23 @@ async function storeCommitments(inspectionId: string, input: InspectorInput, u: 
       sourceId: input.sourceId,
       inspectionId,
     });
+  }
+}
+
+/**
+ * Commitments a later CRM event clearly proves were kept ("book the installation visit" and the job
+ * was done after it) are closed, with the evidence on the lead's activity. Nothing is inferred for
+ * anything else: those stay outstanding until someone marks them.
+ */
+async function settleKeptCommitments(input: InspectorInput, lc: Lifecycle, leadId: string | null) {
+  if (!lc.events.length) return;
+  const fromSource = await db.query.commitments.findMany({ where: and(eq(commitments.sourceType, input.sourceType), eq(commitments.sourceId, input.sourceId), eq(commitments.status, "outstanding")), columns: { id: true, owner: true, action: true, actionKey: true } });
+  const candidates = [...fromSource.map((c) => ({ ...c, at: input.at.toISOString() })), ...lc.outstanding.filter((o) => !fromSource.some((c) => c.id === o.id))];
+  for (const c of candidates) {
+    const by = satisfiedBy(c, lc.events);
+    if (!by) continue;
+    await db.update(commitments).set({ status: "done", completedAt: new Date(), updatedAt: new Date() }).where(and(eq(commitments.id, c.id), eq(commitments.status, "outstanding")));
+    if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "commitment_kept", detail: { commitmentId: c.id, action: c.action, evidence: by.label } });
   }
 }
 

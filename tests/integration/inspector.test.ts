@@ -783,7 +783,7 @@ describe("real-data follow-ups: lifecycle-aware 'no action', nothing offered twi
     expect(out.status).toBe("analysed");
     const ins = (await latestFor(e.id))!;
     expect((ins.validation as { headline: { final: string; changedBy: string | null } }).headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
-    expect(JSON.stringify(ins.validation)).toContain(`Job #${j.number} invoiced`);
+    expect(JSON.stringify(ins.validation)).toContain(`J-${j.number} invoiced`);
     expect((await actionsOf(out.inspectionId)).map((a) => a.type)).not.toContain("NEEDS_REVIEW");
   });
 
@@ -824,6 +824,57 @@ describe("real-data follow-ups: lifecycle-aware 'no action', nothing offered twi
     expect(await db.query.inspectorActions.findFirst({ where: and(eq(S.inspectorActions.inspectionId, out.inspectionId), eq(S.inspectorActions.status, "awaiting_approval")) })).toBeUndefined();
     const open = await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) });
     expect(open).toHaveLength(1);
+  });
+
+  it("Aphichart: commitments the completed, invoiced job proves were kept are closed; 'no action' stands", async () => {
+    const { contactId, leadId } = await customerWithLead("Aphichart");
+    const said = new Date(Date.now() - 40 * 86400_000);
+    const done = new Date(Date.now() - 30 * 86400_000);
+    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV install", contactId, leadId, status: "invoiced", doneAt: done, invoicedAt: done }).returning();
+    made.jobs.push(j.id);
+    script = () => ({
+      intent: "booking_request",
+      recommended_action: "NO_ACTION",
+      confidence: 0.9,
+      reason: `J-${j.number} has been completed and invoiced.`,
+      commitments: [
+        { owner: "get_secure", owner_name: "Chris", action: "book the installation visit", action_key: "visit", due_text: "next week", due_at: null, evidence: "I'll book the installation visit for next week" },
+        { owner: "customer", owner_name: "Aphichart", action: "be available tomorrow", action_key: "confirm", due_text: "tomorrow", due_at: null, evidence: "I'll be available tomorrow" },
+      ],
+    });
+    const e = await emailOn(leadId, "Chris: I'll book the installation visit for next week. Aphichart: I'll be available tomorrow.", `aphichart+${RUN}@example.com`);
+    await db.update(S.emails).set({ receivedAt: said }).where(eq(S.emails.id, e.id));
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const acts = await actionsOf(out.inspectionId);
+    expect(acts.map((a) => a.type)).not.toContain("OUTSTANDING");
+    expect(acts.map((a) => a.type)).not.toContain("NEEDS_REVIEW");
+    const ins = (await latestFor(e.id))!;
+    expect((ins.validation as { headline: { final: string } }).headline.final).toBe("NO_ACTION");
+    expect(JSON.stringify(ins.validation)).toContain(`J-${j.number} completed`);
+    // Both commitments are closed, with the evidence on the lead.
+    const cs = await db.query.commitments.findMany({ where: eq(S.commitments.sourceId, e.id) });
+    expect(cs.map((c) => c.status).sort()).toEqual(["done", "done"]);
+    const kept = await db.query.activityLog.findMany({ where: and(eq(S.activityLog.entityId, leadId), eq(S.activityLog.action, "commitment_kept")) });
+    expect(kept).toHaveLength(2);
+  });
+
+  it("Nympha: the quote cannot be finished only because of pricing → a costing task (once), not a generic review", async () => {
+    const { leadId } = await customerWithLead("Nympha");
+    await db.insert(S.cctvAssessments).values({ leadId, input: {}, packet: { siteVisit: { required: false }, costing: { complete: false, unpriced: ["RES_STANDARD 4-cam: labour hours not set", "RES_STANDARD 4-cam: customer sell allowance not set"] } }, engineVersion: "test", actor: "system" });
+    const [q] = await db.insert(S.quotes).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "CCTV", leadId, status: "ai_prepared", origin: "brain" }).returning();
+    script = () => ({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "NEEDS_REVIEW", confidence: 0.9, reason: `Q-${q.number} cannot be finished: the internal labour and allowance inputs are not set.` });
+    const e = await emailOn(leadId, "Hi, any update on the quote for the cameras?", `nympha+${RUN}@example.com`);
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const t = (await actionsOf(out.inspectionId)).find((a) => a.type === "CREATE_INTERNAL_TASK")!;
+    expect(t).toMatchObject({ status: "done", rule: "pricing_only_blocker" });
+    const title = `Price the quote / complete costing for Q-${q.number}`;
+    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.title, title), eq(S.tasks.status, "open")) })).toHaveLength(1);
+    // Read again: the open task is surfaced, never a second one.
+    const again = (await inspect("email", e.id, { force: true }))!;
+    expect((await actionsOf(again.inspectionId)).find((a) => a.type === "CREATE_INTERNAL_TASK")!.result).toMatchObject({ inHand: `Already open: ${title}.` });
+    expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) })).toHaveLength(1);
   });
 
   it("accepting a proposal after a task to arrange it was added does not create a second task", async () => {
