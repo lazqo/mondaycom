@@ -10,6 +10,14 @@
  * There is no tool that sends, approves, confirms, accepts, discounts or writes a fact into the
  * CRM directly, and the guard (src/lib/guard/actor.ts) refuses those for agents anyway.
  *
+ * Two profiles, each with its own bearer token (src/app/api/mcp/route.ts):
+ *   - "inspector": the Hermes profile that reads customer email. CRM tools, the approved catalogue
+ *     without costs, research through the CRM's broker (it never browses the web itself), and
+ *     candidate Business Brain updates.
+ *   - "research": a separate Hermes profile with web access and no customer email. Supplier tools
+ *     (stored trade prices and stock, live logged-in lookups that record nothing) and candidate
+ *     Business Brain updates. No customer data. Supplier logins stay server-side.
+ *
  * Every call, allowed, refused or failed, is written to agent_audit.
  */
 import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
@@ -26,9 +34,14 @@ import { crmKnown, serviceKey } from "@/lib/inspector/sources";
 import { alreadyInHand, openTaskTitled } from "@/lib/inspector/router";
 import { FACT_KEYS, type FactKey } from "@/lib/inspector/types";
 import { dateInAppTz } from "@/lib/email/pipeline";
+import { compareSuppliers, listSuppliers, searchCatalogue } from "@/lib/brain/suppliers/lookup";
+import { liveSupplierLookup } from "@/lib/brain/suppliers/connector";
+import { CANDIDATE_KINDS, proposeBrainUpdate, requestResearch, RESEARCH_KINDS } from "./research";
 import { findPeople, readBrainOutcome, readCommitments, readCustomer, readEmailThread, readFacts, readInspection, readLead, readOpenTasks, readQuotes, readRecording, readTimeline, readVisitsAndJobs } from "./crm-read";
 
 export const HERMES_ACTOR: Actor = { kind: "agent", agent: "hermes" };
+export const HERMES_RESEARCH_ACTOR: Actor = { kind: "agent", agent: "hermes-research" };
+export type McpProfile = "inspector" | "research";
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
@@ -43,6 +56,8 @@ type Tool = {
   input: z.ZodType;
   run: (args: never) => Promise<unknown>;
   leadOf?: (args: Record<string, unknown>) => { leadId?: string | null; contactId?: string | null };
+  /** Which Hermes profiles may see and call it (default: the inspector only). */
+  profiles?: McpProfile[];
 };
 
 const tool = <S extends z.ZodType>(t: Omit<Tool, "input" | "run"> & { input: S; run: (args: z.infer<S>) => Promise<unknown> }): Tool => t as unknown as Tool;
@@ -245,6 +260,87 @@ export const TOOLS: Tool[] = [
     },
     leadOf: ids,
   }),
+
+  // ---------------- research and the catalogue ----------------
+  tool({
+    name: "crm_search_catalogue",
+    access: "read",
+    capability: "read_catalogue",
+    description: "Get Secure's approved product catalogue: models, specs, knowledge status, alternatives and which suppliers list them. No costs.",
+    input: z.object({ query: z.string().min(2).max(120) }),
+    run: (a) => searchCatalogue(a.query, { withCosts: false }),
+  }),
+  tool({
+    name: "crm_request_research",
+    access: "read",
+    capability: "research",
+    description:
+      "Ask Get Secure's research profile a technical or product question the CRM and the Business Brain cannot answer (manufacturer specs, current models, compatibility, manuals, firmware, supplier availability, standards). Returns sourced findings with trust tiers; anything that would change approved knowledge becomes a candidate update for Chris. Put only the question in, never the customer's message.",
+    input: z.object({ question: z.string().min(5).max(1000), kind: z.enum(RESEARCH_KINDS).default("other"), lead_id: uuid.optional() }),
+    run: async (a) => {
+      const r = await requestResearch({ question: a.question, kind: a.kind, requestedBy: "agent:hermes", leadId: a.lead_id ?? null });
+      return { status: r.status, summary: r.summary, findings: r.findings.map((f) => ({ claim: f.claim, confidence: f.confidence, knowledge: f.knowledge, sources: f.sources.map((s) => ({ url: s.url, title: s.title, tier: s.tierLabel })) })), candidates: r.candidates, error: r.error };
+    },
+    leadOf: ids,
+  }),
+  tool({
+    name: "crm_propose_brain_update",
+    access: "write",
+    capability: "propose_brain_update",
+    profiles: ["inspector", "research"],
+    description:
+      "Propose a change to approved Business Brain knowledge (a new or replacement product, a compatibility, a technical fact, a supplier fact, a workflow lesson) with its sources. It waits for Chris; nothing in the catalogue, prices, labour or rules changes. Prices cannot be proposed here.",
+    input: z.object({
+      kind: z.enum(CANDIDATE_KINDS),
+      title: z.string().min(3).max(200),
+      detail: z.string().max(2000).optional(),
+      payload: z.record(z.string(), z.unknown()).optional(),
+      sources: z.array(z.object({ url: z.string().min(5).max(1000), title: z.string().max(300).optional() })).max(10).default([]),
+      confidence: z.number().min(0).max(1),
+    }),
+    run: (a) => proposeBrainUpdate({ kind: a.kind, title: a.title, detail: a.detail ?? null, payload: a.payload ?? {}, sources: a.sources, confidence: a.confidence, proposedBy: "agent:hermes" }),
+  }),
+  tool({ name: "supplier_list", access: "read", capability: "supplier_lookup", profiles: ["research"], description: "Get Secure's approved suppliers: website, brands, whether a live logged-in lookup is available (never the login itself).", input: z.object({}), run: () => listSuppliers() }),
+  tool({
+    name: "supplier_search_catalogue",
+    access: "read",
+    capability: "supplier_lookup",
+    profiles: ["research"],
+    description: "Search the CRM catalogue with each supplier's stored trade price (and whether Chris approved it), SKU and stock. With supplier_id and live=true, also search that supplier's logged-in catalogue now (records nothing).",
+    input: z.object({ query: z.string().min(2).max(120), supplier_id: uuid.optional(), live: z.boolean().default(false) }),
+    run: async (a) => ({ catalogue: await searchCatalogue(a.query, { withCosts: true }), live: a.live && a.supplier_id ? await liveSupplierLookup(a.supplier_id, { search: a.query }) : null }),
+  }),
+  tool({
+    name: "supplier_get_product",
+    access: "read",
+    capability: "supplier_lookup",
+    profiles: ["research"],
+    description: "A supplier's live logged-in product page by SKU: trade price shown, price basis, stock. Evidence only: it is not recorded as a cost (Chris records and approves prices under Suppliers).",
+    input: z.object({ supplier_id: uuid, sku: z.string().min(1).max(80) }),
+    run: (a) => liveSupplierLookup(a.supplier_id, { sku: a.sku }),
+  }),
+  tool({
+    name: "supplier_compare",
+    access: "read",
+    capability: "supplier_lookup",
+    profiles: ["research"],
+    description: "Every approved supplier's stored trade price, approval state, stock and last check for one catalogue product, side by side.",
+    input: z.object({ product_id: uuid }),
+    run: async (a) => (await compareSuppliers(a.product_id)) ?? { error: "Product not found." },
+  }),
+  tool({
+    name: "supplier_check_stock",
+    access: "read",
+    capability: "supplier_lookup",
+    profiles: ["research"],
+    description: "Stock for one catalogue product: what each supplier showed at its last check, and, with supplier_id and sku, that supplier's logged-in page now.",
+    input: z.object({ product_id: uuid, supplier_id: uuid.optional(), sku: z.string().max(80).optional() }),
+    run: async (a) => {
+      const stored = await compareSuppliers(a.product_id);
+      const live = a.supplier_id && a.sku ? await liveSupplierLookup(a.supplier_id, { sku: a.sku }) : null;
+      return { stored: stored?.offers.map((o) => ({ supplier: o.supplier, sku: o.sku, stock: o.stock, lastCheckedAt: o.lastCheckedAt })) ?? [], live: live && live.ok ? { supplier: live.supplier, stock: live.page?.stock ?? null } : live };
+    },
+  }),
 ];
 
 /** A fact from Hermes: proposed (or a conflict) for Chris; never written into the CRM directly. */
@@ -268,7 +364,9 @@ type RpcResponse = { jsonrpc: "2.0"; id: string | number | null; result?: unknow
 
 const redact = (args: Record<string, unknown>) => Object.fromEntries(Object.entries(args).map(([k, v]) => [k, typeof v === "string" && v.length > 300 ? `${v.slice(0, 300)}… (${v.length} chars)` : v]));
 
-async function callTool(name: string, args: Record<string, unknown>, actor: Actor): Promise<{ content: { type: "text"; text: string }[]; structuredContent?: unknown; isError: boolean }> {
+const inProfile = (t: Tool, profile: McpProfile) => (t.profiles ?? ["inspector"]).includes(profile);
+
+async function callTool(name: string, args: Record<string, unknown>, actor: Actor, profile: McpProfile): Promise<{ content: { type: "text"; text: string }[]; structuredContent?: unknown; isError: boolean }> {
   const started = Date.now();
   const t = TOOLS.find((x) => x.name === name);
   const audit = async (status: "ok" | "denied" | "error", summary: string | null, error: string | null) => {
@@ -281,8 +379,8 @@ async function callTool(name: string, args: Record<string, unknown>, actor: Acto
       console.error(`[mcp] audit failed for ${name}: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
-  if (!t) {
-    await audit("denied", null, "unknown tool");
+  if (!t || !inProfile(t, profile)) {
+    await audit("denied", null, t ? `not available to the ${profile} profile` : "unknown tool");
     return { content: [{ type: "text", text: `Unknown tool: ${name}` }], isError: true };
   }
   try {
@@ -305,7 +403,7 @@ async function callTool(name: string, args: Record<string, unknown>, actor: Acto
   }
 }
 
-async function handleOne(req: RpcRequest, actor: Actor): Promise<RpcResponse | null> {
+async function handleOne(req: RpcRequest, actor: Actor, profile: McpProfile): Promise<RpcResponse | null> {
   const id = req.id ?? null;
   const isNotification = req.id === undefined;
   const ok = (result: unknown): RpcResponse => ({ jsonrpc: "2.0", id, result });
@@ -329,7 +427,7 @@ async function handleOne(req: RpcRequest, actor: Actor): Promise<RpcResponse | n
       return ok({});
     case "tools/list":
       return ok({
-        tools: TOOLS.map((t) => ({
+        tools: TOOLS.filter((t) => inProfile(t, profile)).map((t) => ({
           name: t.name,
           description: `${t.description}${t.access === "write" ? " (Audited.)" : ""}`,
           inputSchema: z.toJSONSchema(t.input, { io: "input" }),
@@ -339,7 +437,7 @@ async function handleOne(req: RpcRequest, actor: Actor): Promise<RpcResponse | n
     case "tools/call": {
       const name = String(req.params?.name ?? "");
       const args = (req.params?.arguments as Record<string, unknown> | undefined) ?? {};
-      return ok(await callTool(name, args, actor));
+      return ok(await callTool(name, args, actor, profile));
     }
     default:
       return isNotification ? null : err(-32601, `Method not found: ${req.method}`);
@@ -347,11 +445,11 @@ async function handleOne(req: RpcRequest, actor: Actor): Promise<RpcResponse | n
 }
 
 /** Handle one JSON-RPC message or a batch. Returns null when there is nothing to answer (notifications). */
-export async function handleMcp(body: unknown, actor: Actor = HERMES_ACTOR): Promise<RpcResponse | RpcResponse[] | null> {
+export async function handleMcp(body: unknown, actor: Actor = HERMES_ACTOR, profile: McpProfile = "inspector"): Promise<RpcResponse | RpcResponse[] | null> {
   if (Array.isArray(body)) {
-    const out = (await Promise.all(body.map((b) => handleOne(b as RpcRequest, actor)))).filter((r): r is RpcResponse => r !== null);
+    const out = (await Promise.all(body.map((b) => handleOne(b as RpcRequest, actor, profile)))).filter((r): r is RpcResponse => r !== null);
     return out.length ? out : null;
   }
   if (!body || typeof body !== "object") return { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } };
-  return handleOne(body as RpcRequest, actor);
+  return handleOne(body as RpcRequest, actor, profile);
 }

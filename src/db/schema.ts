@@ -1270,6 +1270,63 @@ export const agentAudit = pgTable(
   (t) => [index("agent_audit_created_idx").on(t.createdAt), index("agent_audit_lead_idx").on(t.leadId)],
 );
 
+/**
+ * What Hermes found out from outside the CRM (manufacturer documentation, supplier catalogues,
+ * standards), with every source, its trust tier and date. Evidence only: nothing here is approved
+ * Business Brain knowledge, and nothing here changes a product, a rule or a price.
+ */
+export const researchFindings = pgTable(
+  "research_findings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    question: text("question").notNull(),
+    /** product | compatibility | manual | firmware | supplier | availability | standard | other */
+    kind: text("kind").notNull().default("other"),
+    /** "agent:hermes" or "user:<id>". */
+    requestedBy: text("requested_by").notNull(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    inspectionId: uuid("inspection_id").references(() => inspections.id, { onDelete: "set null" }),
+    /** ok | failed | not_configured */
+    status: text("status").notNull(),
+    summary: text("summary"),
+    /** [{ claim, confidence, knowledge: "approved" | "new", sources: [{ url, title, publisher, tier, publishedAt, retrievedAt }] }] */
+    findings: jsonb("findings").$type<Record<string, unknown>[]>().notNull().default([]),
+    model: text("model"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("research_findings_created_idx").on(t.createdAt)],
+);
+
+/**
+ * A proposed change to approved Business Brain knowledge (a new product, a compatibility, a
+ * technical fact, a supplier fact, a workflow lesson) found by Hermes, with its sources. It waits
+ * for Chris: accepting records his decision; it is never applied to the catalogue, prices, labour
+ * or rules automatically.
+ */
+export const brainCandidates = pgTable(
+  "brain_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** product | compatibility | technical_fact | supplier | workflow | other */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    detail: text("detail"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    sources: jsonb("sources").$type<Record<string, unknown>[]>().notNull().default([]),
+    confidence: numeric("confidence", { precision: 4, scale: 3 }),
+    /** proposed | accepted | rejected */
+    status: text("status").notNull().default("proposed"),
+    proposedBy: text("proposed_by").notNull(),
+    findingId: uuid("finding_id").references(() => researchFindings.id, { onDelete: "set null" }),
+    decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("brain_candidates_status_idx").on(t.status, t.createdAt)],
+);
+
 /** Emails and conversations waiting to be inspected, with retries when Hermes is unavailable. */
 export const inspectorQueue = pgTable(
   "inspector_queue",

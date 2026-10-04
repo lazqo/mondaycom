@@ -387,3 +387,60 @@ export async function listedProductIds(supplierId: string): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
+
+export type LiveLookup =
+  | { ok: true; supplier: string; entries: { sku: string; name: string; url: string; summary: string | null; stock: string | null }[]; page?: { sku: string | null; title: string | null; stock: string | null; priceText: string | null; amount: number | null; basis: PriceBasis | null; wasAmount: number | null } | null; note: string }
+  | { ok: false; supplier: string; stopped: boolean; reason: string };
+
+/**
+ * A live, read-only look at a supplier's logged-in catalogue (search, or one product page with its
+ * trade price and stock) for Hermes's research. The stored login is used here, server-side only;
+ * nothing returned contains it. Nothing is recorded: no price, no listing, no cost. A CAPTCHA, MFA
+ * or block stops it and is reported; a rejected login is not retried.
+ */
+export async function liveSupplierLookup(supplierId: string, q: { search?: string; sku?: string }): Promise<LiveLookup> {
+  const supplier = await db.query.suppliers.findFirst({ where: eq(suppliers.id, supplierId) });
+  if (!supplier) return { ok: false, supplier: "unknown", stopped: false, reason: "Supplier not found." };
+  const conn = await connectorFor(supplierId);
+  if (!conn) return { ok: false, supplier: supplier.name, stopped: false, reason: `${supplier.name} has no logged-in connector: only the CRM's stored catalogue and prices are available.` };
+  const why = await loginBlockedReason(supplierId, conn);
+  if (why) return { ok: false, supplier: supplier.name, stopped: true, reason: why };
+  let secrets: string[] = [];
+  let session: WebSession | null = null;
+  try {
+    const credential = await getSupplierCredential(supplierId, SYSTEM);
+    if (!credential) return { ok: false, supplier: supplier.name, stopped: false, reason: "No trade login is stored for this supplier." };
+    secrets = [credential.username ?? "", credential.secret];
+    session = new WebSession(baseUrlFor(conn.connector), { delayMs: Number(process.env.SUPPLIER_SYNC_DELAY_MS ?? 800) });
+    try {
+      await login(session, credential);
+    } catch (e) {
+      const err = e instanceof ConnectorError ? e : new ConnectorError("error", "The login could not be completed.");
+      const reason = redact(err.message, [...secrets, ...session.secrets()]);
+      await setStatus(supplierId, { status: BLOCK_CODES.has(err.code) ? "blocked" : AUTH_CODES.has(err.code) ? "auth_failed" : "error", statusDetail: reason, lastLoginFailedAt: new Date(), lastLoginFailure: reason, lastLoginFailureCode: err.code });
+      return { ok: false, supplier: supplier.name, stopped: BLOCK_CODES.has(err.code), reason };
+    }
+    const entries = await findInCatalogue(session, q.sku ? { skus: [q.sku] } : { search: q.search ?? "" });
+    const list = entries.slice(0, 15).map((e) => ({ sku: e.sku, name: e.name, url: e.url, summary: e.summary ?? null, stock: e.stock ?? null }));
+    if (!q.sku) return { ok: true, supplier: supplier.name, entries: list, note: "Live search of the logged-in catalogue. Nothing was recorded." };
+    const entry = entries.find((e) => e.sku.toLowerCase() === q.sku!.toLowerCase());
+    if (!entry) return { ok: true, supplier: supplier.name, entries: list, page: null, note: `No listing with SKU ${q.sku}.` };
+    const res = await session.request(new URL(entry.url).pathname + new URL(entry.url).search);
+    const blocked = blockOf(res);
+    if (blocked) throw blocked;
+    const page = parseProductPage(res.html);
+    const basis = resolveBasis(page, null);
+    return {
+      ok: true,
+      supplier: supplier.name,
+      entries: list,
+      page: { sku: page.sku, title: page.title, stock: page.stock, priceText: page.priceText, amount: page.amount, basis: basis.basis, wasAmount: page.wasAmount },
+      note: "Live logged-in trade price, as evidence only: it is not recorded as a cost. To record it, refresh the product under Suppliers (changes wait for Chris's approval).",
+    };
+  } catch (e) {
+    const err = e instanceof ConnectorError ? e : null;
+    const reason = redact(err ? err.message : `The lookup failed${e instanceof Error ? `: ${e.message}` : ""}.`, [...secrets, ...(session?.secrets() ?? [])]);
+    if (err && BLOCK_CODES.has(err.code)) await setStatus(supplierId, { status: "blocked", statusDetail: reason });
+    return { ok: false, supplier: supplier.name, stopped: !!err && BLOCK_CODES.has(err.code), reason };
+  }
+}

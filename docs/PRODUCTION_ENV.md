@@ -39,6 +39,10 @@ Production runs the built-in offline classifier. There is no Anthropic account o
 | `HERMES_MODEL` | `hermes-agent` | Optional: the model/profile name Hermes exposes. |
 | `HERMES_TIMEOUT_MS` | `120000` | Optional: how long to wait for Hermes before falling back to review. |
 | `HERMES_MIN_CONFIDENCE` | `0.6` | Optional: below this, Hermes's recommendation waits for Chris. |
+| `HERMES_RESEARCH_API_URL` | `http://host.docker.internal:8642/p/research` | Optional: Hermes's separate **research** profile (web access and the CRM's supplier tools; never customer email). Unset = research is off (questions are recorded, not answered). |
+| `HERMES_RESEARCH_API_KEY` | `openssl rand -hex 32` | The research profile's `API_SERVER_KEY` (in `~/.hermes/profiles/research/.env`). |
+| `HERMES_RESEARCH_MCP_TOKEN` | `openssl rand -hex 32` | The research profile's bearer token for `/api/mcp`: it sees only the supplier and candidate-update tools. At least 24 characters, different from `HERMES_MCP_TOKEN`. |
+| `HERMES_RESEARCH_MODEL` / `HERMES_RESEARCH_TIMEOUT_MS` | `hermes-agent` / `180000` | Optional. |
 | `JEV_SHADOW` | `off` | Leave off. `on` (together with `ANTHROPIC_API_KEY`) runs Jev beside the Inspector's rules in shadow mode: it classifies only, never drives an action, and sends the email or transcript text to Anthropic. See section 17 of `docs/DEPLOYMENT_HANDOFF.md`. |
 | `JEV_MODEL` | `claude-opus-5-5` | Only used when Jev is on. |
 

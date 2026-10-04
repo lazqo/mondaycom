@@ -66,6 +66,11 @@ services:
       HERMES_MIN_CONFIDENCE: ${HERMES_MIN_CONFIDENCE:-}
       # Lets Hermes use the CRM's MCP tools at /api/mcp (unset = the endpoint is off).
       HERMES_MCP_TOKEN: ${HERMES_MCP_TOKEN:-}
+      HERMES_RESEARCH_API_URL: ${HERMES_RESEARCH_API_URL:-}
+      HERMES_RESEARCH_API_KEY: ${HERMES_RESEARCH_API_KEY:-}
+      HERMES_RESEARCH_MODEL: ${HERMES_RESEARCH_MODEL:-}
+      HERMES_RESEARCH_TIMEOUT_MS: ${HERMES_RESEARCH_TIMEOUT_MS:-}
+      HERMES_RESEARCH_MCP_TOKEN: ${HERMES_RESEARCH_MCP_TOKEN:-}
       # Jev shadow classifier (off unless JEV_SHADOW=on and an Anthropic key is set).
       JEV_SHADOW: ${JEV_SHADOW:-off}
       JEV_MODEL: ${JEV_MODEL:-}

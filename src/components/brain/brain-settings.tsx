@@ -1090,6 +1090,9 @@ export function BrainSettings({
             {t.label}
           </Link>
         ))}
+        <Link href="/settings/brain/research" className="-mb-px border-b-2 border-transparent px-3 py-2 text-gray-600 hover:text-gray-900" data-testid="brain-research-tab">
+          Research
+        </Link>
       </div>
 
       {tab === "policies" ? (

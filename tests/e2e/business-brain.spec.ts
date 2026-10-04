@@ -275,4 +275,17 @@ test.describe("CCTV Business Brain", () => {
     await expect(page.getByTestId("packet-upgrade")).toContainText("IP upgrade: existing Cat6 runs and camera positions reused");
     await expect(page.getByTestId("packet-labour")).toContainText("RES_CCTV_UPGRADE_IP_4");
   });
+  test("Research: Chris can ask Hermes and review candidate Business Brain updates (nothing applied automatically)", async ({ page }) => {
+    await login(page);
+    await page.goto("/settings/brain");
+    await page.getByTestId("brain-research-tab").click();
+    await expect(page.getByRole("heading", { name: "Research", exact: true })).toBeVisible();
+    await expect(page.getByTestId("brain-candidates")).toContainText("Candidate Business Brain updates");
+    await expect(page.getByText("Trade prices are never taken from research.")).toBeVisible();
+    // With no research profile connected, a question is recorded and answered "not connected".
+    await page.getByTestId("research-question").fill("Is the VIGI C540 still a current model?");
+    await page.getByRole("button", { name: "Ask Hermes" }).click();
+    await expect(page.getByTestId("research-findings")).toContainText("Is the VIGI C540 still a current model?");
+    await expect(page.getByTestId("research-findings")).toContainText("not configured");
+  });
 });

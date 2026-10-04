@@ -338,3 +338,43 @@ describe("IT Plus connector", () => {
     });
   }
 });
+
+describe("Hermes's research: live, read-only supplier lookups through the CRM", () => {
+  it("search and a product page: trade price and stock as evidence, nothing recorded, no login exposed", async () => {
+    state.mode = "normal";
+    await storeLogin(USER, PASS);
+    const { liveSupplierLookup } = await import("@/lib/brain/suppliers/connector");
+    const offersBefore = await db.select().from(supplierProducts).where(eq(supplierProducts.supplierId, itPlusId));
+    const historyBefore = (await db.select().from(productPriceHistory)).length;
+
+    const search = await liveSupplierLookup(itPlusId, { search: "VJB-240" });
+    expect(search.ok).toBe(true);
+    if (search.ok) expect(search.entries.map((e) => e.sku)).toContain("VJB-240");
+
+    const page = await liveSupplierLookup(itPlusId, { sku: "VJB-240" });
+    expect(page.ok).toBe(true);
+    if (page.ok) {
+      expect(page.page).toMatchObject({ sku: "VJB-240", amount: trade("VJB-240").trade });
+      expect(page.note).toMatch(/not recorded/);
+    }
+    // Nothing written: no listing, no cost, no price history.
+    expect(await db.select().from(supplierProducts).where(eq(supplierProducts.supplierId, itPlusId))).toEqual(offersBefore);
+    expect((await db.select().from(productPriceHistory)).length).toBe(historyBefore);
+    await expectNoSecrets([search, page]);
+  });
+
+  it("through MCP: only the research profile has supplier tools; a CAPTCHA stops the lookup and is reported", async () => {
+    const { handleMcp, HERMES_ACTOR, HERMES_RESEARCH_ACTOR } = await import("@/lib/hermes/mcp");
+    const call = async (name: string, args: Record<string, unknown>, profile: "inspector" | "research") =>
+      (await handleMcp({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, profile === "research" ? HERMES_RESEARCH_ACTOR : HERMES_ACTOR, profile)) as { result: { isError: boolean; content: { text: string }[] } };
+    expect((await call("supplier_get_product", { supplier_id: itPlusId, sku: "VJB-240" }, "inspector")).result).toMatchObject({ isError: true });
+    const ok = (await call("supplier_get_product", { supplier_id: itPlusId, sku: "VJB-240" }, "research")).result;
+    expect(ok.isError).toBe(false);
+    expect(ok.content[0].text).toContain("VJB-240");
+    state.mode = "captcha";
+    const stopped = (await call("supplier_get_product", { supplier_id: itPlusId, sku: "VJB-240" }, "research")).result;
+    state.mode = "normal";
+    expect(JSON.parse(stopped.content[0].text)).toMatchObject({ ok: false, stopped: true });
+    await expectNoSecrets([ok, stopped]);
+  });
+});

@@ -141,6 +141,13 @@
       "when": 1791092091047,
       "tag": "0019_hermes_inspector",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791155350260,
+      "tag": "0020_research_candidates",
+      "breakpoints": true
     }
   ]
 }

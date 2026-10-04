@@ -1044,6 +1044,58 @@ Until Hermes is connected, every new enquiry therefore waits in the Inspector fo
 
   There is no tool that sends, approves, confirms, accepts, discounts or writes a fact directly.
   Supplier credentials, costs and margins are not reachable.
+- **Research and the catalogue:**
+  - `crm_search_catalogue`: the approved catalogue, without costs.
+  - `crm_request_research`: a question passed by the CRM to the research profile (below).
+  - `crm_propose_brain_update`: a candidate change to approved knowledge, for Chris.
+
+**Research and supplier tools.** Hermes can research what the CRM and the Business Brain do not
+know: manufacturer specifications, current models, compatibility, manuals, firmware changes,
+supplier catalogues, stock, trade prices from approved suppliers, alternatives, and standards.
+
+- **Separate profiles.** Inbound email is untrusted and can carry instructions aimed at an agent, so
+  the Inspector profile never browses the web.
+  - It asks the CRM (`crm_request_research`, with the question only, never the customer's
+    message).
+  - The CRM asks a separate **research** profile: its own API key, web access, the CRM's supplier
+    tools, no terminal or files, and no customer data.
+  - The answer comes back as structured evidence.
+- **Trust tiers.** The CRM grades every source:
+  1. manufacturer documentation;
+  2. approved suppliers and distributors (any supplier's website on the Suppliers list);
+  3. standards and regulatory sources;
+  4. trusted technical sources;
+  5. the general web and forums, which are supporting evidence only (confidence capped at 40%).
+
+  A claim with no source is dropped. Each finding keeps its sources, their dates and its confidence.
+  It counts as "approved knowledge" only when it rests on the CRM's own catalogue; everything else is
+  "new information".
+- **Candidate Business Brain updates.** If research finds something that should change approved
+  knowledge (a new or replacement product, a compatibility, a technical fact, a supplier fact, or a
+  workflow lesson), it is proposed under **Settings → Business Brain → Research**.
+  - Chris accepts or rejects it, with a note.
+  - Accepting records the decision only. The catalogue, prices, labour and rules change only when
+    Chris changes them in the Business Brain.
+  - Prices can never be proposed this way.
+- **Supplier tools** (research profile only):
+  - `supplier_list`: suppliers, and whether a live logged-in lookup is available. It never shows
+    the login.
+  - `supplier_search_catalogue`: stored trade prices, whether Chris approved them, SKUs and stock.
+    With `live`, it also searches the supplier's logged-in catalogue now.
+  - `supplier_get_product`: one live logged-in product page with its trade price and stock.
+  - `supplier_compare`: every supplier's stored offer for a product.
+  - `supplier_check_stock`: stock for a product.
+
+  Live lookups reuse the IT Plus connector:
+  - The login stays encrypted and server-side.
+  - A live price is evidence only and is **never recorded as a cost**. To record a price, refresh it
+    under Suppliers; changes wait for Chris's approval.
+  - A CAPTCHA, MFA or block stops the lookup and is reported, never bypassed. A rejected login is
+    not retried.
+
+  Clear Digital, Atlas, IOT, Vesta and SWL have no logged-in connector yet: the tools report their
+  stored catalogue and prices only.
+- Every research request and finding is stored. Every tool call is in `agent_audit`.
 
 **Setting it up** (on the VPS, after deploying):
 1. In Hermes Agent, turn on its API server (`~/.hermes/.env`):
@@ -1125,12 +1177,49 @@ What the CRM guarantees on its side, whatever Hermes is configured with:
 What the CRM cannot see is which toolsets Hermes itself has loaded. The restriction is enforced in
 Hermes's profile, so check it there.
 
+**The research profile (optional).** This is a second profile for research only. It never reads
+customer email.
+
+```
+hermes profile create research
+```
+
+In `~/.hermes/profiles/research/config.yaml`, enable web access and the CRM's research tools, and
+nothing else (no terminal, files, code execution or memory):
+
+```yaml
+toolsets:
+  - web
+  - mcp-getsecure_research
+mcp_servers:
+  getsecure_research:
+    url: "https://hermes.aucklandsecuritysystems.co.nz/api/mcp"
+    headers:
+      Authorization: "Bearer <HERMES_RESEARCH_MCP_TOKEN>"
+    timeout: 120
+```
+
+Then:
+1. Give it its own `API_SERVER_KEY` in `~/.hermes/profiles/research/.env`.
+2. Add these to `/opt/getsecure/.env`:
+   - `HERMES_RESEARCH_API_URL=http://host.docker.internal:8642/p/research`
+   - `HERMES_RESEARCH_API_KEY=<the research profile's key>`
+   - `HERMES_RESEARCH_MCP_TOKEN=<openssl rand -hex 32>` (different from `HERMES_MCP_TOKEN`)
+3. Run `docker compose -f docker-compose.prod.yml up -d`.
+4. Check with `hermes tools` that the research profile has `web` and `mcp-getsecure_research`
+   only.
+
+With its token, `/api/mcp` shows that profile only the supplier and candidate-update tools: no
+customer data, and no actions on leads. Without the research profile, research requests are
+recorded and answered "not connected", and nothing else changes.
+
 Which model Hermes runs on is set in Hermes Agent (its provider configuration), not in the CRM.
 The CRM records the model name Hermes reports with every run.
 
 **Deploying:**
 - Migration `0019_hermes_inspector` adds the run, feedback, audit and queue tables, and new columns
-  on inspections. `./deploy/update.sh` runs it.
+  on inspections. Migration `0020_research_candidates` adds the research findings and candidate
+  Business Brain updates. `./deploy/update.sh` runs them.
 - Earlier inspections are kept as they were, marked "Rules (before Hermes)".
 - Nothing is re-read automatically.
 

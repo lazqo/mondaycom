@@ -49,6 +49,10 @@ export const AGENT_CAPABILITIES = [
   "create_internal_task",
   "propose_fact_update",
   "request_review",
+  // Research (Hermes's research profile and the CRM's research broker): read and propose only.
+  "research",
+  "supplier_lookup",
+  "propose_brain_update",
 ] as const;
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
 

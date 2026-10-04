@@ -3,11 +3,12 @@
  * propose only, through the guard), that everything is audited, and the endpoint's own lock.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 const { db } = await import("@/db");
 const S = await import("@/db/schema");
-const { handleMcp, HERMES_ACTOR, TOOLS } = await import("@/lib/hermes/mcp");
+const { handleMcp, HERMES_ACTOR, HERMES_RESEARCH_ACTOR, TOOLS } = await import("@/lib/hermes/mcp");
+const { setResearchRuntime, requestResearch, gradeFindings, decideCandidate } = await import("@/lib/hermes/research");
 const { sendDraft, approveDraft } = await import("@/lib/drafts/workflow");
 const { GuardrailError } = await import("@/lib/guard/actor");
 
@@ -142,5 +143,102 @@ describe("the endpoint's lock", () => {
       if (before === undefined) delete process.env.HERMES_MCP_TOKEN;
       else process.env.HERMES_MCP_TOKEN = before;
     }
+  });
+});
+
+describe("research and candidate Business Brain updates (stage 2)", () => {
+  const asResearch = async (name: string, args: Record<string, unknown>) =>
+    ((await handleMcp({ jsonrpc: "2.0", id: ++rpcId, method: "tools/call", params: { name, arguments: args } }, HERMES_RESEARCH_ACTOR, "research")) as { result: { isError: boolean; content: { text: string }[] } }).result;
+  let researchReply = "";
+  afterAll(async () => {
+    setResearchRuntime(undefined);
+    await db.delete(S.brainCandidates).where(sql`${S.brainCandidates.title} like ${`%${RUN}%`}`);
+    await db.delete(S.researchFindings).where(sql`${S.researchFindings.question} like ${`%${RUN}%`}`);
+  });
+
+  it("each Hermes profile sees only its own tools", async () => {
+    const list = async (profile: "inspector" | "research") => ((await handleMcp({ jsonrpc: "2.0", id: ++rpcId, method: "tools/list" }, profile === "research" ? HERMES_RESEARCH_ACTOR : HERMES_ACTOR, profile)) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name);
+    const inspector = await list("inspector");
+    const research = await list("research");
+    expect(inspector).toEqual(expect.arrayContaining(["crm_search_catalogue", "crm_request_research", "crm_propose_brain_update"]));
+    expect(inspector.some((n) => n.startsWith("supplier_"))).toBe(false);
+    expect(research).toEqual(expect.arrayContaining(["supplier_list", "supplier_search_catalogue", "supplier_get_product", "supplier_compare", "supplier_check_stock", "crm_propose_brain_update"]));
+    // The research profile reaches no customer data and cannot act on the CRM.
+    for (const n of ["crm_get_lead", "crm_get_timeline", "crm_add_internal_note", "crm_prepare_quote", "crm_find_people"]) expect(research).not.toContain(n);
+    expect(await asResearch("crm_get_lead", { lead_id: leadId })).toMatchObject({ isError: true });
+  });
+
+  it("the Inspector's catalogue has no costs; the research profile's shows stored trade prices with their approval state; no login anywhere", async () => {
+    const inspectorView = await call("crm_search_catalogue", { query: "VIGI" });
+    expect(inspectorView.isError).toBe(false);
+    expect(inspectorView.content[0].text).not.toMatch(/tradeCost|costExGst|pendingCost/);
+    const researchView = await asResearch("supplier_search_catalogue", { query: "VIGI" });
+    expect(researchView.isError).toBe(false);
+    if (/"suppliers":\[\{/.test(researchView.content[0].text)) expect(researchView.content[0].text).toContain("approvedByChris");
+    const suppliersList = await asResearch("supplier_list", {});
+    expect(suppliersList.content[0].text).not.toMatch(/secret|password|secretEncrypted|username/i);
+  });
+
+  it("research is brokered to the research profile: sources graded by tier, findings stored, proposed updates become candidates", async () => {
+    setResearchRuntime({
+      name: "test-research",
+      model: "stand-in-research",
+      complete: async (messages) => {
+        // The research profile is given the question only, never a customer's message.
+        expect(messages[1].content).toContain(`C540 ${RUN}`);
+        return { text: researchReply, model: "stand-in-research", durationMs: 2 };
+      },
+    });
+    researchReply = JSON.stringify({
+      summary: "The VIGI C540 is current; firmware 1.2 adds smart detection.",
+      findings: [
+        { claim: `VIGI C540 ${RUN} supports 4MP and smart detection`, confidence: 0.9, knowledge: "new", sources: [{ url: "https://www.tp-link.com/nz/business-networking/vigi-network-camera/vigi-c540/", title: "VIGI C540 datasheet", publisher: "TP-Link" }], proposed_update: { kind: "technical_fact", title: `VIGI C540 smart detection ${RUN}`, detail: "Firmware 1.2 adds smart detection.", payload: { model: "VIGI C540" } } },
+        { claim: "Some forum says it overheats", confidence: 0.8, knowledge: "approved", sources: [{ url: "https://forum.example.org/t/1", title: "Forum thread" }] },
+        { claim: "No source at all", confidence: 0.9, knowledge: "new", sources: [] },
+      ],
+    });
+    const r = await call("crm_request_research", { question: `Is the VIGI C540 ${RUN} current and does it do smart detection?`, kind: "product" });
+    expect(r.isError).toBe(false);
+    const out = JSON.parse(r.content[0].text);
+    expect(out.status).toBe("ok");
+    expect(out.findings).toHaveLength(2); // the unsourced claim is dropped
+    expect(out.findings[0].sources[0].tier).toBe("Manufacturer documentation");
+    // General web: capped and never "approved knowledge".
+    expect(out.findings[1]).toMatchObject({ confidence: 0.4, knowledge: "new" });
+    expect(out.candidates).toHaveLength(1);
+    const cand = (await db.query.brainCandidates.findFirst({ where: eq(S.brainCandidates.id, out.candidates[0].id) }))!;
+    expect(cand).toMatchObject({ status: "proposed", kind: "technical_fact" });
+    expect(await db.query.researchFindings.findFirst({ where: and(eq(S.researchFindings.requestedBy, "agent:hermes"), sql`${S.researchFindings.question} like ${`%${RUN}%`}`) })).toBeTruthy();
+
+    // Only Chris decides; accepting changes nothing in the catalogue.
+    const productsBefore = (await db.select({ id: S.products.id }).from(S.products)).length;
+    await expect(decideCandidate(cand.id, "accepted", null, HERMES_ACTOR)).rejects.toBeInstanceOf(GuardrailError);
+    const [chris] = await db.insert(S.users).values({ email: `chris-${RUN}@test.local`, name: "Chris", passwordHash: "x", role: "admin", canApprove: true }).returning();
+    try {
+      await decideCandidate(cand.id, "accepted", "Add to the catalogue next week.", { kind: "human", userId: chris.id, name: "Chris", canApprove: true });
+      expect((await db.query.brainCandidates.findFirst({ where: eq(S.brainCandidates.id, cand.id) }))!).toMatchObject({ status: "accepted", decidedById: chris.id });
+      expect((await db.select({ id: S.products.id }).from(S.products)).length).toBe(productsBefore);
+    } finally {
+      await db.update(S.brainCandidates).set({ decidedById: null }).where(eq(S.brainCandidates.id, cand.id));
+      await db.delete(S.users).where(eq(S.users.id, chris.id));
+    }
+  });
+
+  it("not connected or unusable: recorded, nothing invented", async () => {
+    setResearchRuntime(null);
+    expect(await requestResearch({ question: `Anything ${RUN}`, requestedBy: "agent:hermes" })).toMatchObject({ status: "not_configured", findings: [] });
+    setResearchRuntime({ name: "x", model: "x", complete: async () => ({ text: "I could not find much, sorry.", model: "x", durationMs: 1 }) });
+    expect(await requestResearch({ question: `Unusable ${RUN}`, requestedBy: "agent:hermes" })).toMatchObject({ status: "failed", findings: [] });
+  });
+
+  it("a candidate proposed directly needs sources (except a workflow lesson); prices cannot be proposed", async () => {
+    const noSource = await call("crm_propose_brain_update", { kind: "product", title: `New camera ${RUN}`, confidence: 0.8 });
+    expect(noSource.isError).toBe(true);
+    const ok = await asResearch("crm_propose_brain_update", { kind: "compatibility", title: `S455 works with NVR1004H ${RUN}`, sources: [{ url: "https://www.tp-link.com/nz/support/compat" }], confidence: 0.85 });
+    expect(ok.isError).toBe(false);
+    const lesson = await call("crm_propose_brain_update", { kind: "workflow", title: `Tenants reporting faults belong to the landlord's job ${RUN}`, confidence: 0.7 });
+    expect(lesson.isError).toBe(false);
+    expect((await call("crm_propose_brain_update", { kind: "price", title: `Cheaper price ${RUN}`, confidence: 0.9 })).isError).toBe(true);
+    expect(gradeFindings({ summary: "", findings: [{ claim: "x", confidence: 0.9, knowledge: "approved", sources: [{ url: "crm:product:abc" }] }] }, { supplierHosts: [], manufacturerWords: [] })[0]).toMatchObject({ knowledge: "approved", bestTier: 0 });
   });
 });
