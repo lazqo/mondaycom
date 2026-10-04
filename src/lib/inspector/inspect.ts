@@ -205,7 +205,8 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       direction: input.direction,
       sourceAt: input.at,
       version: INSPECTOR_VERSION,
-      status,
+      // A review is only shown once its actions (the decision Chris makes) are stored: see below.
+      status: status === "needs_review" ? "routing" : status,
       engine,
       reviewKind,
       leadId,
@@ -251,14 +252,20 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
   if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
   else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
 
-  const actions = await routeActions(planned, {
-    inspectionId: row.id,
-    input,
-    leadId,
-    contactId,
-    jobId: state.jobId,
-    applyFacts: async () => storeFacts(diffs, { leadId, contactId, jobId: state.jobId }, input, row.id),
-  });
+  let actions: RoutedAction[];
+  try {
+    actions = await routeActions(planned, {
+      inspectionId: row.id,
+      input,
+      leadId,
+      contactId,
+      jobId: state.jobId,
+      applyFacts: async () => storeFacts(diffs, { leadId, contactId, jobId: state.jobId }, input, row.id),
+    });
+  } finally {
+    // Now the review (with its suggestion and buttons) can appear; even if routing failed, it is never lost.
+    if (status === "needs_review") await db.update(inspections).set({ status: "needs_review" }).where(and(eq(inspections.id, row.id), eq(inspections.status, "routing")));
+  }
   const brain = actions.filter((a) => a.type === "RUN_BUSINESS_BRAIN" || a.type === "PREPARE_QUOTE" || (a.type === "PROPOSE_SITE_VISIT" && a.rule === "business_brain_site_visit"));
   await db
     .update(inspectorRuns)
