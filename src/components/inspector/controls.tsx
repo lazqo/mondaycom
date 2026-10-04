@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { acceptInspectorAction, confirmIdentityAction, dismissInspectorAction, reinspectAction, resolveFactAction, resolveReviewAction, setCommitmentStatusAction } from "@/actions/inspector";
+import { acceptInspectorAction, acceptProposedLeadAction, confirmIdentityAction, dismissInspectorAction, reinspectAction, resolveFactAction, resolveReviewAction, setCommitmentStatusAction } from "@/actions/inspector";
 import { searchLinkTargets } from "@/actions/inbox";
 import { Button, Input } from "@/components/ui";
 import type { ActionResult } from "@/lib/action-result";
@@ -178,6 +178,25 @@ export function HermesReviewControls({ inspectionId, reviewActionId, canAccept, 
       </Button>
       <Button size="sm" variant="ghost" disabled={pending} data-testid={`mark-reviewed-${inspectionId}`} onClick={() => act(() => resolveReviewAction(inspectionId, ""))}>
         Mark reviewed
+      </Button>
+      <ErrorText err={err} />
+    </div>
+  );
+}
+
+/** An email the rules filed as "not a lead" that Hermes reads as an enquiry: Chris decides. */
+export function ProposedLeadControls({ inspectionId, sourceId }: { inspectionId: string; sourceId: string }) {
+  const { pending, err, act } = useAct();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Button size="sm" disabled={pending} data-testid={`make-lead-${inspectionId}`} onClick={() => act(() => acceptProposedLeadAction(inspectionId))}>
+        {pending ? "Working…" : "Make it a lead"}
+      </Button>
+      <Button size="sm" variant="secondary" disabled={pending} data-testid={`not-lead-${inspectionId}`} onClick={() => act(() => resolveReviewAction(inspectionId, "not a lead"))}>
+        Not a lead
+      </Button>
+      <Button size="sm" variant="ghost" disabled={pending} onClick={() => act(() => reinspectAction("email", sourceId))}>
+        Read again
       </Button>
       <ErrorText err={err} />
     </div>

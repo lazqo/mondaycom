@@ -19,7 +19,7 @@ const { db } = await import("@/db");
 const S = await import("@/db/schema");
 const { setClassifier } = await import("@/lib/ai");
 const { processEmail } = await import("@/lib/email/pipeline");
-const { inspect, confirmIdentity, acceptAction, resolveFact, setCommitmentStatus, closeReviews, resolveReview } = await import("@/lib/inspector/inspect");
+const { inspect, confirmIdentity, acceptAction, resolveFact, setCommitmentStatus, closeReviews, resolveReview, acceptProposedLead } = await import("@/lib/inspector/inspect");
 const { settleInspectorQueue, enqueueInspection } = await import("@/lib/inspector/queue");
 const { setJev } = await import("@/lib/inspector/jev");
 const { setHermes, HermesApiRuntime, HermesUnavailableError } = await import("@/lib/hermes/runtime");
@@ -657,5 +657,99 @@ describe("other guardrails", () => {
     await closeReviews("recording", [r.id], chris);
     expect((await db.query.inspections.findFirst({ where: eq(S.inspections.id, out.inspectionId) }))!.status).toBe("superseded");
     expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!.status).toBe("dismissed");
+  });
+});
+
+describe("rules 'not a lead' is a first signal, not the final word", () => {
+  const notLead = {
+    name: "test-not-lead",
+    classify: async (input: { from: { name: string | null; address: string }; subject: string }) => ({
+      provider: "test",
+      model: null,
+      result: { is_lead: false, confidence: 0.95, contact_name: input.from.name, company: null, email: input.from.address, phone: null, service: null, site_address: null, summary: input.subject, urgency: "normal" as const, next_action: null, reason: "rules: not a lead" },
+      durationMs: 1,
+    }),
+  };
+  const yesLead = { ...notLead, name: "test", classify: async (input: Parameters<typeof notLead.classify>[0]) => ({ ...(await notLead.classify(input)), result: { ...(await notLead.classify(input)).result, is_lead: true } }) };
+
+  it("Hermes sees an enquiry: proposed to Chris, nothing created until Chris accepts; then a lead via the normal path", async () => {
+    setClassifier(notLead as never);
+    try {
+      script = () => ({ intent: "quote_request", summary: "Wants cameras for a shop.", facts: [{ key: "camera_count", value: 6, evidence: "6 cameras", confidence: 0.95 }], recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring about cameras", due: null, detail: null }, confidence: 0.9, reason: "A shop owner asking for 6 cameras." });
+      const e = await email({ from: `prop+${RUN}@example.com`, name: "Prop Owner", subject: "Re: your flyer", text: "Saw your flyer. We'd like 6 cameras for the shop, can someone call me?" });
+      const out = await processEmail(e.id);
+      expect(out.classification).toBe("not_lead");
+      await settleInspectorQueue();
+      expect(calls).toBe(1);
+      const ins = (await latestFor(e.id))!;
+      expect(ins).toMatchObject({ engine: "hermes", status: "needs_review", reviewKind: "hermes_proposed_lead", leadId: null });
+      expect((ins.rulesView as { classification: string }).classification).toBe("not_lead");
+      const acts = await actionsOf(ins.id);
+      expect(acts.map((a) => a.type)).toEqual(["NEEDS_REVIEW"]);
+      expect(acts[0]).toMatchObject({ rule: "hermes_proposed_lead", status: "awaiting_approval" });
+      // Nothing written: no lead, no task, no facts, no commitments; the email is still "not a lead".
+      expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
+      expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, "Ring about cameras") })).toBeUndefined();
+      expect(await db.query.commitments.findFirst({ where: eq(S.commitments.sourceId, e.id) })).toBeUndefined();
+      expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ classification: "not_lead", leadId: null });
+
+      // Only a person can accept it.
+      await expect(acceptProposedLead(ins.id, INSPECTOR_ACTOR)).rejects.toBeInstanceOf(GuardrailError);
+      const after = await acceptProposedLead(ins.id, chris);
+      const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+      leadIds.push(lead.id);
+      expect(lead).toMatchObject({ status: "new", createdById: chris.userId });
+      expect(after).toMatchObject({ engine: "hermes" });
+      const reread = (await latestFor(e.id))!;
+      expect(reread).toMatchObject({ leadId: lead.id });
+      expect(reread.reviewKind).not.toBe("hermes_proposed_lead");
+      expect(await db.query.inspectorFeedback.findFirst({ where: and(eq(S.inspectorFeedback.inspectionId, ins.id), eq(S.inspectorFeedback.kind, "proposed_lead_accepted")) })).toBeTruthy();
+      // A second click does not make a second lead.
+      await expect(acceptProposedLead(ins.id, chris)).rejects.toThrow();
+    } finally {
+      setClassifier(yesLead as never);
+    }
+  });
+
+  it("Hermes agrees it is not a lead: nothing for Chris, nothing written", async () => {
+    setClassifier(notLead as never);
+    try {
+      script = () => ({ conversation_type: "other", intent: "not_relevant", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.9, reason: "A supplier's delivery note." });
+      const e = await email({ from: `supp+${RUN}@example.com`, name: "Supplier", subject: "Your delivery", text: "Your order has been dispatched." });
+      await processEmail(e.id);
+      await settleInspectorQueue();
+      expect(calls).toBe(1);
+      const ins = (await latestFor(e.id))!;
+      expect(ins).toMatchObject({ engine: "hermes", status: "analysed", reviewKind: null, leadId: null });
+      expect(await actionsOf(ins.id)).toEqual([]);
+    } finally {
+      setClassifier(yesLead as never);
+    }
+  });
+
+  it("Hermes unavailable for a 'not a lead' email: the rules verdict stands, no review card, retried later", async () => {
+    setClassifier(notLead as never);
+    try {
+      script = () => new HermesUnavailableError("Hermes could not be reached", "network");
+      const e = await email({ from: `nl-down+${RUN}@example.com`, name: "Somebody", subject: "Hello", text: "Just saying hi." });
+      await processEmail(e.id);
+      await settleInspectorQueue();
+      const ins = (await latestFor(e.id))!;
+      expect(ins).toMatchObject({ engine: "fallback", status: "analysed", reviewKind: null, leadId: null });
+      expect(await actionsOf(ins.id)).toEqual([]);
+      expect(await db.query.inspectorQueue.findFirst({ where: eq(S.inspectorQueue.sourceId, e.id) })).toBeTruthy();
+    } finally {
+      setClassifier(yesLead as never);
+    }
+  });
+
+  it("obvious automated mail is filtered before Hermes and never sent to it", async () => {
+    const e = await email({ from: `news+${RUN}@example.com`, name: "Supplier News", subject: "October newsletter", text: "New products and offers." });
+    await db.update(S.emails).set({ headers: { "list-unsubscribe": "<mailto:unsub@example.com>" } }).where(eq(S.emails.id, e.id));
+    const out = await processEmail(e.id);
+    expect(out).toMatchObject({ classification: "not_lead", prefiltered: true });
+    await settleInspectorQueue();
+    expect(calls).toBe(0);
+    expect(await latestFor(e.id)).toBeUndefined();
   });
 });

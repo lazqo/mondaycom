@@ -16,6 +16,7 @@ export type FeedbackKind =
   | "fact_applied"
   | "fact_rejected"
   | "review_resolved"
+  | "proposed_lead_accepted"
   | "commitment_done"
   | "commitment_cancelled"
   | "quote_approved"

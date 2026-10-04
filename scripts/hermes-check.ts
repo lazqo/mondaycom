@@ -108,6 +108,12 @@ const SCENARIOS: Scenario[] = [
     identity: matched,
     expect: (h) => (["NO_ACTION", "NEEDS_REVIEW"].includes(h.recommended_action) ? null : `recommended ${h.recommended_action}`),
   },
+  {
+    name: "9. Admin-looking email that is really an enquiry (rules said not a lead)",
+    input: email("Thanks for your order confirmation. While I have you, could I get a quote for 3 cameras for our house? Single storey.", "About your order"),
+    identity: matched,
+    expect: (h) => (["new_enquiry", "quote_request", "site_visit_request", "booking_request", "service_issue"].includes(h.intent) && h.recommended_action !== "NO_ACTION" ? null : `intent ${h.intent} → ${h.recommended_action}`),
+  },
 ];
 
 async function main() {

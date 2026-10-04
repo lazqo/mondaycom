@@ -67,4 +67,5 @@ export const REVIEW_KIND_LABELS: Record<string, string> = {
   hermes_unavailable: "Hermes could not read it",
   hermes_low_confidence: "Hermes is unsure",
   hermes_flagged: "Hermes asks you to look",
+  hermes_proposed_lead: "Hermes thinks this is a lead",
 };

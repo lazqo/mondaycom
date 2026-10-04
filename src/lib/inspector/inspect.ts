@@ -13,7 +13,7 @@ import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { commitments, emails, emailThreads, facts, inspections, inspectorActions, inspectorRuns, leads, recordings, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { markEmailNotLead } from "@/lib/email/pipeline";
+import { createLeadFromEmail, markEmailNotLead } from "@/lib/email/pipeline";
 import { type Actor, assertApprover, GuardrailError } from "@/lib/guard/actor";
 import { analyse } from "./analyse";
 import { decideFact, diffFacts, storeFacts } from "./facts";
@@ -37,6 +37,9 @@ export type InspectOutcome = {
   hermesError: string | null;
   actions: RoutedAction[];
 } | null;
+
+/** What reads as someone wanting Get Secure's services (for a "not a lead" email Hermes disagrees with). */
+const ENQUIRY_INTENTS: string[] = ["new_enquiry", "quote_request", "site_visit_request", "booking_request", "service_issue"];
 
 async function loadInput(sourceType: SourceType, sourceId: string) {
   return sourceType === "email" ? emailInput(sourceId) : recordingInput(sourceId);
@@ -98,6 +101,8 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
   const rulesPlan = identity.status === "not_applicable" ? [] : planActions(input, rules.understanding, identity, rules.known, crmForPlan);
   const BASE = ["ADD_INTERNAL_NOTE", "LINK_RECORDING", "PROPOSE_LEAD_FACT_UPDATE"];
   const rulesView = {
+    /** The rules classifier's verdict on an email (lead / not_lead / existing…): comparison only. */
+    classification: input.rulesClassification ?? null,
     primaryIntent: rules.understanding.primaryIntent,
     intents: rules.understanding.intents,
     urgency: rules.understanding.urgency,
@@ -153,7 +158,38 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     }
   }
 
-  const diffs = identity.status === "matched" ? (engine === "fallback" ? rulesDiffs : await diffFacts(understanding.facts, leadId, contactId)) : [];
+  // The rules classifier said "not a lead". That is only a first signal: Hermes reads it too. If
+  // Hermes sees a genuine enquiry, it is proposed to Chris as a lead and nothing is created or
+  // changed until Chris accepts it. If Hermes agrees (or could not read it), the rules' verdict stands and
+  // nothing is put in front of Chris.
+  const rulesSaidNotLead = input.sourceType === "email" && input.rulesClassification === "not_lead";
+  let storeCommitmentsFor = true;
+  if (rulesSaidNotLead) {
+    const h = hermes.result;
+    const looksLikeLead = !!h && h.recommended_action !== "NO_ACTION" && (ENQUIRY_INTENTS.includes(h.intent) || ["new_enquiry", "service_request"].includes(h.conversation_type));
+    if (engine === "hermes" && h && looksLikeLead) {
+      planned = [
+        {
+          type: "NEEDS_REVIEW",
+          mode: "approval",
+          rule: "hermes_proposed_lead",
+          reason: `The rules classifier said this is not a lead; Hermes reads it as ${h.intent.replace(/_/g, " ")}. ${h.reason}`,
+          payload: { kind: "hermes_proposed_lead", hermesRecommendation: h.recommended_action, confidence: h.confidence, rulesClassification: "not_lead", candidates: identity.candidates.slice(0, 5).map((c) => ({ leadId: c.leadId, contactId: c.contactId, label: c.label, score: c.score, signals: c.signals })) },
+        },
+      ];
+      reviewKind = "hermes_proposed_lead";
+      if (validation) {
+        validation.hard.push({ rule: "rules_not_lead_proposal", message: "The rules classifier said not a lead. Hermes's reading is proposed to Chris as a lead: no lead or customer is created or changed until Chris accepts it.", effect: "NEEDS_REVIEW" });
+        validation.headline = { ...validation.headline, final: "NEEDS_REVIEW", changedBy: "rules_not_lead_proposal" };
+      }
+    } else {
+      planned = [];
+      reviewKind = null;
+      storeCommitmentsFor = false;
+    }
+  }
+
+  const diffs = identity.status === "matched" && !rulesSaidNotLead ? (engine === "fallback" ? rulesDiffs : await diffFacts(understanding.facts, leadId, contactId)) : [];
 
   if (previous) {
     await db.update(inspections).set({ status: "superseded", updatedAt: new Date() }).where(eq(inspections.id, previous.id));
@@ -208,7 +244,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     })
     .returning({ id: inspectorRuns.id });
 
-  await storeCommitments(row.id, input, understanding, identity.status === "matched" ? { leadId, contactId, jobId: state.jobId } : { leadId: null, contactId: null, jobId: null });
+  if (storeCommitmentsFor) await storeCommitments(row.id, input, understanding, identity.status === "matched" && !rulesSaidNotLead ? { leadId, contactId, jobId: state.jobId } : { leadId: null, contactId: null, jobId: null });
   const detail = { inspectionId: row.id, sourceType, sourceId, title: input.title, summary: understanding.summary, engine, recommended: hermes.result?.recommended_action ?? null, confidence: hermes.result?.confidence ?? null };
   if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
   else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
@@ -372,6 +408,24 @@ export async function dismissAction(actionId: string, actor: Actor, note: string
   await recordFeedback({ inspectionId: a.inspectionId, kind: "action_dismissed", subject: a.type, value: { rule: a.rule, note }, userId: actor.userId });
   // Dismissing the review card itself settles the review.
   if (a.type === "NEEDS_REVIEW") await db.update(inspections).set({ status: "analysed", reviewedById: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(and(eq(inspections.id, a.inspectionId), eq(inspections.status, "needs_review")));
+}
+
+/**
+ * Chris agrees with Hermes that an email the rules called "not a lead" is a genuine enquiry: the
+ * lead is created through the normal path (as when Chris accepts one in the Inbox), and Hermes reads
+ * it again with the lead known.
+ */
+export async function acceptProposedLead(inspectionId: string, actor: Actor): Promise<InspectOutcome> {
+  if (actor.kind !== "human") throw new GuardrailError("Only a person can turn a proposal into a lead.");
+  const ins = await db.query.inspections.findFirst({ where: eq(inspections.id, inspectionId) });
+  if (!ins || ins.sourceType !== "email" || ins.reviewKind !== "hermes_proposed_lead") throw new Error("This is not a proposed lead.");
+  if (ins.status !== "needs_review") throw new Error("This proposal has already been dealt with.");
+  const em = await db.query.emails.findFirst({ where: eq(emails.id, ins.sourceId), columns: { leadId: true } });
+  if (em?.leadId) throw new Error("This email is already on a lead.");
+  const leadId = await createLeadFromEmail(ins.sourceId, { actorId: actor.userId });
+  await db.update(inspections).set({ reviewedById: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(inspections.id, inspectionId));
+  await recordFeedback({ inspectionId, leadId, kind: "proposed_lead_accepted", subject: "hermes_proposed_lead", userId: actor.userId });
+  return inspect("email", ins.sourceId, { force: true });
 }
 
 /**

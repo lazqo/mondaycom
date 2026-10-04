@@ -41,6 +41,7 @@ export async function emailInput(emailId: string): Promise<InspectorInput | null
       : { name: e.fromName, email: e.direction === "outbound" ? null : e.fromAddress.toLowerCase(), phone: null },
     form: web ? { fields: web.fields, name: web.extraction.contact_name, email: web.extraction.email, phone: web.extraction.phone, service: web.extraction.service, address: web.extraction.site_address } : null,
     context: prior.map((p) => ({ from: p.fromName ?? p.fromAddress, at: p.receivedAt.toISOString(), text: stripQuotedReply(p.textBody ?? "").slice(0, 1500) })),
+    rulesClassification: e.classification,
     linked: { leadId, contactId, jobId: t?.jobId ?? null, how: leadId || contactId ? (t?.leadId || t?.contactId ? "the email thread" : "the email pipeline") : null },
   };
 }

@@ -61,3 +61,9 @@ export async function resolveReviewAction(inspectionId: string, note: string): P
   if (!id.safeParse(inspectionId).success) return fail("Invalid inspection");
   return run(async (actor) => void (await inspector.resolveReview(inspectionId, actor, note.trim() || null)));
 }
+
+/** Hermes says an email the rules filed as "not a lead" is a real enquiry, and Chris agrees. */
+export async function acceptProposedLeadAction(inspectionId: string): Promise<ActionResult<{ status: string | null }>> {
+  if (!id.safeParse(inspectionId).success) return fail("Invalid inspection");
+  return run(async (actor) => ({ status: (await inspector.acceptProposedLead(inspectionId, actor))?.status ?? null }));
+}

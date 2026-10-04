@@ -273,4 +273,22 @@ test.describe("Lead + Conversation Inspector", () => {
     await card.getByRole("button", { name: "Mark reviewed" }).click();
     await expect(card).toHaveCount(0);
   });
+  test("7. the rules say 'not a lead' but Hermes reads an enquiry: proposed to Chris, a lead only when accepted", async ({ page }) => {
+    // "your order" makes the old rules classifier call this administrative mail; Hermes still reads it.
+    const subject = `About your order ${RUN}`;
+    deliver({ subject, id: `<proposed-${RUN}@example.com>`, body: "Thanks for your order confirmation. While I have you, could I get a quote for 3 cameras for our house? Single storey.", from: `Tama Proposal <tama+${RUN}@example.com>` }, "proposed");
+    await login(page);
+    await syncMail(page);
+    const card = page.getByTestId("hermes-review").filter({ hasText: subject });
+    await eventually(page, "/inspector", async () => expect(card).toBeVisible({ timeout: 1000 }));
+    await expect(card).toContainText("Hermes thinks this is a lead");
+    await expect(card).toContainText("The rules classifier said this is not a lead");
+    await page.goto("/leads");
+    await expect(page.getByText("Tama Proposal")).toHaveCount(0);
+    await page.goto("/inspector");
+    await card.getByRole("button", { name: "Make it a lead" }).click();
+    await expect(card).toHaveCount(0);
+    await page.goto("/leads");
+    await expect(page.getByText("Tama Proposal").first()).toBeVisible();
+  });
 });

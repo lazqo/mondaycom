@@ -15,17 +15,25 @@ export type ProcessOutcome = {
   leadId: string | null;
   contactId: string | null;
   detail: string;
+  /** Not a lead because the deterministic pre-filter is sure (automated mail): never sent to Hermes. */
+  prefiltered?: boolean;
 };
 
 /**
  * Classify one stored email and create/link the lead, then queue it for the Lead + Conversation
- * Inspector (Hermes, validated; see src/lib/inspector/inspect.ts). The Inspector never sends
+ * Inspector (Hermes, validated; see src/lib/inspector/inspect.ts). The rules classifier's verdict is
+ * a first signal: emails it calls "not a lead" are still inspected by Hermes, unless the
+ * deterministic pre-filter is sure they are automated mail. The Inspector never sends
  * anything; if it fails, the email is still classified and filed as before. Safe to re-run: an already classified
  * email is skipped unless `force`.
  */
 export async function processEmail(emailId: string, opts: { force?: boolean } = {}): Promise<ProcessOutcome> {
   const out = await classifyEmail(emailId, opts);
-  if (out.detail !== "already classified" && ["lead", "existing", "needs_review", "outbound"].includes(out.classification)) {
+  // The rules classifier is an initial signal, not the final word: a "not a lead" from the classifier
+  // still goes to Hermes (which may propose it as a lead for Chris). Only mail the deterministic
+  // pre-filter is sure about (auto-submitted, bulk, list, bounce, auto-reply) skips Hermes.
+  const forHermes = ["lead", "existing", "needs_review", "outbound"].includes(out.classification) || (out.classification === "not_lead" && !out.prefiltered);
+  if (out.detail !== "already classified" && forHermes) {
     try {
       // Queued, not awaited: ingestion never waits for Hermes. The queue is worked in the background.
       const { enqueueInspection, kickInspectorQueue } = await import("@/lib/inspector/queue");
@@ -155,7 +163,7 @@ async function classifyEmail(emailId: string, opts: { force?: boolean } = {}): P
         .update(emails)
         .set({ classification: "not_lead", contactId: contact?.id ?? null, classifiedAt: new Date() })
         .where(eq(emails.id, emailId));
-      return { emailId, classification: "not_lead", leadId: null, contactId: contact?.id ?? null, detail: automated };
+      return { emailId, classification: "not_lead", leadId: null, contactId: contact?.id ?? null, detail: automated, prefiltered: true };
     }
 
     // E. Ask the classifier.

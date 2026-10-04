@@ -26,6 +26,8 @@ export type InspectorInput = {
   context: { from: string; at: string; text: string }[];
   /** Labelled fields from a website enquiry form (Property, Cameras, Storeys…), when it is one. */
   form?: { fields: Record<string, string>; name: string | null; email: string | null; phone: string | null; service: string | null; address: string | null } | null;
+  /** What the rules classifier said about an email (comparison and evidence only, never the final word). */
+  rulesClassification?: string | null;
   /** Links the source already has (thread linked to a lead, recording filed by Chris). */
   linked: { leadId: string | null; contactId: string | null; jobId: string | null; how: string | null };
 };
