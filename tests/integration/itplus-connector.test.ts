@@ -201,7 +201,8 @@ describe("IT Plus connector", () => {
     const sup = item(ids.hdd).candidates!.find((c) => c.sku === "WD43PURZ-SUP")!;
     expect(sup).toMatchObject({ summary: expect.stringMatching(/Supply Only/), notes: expect.stringMatching(/^Notes\*/), stock: "Out of stock" });
     expect(item(ids.hdd).candidates!.find((c) => c.sku === "WD43PURZ-Inst")!.summary).toMatch(/Including Installation In a Recorder/);
-    expect(JSON.stringify(item(ids.hdd).candidates)).not.toMatch(/350|370|189|205/);
+    // No price figure anywhere in what Chris is shown (the listing URL's port number is not a price).
+    expect(JSON.stringify(item(ids.hdd).candidates!.map(({ url: _url, ...c }) => c))).not.toMatch(/\b(350|370|189|205)(\.\d+)?\b/);
     expect(await offer(ids.hdd)).toBeUndefined();
     expect(r.status).toBe("partial");
 
