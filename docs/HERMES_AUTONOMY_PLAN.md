@@ -290,6 +290,10 @@ Retire the classifier as decision-maker, Jev and the deterministic planner; one 
 leads from Hermes's reading; one work module. Build the Decisions queue and feed, and make Home the
 landing page with the brief. Settings → Hermes with the autonomy dial and a status card.
 Outcome: the Inspector screenshot problems are gone, and Chris has one place to look.
+*Delivered* (migration `0022_hermes_only_reader`; `docs/DEPLOYMENT_HANDOFF.md` sections 9 and 17).
+Two things learnt on the way, now rules: a job number names the work, never the sender, so it
+places a message without filing the person; and when Hermes leaves `lead_decision` blank, a new
+enquiry or quote request from a customer counts as a lead while a supplier or provider does not.
 
 **Phase 2: quote anything, including indicative.** Quote composer; CCTV designer refactor;
 indicative quotes; proposal kinds and cards for any category; alarm catalogue categories and

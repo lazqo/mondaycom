@@ -8,14 +8,13 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { ImapFlow } from "imapflow";
 
-process.env.AI_PROVIDER = "rules";
-process.env.AI_LEAD_CONFIDENCE_THRESHOLD = "0.75";
 
 const { db } = await import("@/db");
 const { mailboxes, emails, emailThreads, leads, contacts, users } = await import("@/db/schema");
 const { encryptSecret } = await import("@/lib/crypto");
 const { syncMailboxOnce, testImapConnection } = await import("@/lib/email/imap");
 const { sendReply } = await import("@/lib/email/smtp");
+const { createLeadFromEmail } = await import("@/lib/email/pipeline");
 const { startSmtpSink } = await import("../support/smtp-sink");
 
 const RUN = `ss${Date.now().toString(36)}`;
@@ -123,7 +122,10 @@ describe.skipIf(!dovecotUp)("syncing the Sent folder", () => {
     );
     const first = await syncMailboxOnce(mailboxId);
     expect(first.stored).toBe(1);
-    const inbound = (await db.query.emails.findFirst({ where: and(eq(emails.mailboxId, mailboxId), eq(emails.messageId, enquiry)) }))!;
+    const stored = (await db.query.emails.findFirst({ where: and(eq(emails.mailboxId, mailboxId), eq(emails.messageId, enquiry)) }))!;
+    expect(stored.classification).toBe("reading"); // Hermes's to decide; its reading becomes the lead
+    await createLeadFromEmail(stored.id, { actorId: null, overrides: { contact_name: "Kiri Brown", phone: "021 555 0199", service: "CCTV", site_address: "14 Rimu Road, Titirangi", confidence: 0.9, reason: "Asks for a quote" } });
+    const inbound = (await db.query.emails.findFirst({ where: eq(emails.id, stored.id) }))!;
     expect(inbound.leadId).toBeTruthy();
 
     // Chris answers from his phone: the message only ever exists in Titan's Sent folder.

@@ -26,11 +26,11 @@
  */
 import { NON_CUSTOMER_CONTEXTS, type HermesAction, type HermesResult } from "@/lib/hermes/contract";
 import { AUTHORITY, lacksRecord } from "@/lib/hermes/authority";
+import { AUTONOMY_DEFAULTS, dialFor, type AutonomySettings } from "@/lib/hermes/autonomy";
 import { BUSINESS_CONTEXT_LABELS } from "./labels";
 import { resolveDue } from "./dates";
 import { normalisePhone, toNumber } from "./text";
-import type { Known } from "./missing";
-import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, MissingInfo, PlannedAction, Understanding } from "./types";
+import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, Known, MissingInfo, PlannedAction, Understanding } from "./types";
 
 export type ValidateContext = {
   input: InspectorInput;
@@ -47,7 +47,8 @@ export type ValidateContext = {
     customerEmail: string | null;
     customerPhone: string | null;
   };
-  minConfidence: number;
+  /** The autonomy dial (Settings → Hermes): how far each class goes on its own, and how sure Hermes must be. */
+  autonomy?: AutonomySettings;
   /** CRM records (refs from the context pack) Hermes may cite as evidence or choose as the work. */
   citable?: string[];
   /**
@@ -55,8 +56,6 @@ export type ValidateContext = {
    * exists and the source itself shows it (its site address, job or quote number, the thread).
    */
   context?: { ref: string; label: string; leadId: string | null; jobId: string | null; contactId: string | null; accepted: boolean; why: string } | null;
-  /** The old deterministic reading, for the comparison advisory only. */
-  rules?: { primaryIntent: string; firstAction: string | null; urgency: string } | null;
 };
 
 export type Check = { rule: string; message: string; effect?: string };
@@ -159,6 +158,7 @@ export function resolveEvidenceRef(ref: string, input: InspectorInput, known: Kn
   }
   if (kind === "email") {
     if (k === "subject") return input.title ? { text: input.title, label: "subject" } : null;
+    if (k === "body" || k === "text") return input.text ? { text: input.text, label: "the message" } : null;
     if (k === "from") {
       const t = [input.from.name, input.from.email, input.from.phone].filter(Boolean).join(" ");
       return t ? { text: t, label: "sender" } : null;
@@ -174,7 +174,7 @@ export function resolveEvidenceRef(ref: string, input: InspectorInput, known: Kn
  * value (or contains the quoted words), or if the quoted words are in the source. A quote that is
  * itself a ref ("form:Cameras", "source.form.fields.Cameras") is read as one.
  */
-export function provenance(e: { evidence: string; evidence_ref?: string | null }, input: InspectorInput, known: Known, hay: { text: string; tokens: Set<string> }, fact?: { key: FactKey; value: string | number | boolean }): { ok: boolean; shown: string; reason?: string } {
+export function provenance(e: { evidence: string; evidence_ref?: string | null }, input: InspectorInput, known: Known, hay: { text: string; tokens: Set<string> }, fact?: { key: FactKey; value: string | number | boolean }): { ok: boolean; shown: string; reason?: string; cited?: boolean } {
   const quoted = e.evidence.trim();
   const ref = e.evidence_ref?.trim() || (/^(?:source\.)?(form|turn|email|crm)(?:\.fields)?[:.]/i.test(quoted) ? quoted : null);
   if (ref) {
@@ -194,6 +194,11 @@ export function provenance(e: { evidence: string; evidence_ref?: string | null }
         })();
       const quoteFits = !quoted || quoted === ref || evidenceFound(quoted, within) || evidenceFound(quoted, hay);
       if (supports && quoteFits) return { ok: true, shown: quoted && quoted !== ref ? quoted : `${r.label}: ${r.text}`.slice(0, 500) };
+      // The quoted words are in the source even though the ref was the wrong place: the quote stands.
+      if (quoted && quoted !== ref && evidenceFound(quoted, hay)) return { ok: true, shown: quoted };
+      // A reading of a transcript turn or the message ("residential", "alarm system") that is not
+      // verbatim: the source is cited, so it is kept, but only proposed for Chris, never filled in.
+      if (/^(turn|email)$/i.test(ref.split(/[:.]/)[0].replace(/^source\./, "")) && r.label !== "subject" && r.label !== "sender") return { ok: true, shown: `${r.label}: ${r.text}`.slice(0, 500), cited: true };
       return { ok: false, shown: quoted, reason: `${ref} does not show ${fact ? String(fact.value) : "that"}` };
     }
     if (!quoted || quoted === ref) return { ok: false, shown: quoted, reason: `${ref} is not in the source or the record` };
@@ -202,7 +207,7 @@ export function provenance(e: { evidence: string; evidence_ref?: string | null }
   return { ok: false, shown: quoted, reason: quoted ? "evidence not found in the source" : "no evidence given" };
 }
 
-const SERVICE_DISPLAY: Record<string, string> = { cctv: "CCTV", alarm: "Alarm", access_control: "Access control", intercom: "Intercom", networking: "Networking", other: "Other" };
+export const SERVICE_DISPLAY: Record<string, string> = { cctv: "CCTV", alarm: "Alarm", access_control: "Access control", intercom: "Intercom", networking: "Networking", other: "Other" };
 
 /** A sane value for the CRM, and how it reads; null when the value is not usable. */
 export function normaliseFact(key: FactKey, raw: string | number | boolean): { value: string | number | boolean; display: string } | null {
@@ -282,6 +287,8 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const rejectedFacts: Validation["rejectedFacts"] = [];
   const decisions: Validation["decisions"] = [];
   const { input, identity, crm } = ctx;
+  const autonomy = ctx.autonomy ?? AUTONOMY_DEFAULTS;
+  const leadThreshold = autonomy.thresholds.operational_state;
   const hay = sourceHaystack(input);
   const citable = new Set(ctx.citable ?? []);
 
@@ -299,7 +306,8 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
       continue;
     }
     if (facts.some((x) => x.key === f.key)) continue;
-    facts.push({ key: f.key, value: n.value, display: n.display, evidence: p.shown.slice(0, 500), confidence: f.confidence });
+    // Cited but not verbatim: proposed for Chris (below the fill-in confidence), never filled in.
+    facts.push({ key: f.key, value: n.value, display: n.display, evidence: p.shown.slice(0, 500), confidence: p.cited ? Math.min(f.confidence, 0.69) : f.confidence });
   }
   if (rejectedFacts.length) hard.push({ rule: "fact_evidence", message: `Not used (${rejectedFacts.map((r) => `${r.key}: ${r.reason}`).join("; ")}).`, effect: "facts rejected" });
   const low = facts.filter((f) => f.confidence < 0.7);
@@ -367,7 +375,6 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   };
 
   // ---- Advisories: shown, never deciding ----
-  if (ctx.rules && ctx.rules.primaryIntent !== h.intent) advisories.push({ rule: "rules_disagree", message: `The old rules read this as "${ctx.rules.primaryIntent.replace(/_/g, " ")}"${ctx.rules.firstAction ? ` (${ctx.rules.firstAction})` : ""}; Hermes's reading is used.` });
   for (const a of h.advisories) advisories.push({ rule: "hermes", message: a });
 
   const recommended = h.recommended_action;
@@ -383,7 +390,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
 
   // Hermes is sure this is not a lead or not customer business, and nothing needs doing: nothing to file.
   const extraWork = h.internal_actions.length > 0 || h.research.length > 0;
-  if ((h.lead_decision === "not_lead" || nonCustomer) && recommended === "NO_ACTION" && !extraWork && h.confidence >= ctx.minConfidence && identity.status !== "matched") {
+  if ((h.lead_decision === "not_lead" || nonCustomer) && recommended === "NO_ACTION" && !extraWork && h.confidence >= leadThreshold && identity.status !== "matched") {
     advisories.push({ rule: "not_a_lead", message: "Hermes: nothing to do. Nothing filed." });
     return result([], null, null, false);
   }
@@ -414,7 +421,8 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const base: PlannedAction[] = [];
   if (identity.status !== "not_applicable") base.push(act("ADD_INTERNAL_NOTE", "auto", "always_note", "What Hermes understood.", { summary: h.summary }));
   if (input.sourceType === "recording" && personVerified && !crm.recordingLinked) base.push(act("LINK_RECORDING", "auto", "identity_matched", identity.reason));
-  if (onWork && facts.length && !nonCustomer)
+  const customerContext = !nonCustomer && h.business_context !== "accounting_payment";
+  if (onWork && facts.length && customerContext)
     base.push(
       act(
         "PROPOSE_LEAD_FACT_UPDATE",
@@ -437,12 +445,16 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   if (h.run_business_brain && !planned.some((p) => p.type === "RUN_BUSINESS_BRAIN")) planned.push(...planFor("RUN_BUSINESS_BRAIN", h, ctx, { known, missing, service, commitments, business, hard }));
   planned = dedupe(planned);
 
-  // ---- GUARDRAIL: customer work is closed only with evidence ----
-  const customerWork = !nonCustomer && h.business_context !== "accounting_payment" && h.lead_decision !== "not_lead";
+  // ---- GUARDRAIL: customer work is closed only with evidence (a cited record, or work already open) ----
+  const customerWork = customerContext && h.lead_decision !== "not_lead";
   const saysOpen = ENQUIRY_INTENTS.includes(h.intent) || h.conversation_type === "new_enquiry" || h.resolution.status === "waiting_on_us";
+  const openWork = [...citable].filter((r) => r.startsWith("task:") || r.startsWith("commitment:"));
   if (recommended === "NO_ACTION" && customerWork && saysOpen && !extraWork) {
     if (h.resolution.status === "resolved" && evidence.length) {
       advisories.push({ rule: "closed_with_evidence", message: `Hermes closed this, citing ${evidence.map((e) => `${e.ref}${e.note ? ` (${e.note})` : ""}`).join("; ")}.` });
+    } else if (openWork.length && !ENQUIRY_INTENTS.includes(h.intent)) {
+      // An acknowledgement on work that already has an open task or commitment: covered, nothing to add.
+      advisories.push({ rule: "covered_by_open_work", message: `Nothing new to do: ${openWork.length} open task${openWork.length === 1 ? "" : "s"}/commitment${openWork.length === 1 ? "" : "s"} already cover${openWork.length === 1 ? "s" : ""} this.` });
     } else {
       hard.push({ rule: "close_needs_evidence", message: "Hermes said no action on open customer work without citing CRM records that show it was dealt with. Chris decides.", effect: "NEEDS_REVIEW" });
       decisions.push({ action: "NO_ACTION", allowed: false, rule: "close_needs_evidence" });
@@ -459,23 +471,37 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
     planned.push(act("CREATE_INTERNAL_TASK", "auto", "customer_accepted", "The customer says they want to go ahead. Chris confirms and marks the quote accepted.", { title: "Customer wants to go ahead: confirm and mark the quote accepted", kind: "task", due: "today" }));
   }
 
-  // ---- GUARDRAIL: Hermes's own doubt. Internal work goes ahead; the rest waits for Chris ----
-  const autonomousNow = (p: PlannedAction) => ["internal_work", "internal_record", "research", "none"].includes(AUTHORITY[p.type]?.class ?? "");
-  if (h.confidence < ctx.minConfidence) {
-    const held = planned.filter((p) => !autonomousNow(p));
-    const go = planned.filter(autonomousNow);
-    if (held.length || recommended === "NEEDS_REVIEW") {
-      hard.push({ rule: "low_confidence", message: `Hermes is ${Math.round(h.confidence * 100)}% sure (below ${Math.round(ctx.minConfidence * 100)}%). ${go.length ? "Its internal work went ahead; " : ""}${held.map((p) => p.type.replace(/_/g, " ").toLowerCase()).join(", ") || "its recommendation"} wait${held.length === 1 ? "s" : ""} for Chris.`, effect: "NEEDS_REVIEW" });
-      for (const p of held) decisions.push({ action: p.type, allowed: false, rule: "low_confidence" });
-      headline.final = "NEEDS_REVIEW";
-      headline.changedBy = "low_confidence";
-      const review = act("NEEDS_REVIEW", "approval", "low_confidence", h.reason, { kind: "hermes_low_confidence", question: h.review_question ?? `Hermes recommends: ${recommended.replace(/_/g, " ").toLowerCase()}. Go ahead?`, hermesRecommendation: recommended, confidence: h.confidence, plan: held });
-      return result([...base, ...go.filter((p) => p.type !== "NO_ACTION"), review], "hermes_low_confidence", workContext, personVerified);
+  // ---- AUTONOMY: the dial per class (Settings → Hermes). "never" is refused; "ask_first" waits for
+  // Chris; below the class's confidence threshold the action waits for Chris with the plan attached ----
+  const refused: PlannedAction[] = [];
+  const held: PlannedAction[] = [];
+  const go0: PlannedAction[] = [];
+  for (const p of planned) {
+    const dial = dialFor(autonomy, AUTHORITY[p.type]?.class ?? "none");
+    if (!dial) {
+      go0.push(p);
+      continue;
     }
+    if (dial.level === "never") refused.push(p);
+    else if (h.confidence < dial.threshold && p.type !== "NO_ACTION") held.push(p);
+    else if (dial.level === "ask_first" && p.mode === "auto") go0.push({ ...p, mode: "approval" });
+    else go0.push(p);
+  }
+  for (const p of refused) decisions.push({ action: p.type, allowed: false, rule: "autonomy_never" });
+  if (refused.length) hard.push({ rule: "autonomy_never", message: `Not done: ${refused.map((p) => p.type.replace(/_/g, " ").toLowerCase()).join(", ")} ${refused.length === 1 ? "is" : "are"} switched off for Hermes in Settings → Hermes.`, effect: "refused" });
+  planned = go0;
+  if (held.length || (recommended === "NEEDS_REVIEW" && h.confidence < leadThreshold)) {
+    const lowest = Math.min(...held.map((p) => dialFor(autonomy, AUTHORITY[p.type].class)?.threshold ?? 1));
+    hard.push({ rule: "low_confidence", message: `Hermes is ${Math.round(h.confidence * 100)}% sure (below the ${Math.round(lowest * 100)}% needed). ${planned.some((p) => !BASE_TYPES.includes(p.type)) ? "Its other work went ahead; " : ""}${held.map((p) => p.type.replace(/_/g, " ").toLowerCase()).join(", ") || "its recommendation"} wait${held.length === 1 ? "s" : ""} for Chris.`, effect: "NEEDS_REVIEW" });
+    for (const p of held) decisions.push({ action: p.type, allowed: false, rule: "low_confidence" });
+    headline.final = "NEEDS_REVIEW";
+    headline.changedBy = "low_confidence";
+    const review = act("NEEDS_REVIEW", "approval", "low_confidence", h.reason, { kind: "hermes_low_confidence", question: h.review_question ?? `Hermes recommends: ${recommended.replace(/_/g, " ").toLowerCase()}. Go ahead?`, hermesRecommendation: recommended, confidence: h.confidence, plan: held });
+    return result([...base, ...planned.filter((p) => p.type !== "NO_ACTION"), review], "hermes_low_confidence", workContext, personVerified);
   }
 
   // ---- GUARDRAIL: identity. Only actions that need a record wait for it; the rest goes ahead ----
-  const willHaveLead = h.lead_decision === "lead" && input.sourceType === "email" && input.direction === "inbound" && h.confidence >= ctx.minConfidence;
+  const willHaveLead = h.lead_decision === "lead" && input.sourceType === "email" && input.direction === "inbound" && h.confidence >= leadThreshold;
   const need = { lead: records.lead || willHaveLead, work: records.work || willHaveLead };
   const waiting = planned.filter((p) => lacksRecord(p.type, need));
   const go = planned.filter((p) => !lacksRecord(p.type, need));

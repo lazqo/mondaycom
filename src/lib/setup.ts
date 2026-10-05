@@ -1,7 +1,6 @@
 import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { mailboxes, users, appSettings } from "@/db/schema";
-import { env } from "@/lib/env";
 import { getSetting, setSetting } from "@/lib/settings";
 
 export const SETUP_KEY = "setup";
@@ -31,7 +30,7 @@ export async function getSetupSteps(): Promise<{ steps: SetupStep[]; complete: b
     getSetupState(),
     db.query.appSettings.findFirst({ where: eq(appSettings.key, "automations") }),
   ]);
-  const aiLive = env.AI_PROVIDER === "anthropic" || (env.AI_PROVIDER === "auto" && !!env.ANTHROPIC_API_KEY);
+  const hermesLive = !!process.env.HERMES_API_URL && !!process.env.HERMES_API_KEY;
   const steps: SetupStep[] = [
     { key: "admin", title: "Admin login", done: Number(staff) >= 1, detail: "Your admin account exists.", href: "/settings/users" },
     {
@@ -52,11 +51,11 @@ export async function getSetupSteps(): Promise<{ steps: SetupStep[]; complete: b
     },
     {
       key: "ai",
-      title: "Configure email AI",
-      done: aiLive ? true : !!state.aiConfirmedAt,
-      detail: aiLive ? `Claude (${env.AI_MODEL}) is reading enquiries.` : "No API key set: the offline rules classifier is in use. Add ANTHROPIC_API_KEY on the server, or confirm you want to start with rules.",
-      href: "/settings/ai",
-      action: aiLive ? undefined : "Use offline rules for now",
+      title: "Connect Hermes",
+      done: hermesLive ? true : !!state.aiConfirmedAt,
+      detail: hermesLive ? "Hermes is reading every email and conversation." : "Hermes is not connected (HERMES_API_URL and HERMES_API_KEY on the server). Until then every new email waits for you on Home.",
+      href: "/settings/hermes",
+      action: hermesLive ? undefined : "Start without Hermes for now",
     },
     {
       key: "hours",

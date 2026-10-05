@@ -7,7 +7,7 @@ import { ReinspectButton } from "./controls";
 import { HermesView } from "./hermes-view";
 
 /**
- * The Inspector on a lead or job page: open commitments (ours and the customer's), anything
+ * Hermes on a lead or job page: open commitments (ours and the customer's), anything
  * waiting for Chris, conflicting facts, and what the latest email or conversation said.
  */
 export async function InspectorPanel({ leadId, jobId, contactId, canApprove }: { leadId?: string | null; jobId?: string | null; contactId?: string | null; canApprove: boolean }) {
@@ -18,9 +18,9 @@ export async function InspectorPanel({ leadId, jobId, contactId, canApprove }: {
   return (
     <Card data-testid="inspector-panel">
       <CardHeader
-        title="Inspector"
+        title="Hermes"
         action={
-          <Link href="/inspector" className="text-sm text-brand-700 hover:underline">
+          <Link href="/dashboard" className="text-sm text-brand-700 hover:underline">
             Review queue
           </Link>
         }

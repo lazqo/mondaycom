@@ -69,6 +69,8 @@ export const FACT_KEYS = [
   "site_visit_requested",
 ] as const;
 export type FactKey = (typeof FACT_KEYS)[number];
+/** What the CRM already holds (record fields and applied facts), by fact key. */
+export type Known = Partial<Record<FactKey, string | number | boolean>>;
 
 export const INTENTS = ["new_enquiry", "quote_request", "site_visit_request", "booking_request", "question", "quote_change", "acceptance", "objection", "service_issue", "follow_up", "information", "not_relevant"] as const;
 export const COMMITMENT_KEYS = ["send_quote", "send_photos", "call", "visit", "send_info", "confirm", "pay", "check", "other"] as const;
@@ -117,7 +119,7 @@ export type Understanding = {
 
 // ---------------- identity ----------------
 
-export type IdentitySignal = { kind: "thread" | "linked" | "email" | "phone" | "calendar" | "quote_ref" | "address" | "company" | "name"; detail: string; weight: number };
+export type IdentitySignal = { kind: "thread" | "linked" | "email" | "phone" | "calendar" | "quote_ref" | "job_ref" | "address" | "company" | "name"; detail: string; weight: number };
 
 export type IdentityCandidate = {
   leadId: string | null;

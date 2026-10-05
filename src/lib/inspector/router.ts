@@ -17,10 +17,9 @@
  * customer-facing function, so that holds in code, not just here. A prepared draft is never treated
  * as sent: nothing here changes a lead's status or contact date.
  */
-import { and, desc, eq, gte, inArray, ne, sql, type SQL } from "drizzle-orm";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { commitments, drafts, emails, events, inspections, inspectorActions, leads, quotes, recordings, tasks, users } from "@/db/schema";
+import { commitments, emails, inspectorActions, leads, quotes, recordings } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
@@ -29,8 +28,8 @@ import { dateInAppTz } from "@/lib/email/pipeline";
 import { AUTHORITY } from "@/lib/hermes/authority";
 import { requestResearch } from "@/lib/hermes/research";
 import { enquiryWithFacts } from "./brain";
-import { composeQuestionsEmail } from "./plan";
 import { serviceKey } from "./sources";
+import { alreadyInHand, businessDay, composeQuestionsEmail, createTask, dueDate, waitingDraft } from "./work";
 import { pricingGaps, pricingTaskTitle } from "./validate";
 import { ACTION_TYPES, type ActionType, type InspectorInput, type PlannedAction } from "./types";
 
@@ -53,115 +52,11 @@ export type RouteContext = {
   senderUnverified?: boolean;
 };
 
-function businessDay(from: Date, add: number): string {
-  const d = new Date(from);
-  let n = add;
-  while (n > 0) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const day = new Date(dateInAppTz(d) + "T12:00:00Z").getUTCDay();
-    if (day !== 0 && day !== 6) n--;
-  }
-  return dateInAppTz(d);
-}
-
-async function assignee(leadId: string | null): Promise<string | null> {
-  if (leadId) {
-    const l = await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { assignedToId: true } });
-    if (l?.assignedToId) return l.assignedToId;
-  }
-  const chris = await db.query.users.findFirst({ where: and(eq(users.canApprove, true), eq(users.active, true)), columns: { id: true } });
-  return chris?.id ?? null;
-}
-
-/** Rows about the same lead (or, without one, the same customer). */
-type Subject = Pick<RouteContext, "leadId" | "contactId">;
-
-function sameSubject(cols: { leadId: AnyPgColumn; contactId: AnyPgColumn }, ctx: Subject): SQL | undefined {
-  if (ctx.leadId) return eq(cols.leadId, ctx.leadId);
-  if (ctx.contactId) return eq(cols.contactId, ctx.contactId);
-  return undefined;
-}
-
-/** An open task with the same title on the same lead or customer: never a second one. */
-export async function openTaskTitled(ctx: Subject, title: string) {
-  const subject = sameSubject(tasks, ctx);
-  if (!subject) return null;
-  return db.query.tasks.findFirst({ where: and(eq(tasks.status, "open"), subject, sql`lower(${tasks.title}) = lower(${title.trim()})`), columns: { id: true, title: true } });
-}
-
-const PROPOSAL_MATCH: Partial<Record<ActionType, { task: RegExp; inHand: string }>> = {
-  PROPOSE_SITE_VISIT: { task: /^site visit\b|\b(arrange|book|schedule|organi[sz]e|propose)\b.*\bsite (visit|inspection)\b/i, inHand: "Site visit already awaiting arrangement." },
-  PROPOSE_BOOKING: { task: /\b(arrange|schedule) the (booking|install(ation)?|job)\b|^book(ing)?\b/i, inHand: "Booking already awaiting arrangement." },
-  PREPARE_REVISED_QUOTE: { task: /\brevised quote\b|\brevise the quote\b/i, inHand: "A revised quote is already in hand." },
-};
-
-/**
- * A proposal Chris has effectively already got: an open task to arrange it, the same proposal still
- * waiting for him from another email or conversation, or (for a site visit) one already booked.
- * Then nothing new is offered, and the CRM says what is already in hand.
- */
-export async function alreadyInHand(a: Pick<PlannedAction, "type">, ctx: Subject & { inspectionId: string | null }, opts: { ignoreWaiting?: boolean } = {}): Promise<Record<string, unknown> | null> {
-  const m = PROPOSAL_MATCH[a.type];
-  if (!m) return null;
-  const taskSubject = sameSubject(tasks, ctx);
-  if (!taskSubject) return null;
-  if (a.type === "PROPOSE_SITE_VISIT") {
-    const booked = await db.query.events.findFirst({ where: and(eq(events.kind, "site_visit"), gte(events.endsAt, new Date()), sameSubject(events, ctx)), columns: { id: true, startsAt: true } });
-    if (booked) return { inHand: `Site visit already booked for ${dateInAppTz(booked.startsAt)}.`, eventId: booked.id };
-  }
-  const open = await db.query.tasks.findMany({ where: and(eq(tasks.status, "open"), taskSubject), columns: { id: true, title: true, ruleKey: true }, limit: 50 });
-  const t = open.find((x) => m.task.test(x.title) || (x.ruleKey ?? "").includes(a.type));
-  if (t) return { inHand: m.inHand, taskId: t.id, taskTitle: t.title };
-  if (opts.ignoreWaiting) return null;
-  const waiting = await db
-    .select({ id: inspectorActions.id })
-    .from(inspectorActions)
-    .innerJoin(inspections, eq(inspections.id, inspectorActions.inspectionId))
-    .where(and(eq(inspectorActions.type, a.type), eq(inspectorActions.status, "awaiting_approval"), ne(inspections.status, "superseded"), ctx.inspectionId ? ne(inspectorActions.inspectionId, ctx.inspectionId) : undefined, sameSubject(inspectorActions, ctx)))
-    .limit(1);
-  if (waiting[0]) return { inHand: "The same proposal is already waiting for your decision.", actionId: waiting[0].id };
-  return null;
-}
-
-/** An open pricing task on the same lead ("Price the quote for …", "… complete costing …"). */
-async function openPricingTask(ctx: Subject) {
-  const subject = sameSubject(tasks, ctx);
-  if (!subject) return null;
-  const open = await db.query.tasks.findMany({ where: and(eq(tasks.status, "open"), subject), columns: { id: true, title: true }, limit: 50 });
-  return open.find((t) => /\bprice the quote\b|\bcomplete (the )?costing\b/i.test(t.title)) ?? null;
-}
-
+/** Carry out one planned task through the shared work module (one de-duplication for the router and Hermes's tools). */
 async function task(ctx: RouteContext, a: PlannedAction, def: { title: string; kind: string; due: string; detail?: string }) {
-  const same = (await openTaskTitled(ctx, def.title)) ?? (def.kind === "quote" && /\bprice the quote\b|\bcomplete (the )?costing\b/i.test(def.title) ? await openPricingTask(ctx) : null);
-  if (same) return { taskId: same.id, note: "an open task like this already exists", inHand: `Already open: ${same.title}.` };
-  const entity = ctx.jobId ?? ctx.leadId ?? ctx.contactId ?? ctx.inspectionId;
-  const [row] = await db
-    .insert(tasks)
-    .values({
-      title: def.title,
-      detail: def.detail ?? a.reason,
-      dueAt: def.due,
-      kind: def.kind,
-      assignedToId: await assignee(ctx.leadId),
-      leadId: ctx.leadId,
-      contactId: ctx.contactId,
-      jobId: ctx.jobId,
-      ruleKey: `inspector:${a.type}:${a.rule}`,
-      entityId: entity,
-    })
-    .onConflictDoNothing()
-    .returning({ id: tasks.id });
-  return row ? { taskId: row.id } : { taskId: null, note: "an open task of this kind already exists" };
-}
-
-/** "today", "next_business_day", a YYYY-MM-DD or an ISO date: the task's due date in the business's time zone. */
-function dueDate(due: unknown, today: string): string {
-  if (due === "today") return today;
-  if (typeof due === "string" && /^\d{4}-\d{2}-\d{2}/.test(due)) {
-    const d = due.length === 10 ? due : dateInAppTz(new Date(due));
-    return d < today ? today : d;
-  }
-  return businessDay(new Date(), 1);
+  const r = await createTask({ leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId }, { title: def.title, kind: def.kind, due: def.due, detail: def.detail ?? a.reason, ruleKey: `inspector:${a.type}:${a.rule}`, entityId: ctx.jobId ?? ctx.leadId ?? ctx.contactId ?? ctx.inspectionId });
+  if (r.alreadyOpen) return { taskId: r.taskId, note: "an open task like this already exists", inHand: `Already open: ${r.title}.` };
+  return { taskId: r.taskId };
 }
 
 async function openBrainQuoteNumber(leadId: string | null): Promise<number | null> {
@@ -267,7 +162,7 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
         return { status: "blocked", result: { reason: "Nothing in the design has an approved price yet, so no quote was prepared.", ...t, created: title } };
       }
       // Reply only if there is no unsent email already waiting for this lead.
-      const waiting = ctx.leadId ? await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, ctx.leadId), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } }) : null;
+      const waiting = await waitingDraft(ctx.leadId);
       const r = await prepareFromAssessment(String(brain.assessmentId), { quote: true, email: !waiting }, actor);
       await logActivity({ entity: "lead", entityId: ctx.leadId!, actorId: null, action: "quote_prepared_by_inspector", detail: { quoteId: r.quoteId, quoteNumber: r.quoteNumber, draftId: r.draftId ?? null, inspectionId: ctx.inspectionId } });
       return { status: "done", result: { quoteId: r.quoteId ?? null, quoteNumber: r.quoteNumber ?? null, draftId: r.draftId ?? null } };
@@ -278,7 +173,7 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       const to = ctx.senderUnverified ? ctx.input.from.email : (lead?.email ?? ctx.input.from.email);
       if (!to) return { status: "blocked", result: { reason: "No email address to reply to." } };
       // One reply waiting at a time: a re-read never stacks a second draft on the first.
-      const waiting = ctx.leadId ? await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, ctx.leadId), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } }) : null;
+      const waiting = await waitingDraft(ctx.leadId);
       if (waiting) return { status: "done", result: { draftId: waiting.id, note: "a reply is already waiting for review" } };
       const src = ctx.input.sourceType === "email" ? await db.query.emails.findFirst({ where: eq(emails.id, ctx.input.sourceId), columns: { threadId: true, subject: true } }) : null;
       // A reply Hermes wrote (already checked by the validator), or the blocking questions only.
@@ -359,3 +254,5 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
 export async function awaitingActions(limit = 50) {
   return db.query.inspectorActions.findMany({ where: eq(inspectorActions.status, "awaiting_approval"), orderBy: [desc(inspectorActions.createdAt)], limit });
 }
+
+export { alreadyInHand, openTaskTitled } from "./work";

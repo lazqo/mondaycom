@@ -52,7 +52,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             {lead.name}
             <StatusPill value={lead.status} />
             {lead.urgency ? <Badge className={`${LEAD_URGENCY_META[lead.urgency].bg} ${LEAD_URGENCY_META[lead.urgency].text}`}>{LEAD_URGENCY_META[lead.urgency].label}</Badge> : null}
-            {lead.aiConfidence ? <span className="text-xs font-normal text-gray-500">AI {Math.round(Number(lead.aiConfidence) * 100)}%</span> : null}
           </h1>
           <p className="text-sm text-gray-500">
             {lead.company ? `${lead.company} · ` : ""}

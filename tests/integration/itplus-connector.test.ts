@@ -14,7 +14,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { startItPlusMock, type MockState } from "../support/itplus-mock";
 
-process.env.AI_PROVIDER = "rules";
 process.env.SUPPLIER_SYNC_DELAY_MS = "0";
 
 const { db } = await import("@/db");

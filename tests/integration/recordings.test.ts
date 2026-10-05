@@ -20,6 +20,8 @@ const CONSULT = `[00:00 - 00:17] Speaker 1: We've got all the old cameras from p
 [03:11 - 03:15] Speaker 2: So let's go at one. Thanks, Dave.`;
 
 // A note to self: nothing in it identifies a customer.
+// A time with no appointments in the calendar, so only what is said in the call counts.
+const QUIET = new Date("2024-01-07T03:00:00Z");
 const SELF_NOTE = `[00:00 - 00:27] Speaker 1: Decided to defer the on site visit because remote visibility was good enough.`;
 
 beforeAll(async () => {
@@ -37,15 +39,13 @@ afterAll(async () => {
 });
 
 describe("matching a recording to a customer", () => {
-  it("matches on the business name spoken in the call", async () => {
+  it("a business name spoken in the call is never enough on its own (a name alone must not auto-match)", async () => {
     const m = await matchRecording({ title: `Consultation: Greyland Firehouse ${RUN} CCTV`, transcript: CONSULT });
-    expect(m).not.toBeNull();
-    expect(m!.contactId).toBe(madeContacts[0]);
-    expect(m!.matchedBy).toContain("name");
+    expect(m).toBeNull();
   });
 
   it("matches on a phone number even when it is written differently", async () => {
-    const m = await matchRecording({ title: "Call back", transcript: "He asked me to ring 0215557788 tomorrow." });
+    const m = await matchRecording({ title: "Call back", transcript: "He asked me to ring 0215557788 tomorrow.", at: QUIET });
     expect(m?.contactId).toBe(madeContacts[0]);
     expect(m!.matchedBy).toContain("phone");
   });
@@ -60,7 +60,7 @@ describe("matching a recording to a customer", () => {
       .values({ name: `Isapela ${RUN}`, phone: "02108856692", status: "new", source: "phone" })
       .returning({ id: leads.id });
     madeLeads.push(l.id);
-    const m = await matchRecording({ title: "Call", transcript: "Ring her on 021 0885 6692 about the cameras." });
+    const m = await matchRecording({ title: "Call", transcript: "Ring her on 021 0885 6692 about the cameras.", at: QUIET });
     expect(m?.leadId).toBe(l.id);
   });
 });

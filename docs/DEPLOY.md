@@ -22,7 +22,6 @@ the watcher dies on every cold start and no email is ever detected automatically
    - `AUTH_SECRET` = output of `openssl rand -base64 32`
    - `APP_TIMEZONE` = `Pacific/Auckland`
    - `INGEST_IN_PROCESS` = `true` (email ingestion runs inside the web service)
-   - `ANTHROPIC_API_KEY` = your key (optional; without it the offline rules classifier is used)
    - `ENCRYPTION_KEY` = another `openssl rand -base64 32`
    - `HEALTH_TOKEN` = `openssl rand -hex 16` (for the uptime monitor)
    Full list with explanations: `docs/PRODUCTION_ENV.md`.

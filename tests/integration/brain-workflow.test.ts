@@ -7,7 +7,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { ImapFlow } from "imapflow";
 
-process.env.AI_PROVIDER = "rules";
 
 const { db } = await import("@/db");
 const schema = await import("@/db/schema");

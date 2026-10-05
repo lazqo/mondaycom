@@ -60,8 +60,8 @@ export default async function StatusPage() {
           </p>
         </Card>
         <Card>
-          <CardHeader title="Email AI" action={<Badge className={h.ai.provider === "anthropic" ? "bg-[#00c875] text-white" : "bg-gray-400 text-white"}>{h.ai.provider === "anthropic" ? "Claude" : "Offline rules"}</Badge>} />
-          <p className="p-4 text-sm text-gray-700">{h.ai.provider === "anthropic" ? `Model ${h.ai.model}.` : "Add ANTHROPIC_API_KEY on the server to use Claude. Until then, simple keyword rules classify email."}</p>
+          <CardHeader title="Hermes" action={<Badge className={h.hermes.connected ? "bg-[#00c875] text-white" : "bg-gray-400 text-white"}>{h.hermes.connected ? "Connected" : "Not connected"}</Badge>} />
+          <p className="p-4 text-sm text-gray-700">{h.hermes.connected ? `Hermes reads every email and conversation${h.hermes.model ? ` (${h.hermes.model})` : ""}.` : "Set HERMES_API_URL and HERMES_API_KEY on the server. Until then every new email waits for you on Home."}</p>
         </Card>
       </div>
     </div>

@@ -13,15 +13,12 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createServer, type Server } from "node:http";
 import { and, asc, desc, eq, inArray, like, or } from "drizzle-orm";
 
-process.env.AI_PROVIDER = "rules";
 
 const { db } = await import("@/db");
 const S = await import("@/db/schema");
-const { setClassifier } = await import("@/lib/ai");
 const { processEmail } = await import("@/lib/email/pipeline");
 const { inspect, confirmIdentity, acceptAction, resolveFact, setCommitmentStatus, closeReviews, resolveReview, acceptProposedLead } = await import("@/lib/inspector/inspect");
 const { settleInspectorQueue, enqueueInspection } = await import("@/lib/inspector/queue");
-const { setJev } = await import("@/lib/inspector/jev");
 const { setHermes, HermesApiRuntime, HermesUnavailableError } = await import("@/lib/hermes/runtime");
 const { encryptSecret } = await import("@/lib/crypto");
 const { sendDraft } = await import("@/lib/drafts/workflow");
@@ -150,16 +147,6 @@ beforeAll(async () => {
     .values({ name: `Inspector ${RUN}`, emailAddress: `info+${RUN}@getsecure.test`, imapHost: "127.0.0.1", imapPort: 1, imapSecure: false, smtpHost: "127.0.0.1", smtpPort: 1, smtpSecure: false, username: "x", passwordEncrypted: encryptSecret("x"), active: false })
     .returning();
   mailboxId = mb.id;
-  setClassifier({
-    name: "test",
-    classify: async (input) => ({
-      provider: "test",
-      model: null,
-      result: { is_lead: true, confidence: 0.95, contact_name: input.from.name, company: null, email: input.from.address, phone: null, service: "CCTV", site_address: null, summary: input.subject, urgency: "normal", next_action: "Reply", reason: "test" },
-      durationMs: 1,
-    }),
-  });
-  setJev(null);
   useStandInHermes();
 });
 
@@ -169,8 +156,6 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  setClassifier(null);
-  setJev(undefined);
   setHermes(undefined);
   const emailIds = (await db.select({ id: S.emails.id }).from(S.emails).where(eq(S.emails.mailboxId, mailboxId))).map((e) => e.id);
   const leadRows = await db.select({ id: S.leads.id }).from(S.leads).where(or(like(S.leads.email, `%${RUN}%`), inArray(S.leads.sourceEmailId, emailIds.length ? emailIds : ["00000000-0000-0000-0000-000000000000"])));
@@ -263,7 +248,6 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     const v = ins.validation as { advisories: { rule: string }[]; headline: { recommended: string } };
     expect(v.headline.recommended).toBe("PREPARE_QUOTE");
     expect(v.advisories.map((x) => x.rule)).not.toContain("two_storey_complexity"); // the Brain allows for storeys itself
-    expect((ins.rulesView as { primaryIntent: string }).primaryIntent).toBeTruthy();
     // Audit: the run records the model, the context it was given, the recommendation and the outcome.
     const run = (await runFor(ins.id))!;
     expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-4" });
@@ -541,14 +525,14 @@ describe("Test 8: Hermes unavailable — kept, reviewed, never 'no action'", () 
     await processEmail(e.id);
     await settleInspectorQueue();
     const ins = (await latestFor(e.id))!;
-    leadIds.push(ins.leadId!);
-    expect(ins).toMatchObject({ engine: "fallback", status: "needs_review", reviewKind: "hermes_unavailable" });
+    expect(ins).toMatchObject({ engine: "fallback", status: "needs_review", reviewKind: "hermes_unavailable", leadId: null });
     const acts = await actionsOf(ins.id);
     expect(acts.map((a) => a.type)).not.toContain("NO_ACTION");
     expect(acts.map((a) => a.type)).not.toContain("RUN_BUSINESS_BRAIN");
     expect(acts.find((a) => a.type === "NEEDS_REVIEW")).toMatchObject({ status: "awaiting_approval", rule: "hermes_unavailable" });
-    // Deterministic extraction used where safe: blank facts filled, with evidence.
-    expect((await db.query.facts.findMany({ where: eq(S.facts.leadId, ins.leadId!) })).map((f) => f.key)).toContain("camera_count");
+    // Nothing is invented without Hermes: no lead, no facts; the email waits for Chris.
+    expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("needs_review");
     expect(await runFor(ins.id)).toMatchObject({ status: "unavailable" });
     const q = (await db.query.inspectorQueue.findFirst({ where: eq(S.inspectorQueue.sourceId, e.id) }))!;
     expect(q.attempts).toBe(1);
@@ -560,6 +544,10 @@ describe("Test 8: Hermes unavailable — kept, reviewed, never 'no action'", () 
     await settleInspectorQueue();
     const again = (await latestFor(e.id))!;
     expect(again).toMatchObject({ engine: "hermes", status: "analysed" });
+    // A quote request from a new sender: the lead is made from Hermes's reading, with its facts.
+    expect(again.leadId).toBeTruthy();
+    leadIds.push(again.leadId!);
+    expect((await db.query.facts.findMany({ where: eq(S.facts.leadId, again.leadId!) })).map((f) => f.key)).toContain("camera_count");
     expect(await db.query.inspectorQueue.findFirst({ where: eq(S.inspectorQueue.sourceId, e.id) })).toBeUndefined();
   });
 
@@ -690,90 +678,70 @@ describe("other guardrails", () => {
   });
 });
 
-describe("Hermes decides lead / not lead (audited and reversible); the rules are a first signal", () => {
-  const notLead = {
-    name: "test-not-lead",
-    classify: async (input: { from: { name: string | null; address: string }; subject: string }) => ({
-      provider: "test",
-      model: null,
-      result: { is_lead: false, confidence: 0.95, contact_name: input.from.name, company: null, email: input.from.address, phone: null, service: null, site_address: null, summary: input.subject, urgency: "normal" as const, next_action: null, reason: "rules: not a lead" },
-      durationMs: 1,
-    }),
-  };
-  const yesLead = { ...notLead, name: "test", classify: async (input: Parameters<typeof notLead.classify>[0]) => ({ ...(await notLead.classify(input)), result: { ...(await notLead.classify(input)).result, is_lead: true, service: "CCTV" } }) };
-  const enquiry = (confidence: number): Loose => ({ intent: "quote_request", lead_decision: "lead", summary: "Wants cameras for a shop.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring about the shop cameras ${RUN}`, due: null, detail: null }, confidence, reason: "A shop owner asking for 6 cameras." });
+describe("Hermes decides lead / not lead (audited and reversible); the CRM files mechanically first", () => {
+  const enquiry = (confidence: number): Loose => ({ intent: "quote_request", lead_decision: "lead", summary: "Wants cameras for a shop.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring about the shop cameras ${RUN}`, due: null, detail: null }, facts: [{ key: "contact_name", value: "Shop Owner", evidence: "", evidence_ref: "email:from", confidence: 0.9 }, { key: "site_address", value: "5 Depot Road, Penrose", evidence: "5 Depot Road, Penrose", confidence: 0.9 }], service: "cctv", confidence, reason: "A shop owner asking for 6 cameras." });
 
-  it("the rules said not a lead, Hermes is sure it is one: the lead is created through the normal path and the work goes on", async () => {
-    setClassifier(notLead as never);
-    try {
-      script = () => enquiry(0.9);
-      const e = await email({ from: `hermeslead+${RUN}@example.com`, name: "Shop Owner", subject: "Re: your flyer", text: "Saw your flyer. We'd like 6 cameras for the shop, can someone call me?" });
-      expect((await processEmail(e.id)).classification).toBe("not_lead");
-      await settleInspectorQueue();
-      const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
-      leadIds.push(lead.id);
-      expect(lead).toMatchObject({ status: "new", createdById: null });
-      expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ classification: "lead", leadId: lead.id });
-      const ins = (await latestFor(e.id))!;
-      expect(ins).toMatchObject({ engine: "hermes", status: "analysed", leadId: lead.id });
-      expect((ins.rulesView as { classification: string }).classification).toBe("not_lead");
-      expect(await db.query.tasks.findFirst({ where: and(eq(S.tasks.leadId, lead.id), eq(S.tasks.title, `Ring about the shop cameras ${RUN}`)) })).toBeTruthy();
-      expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, lead.id), eq(S.activityLog.action, "lead_created_by_hermes")) })).toBeTruthy();
-    } finally {
-      setClassifier(yesLead as never);
-    }
-  });
-
-  it("Hermes thinks it is a lead but is not sure: proposed to Chris; only a person accepts, once", async () => {
-    setClassifier(notLead as never);
-    try {
-      script = () => enquiry(0.5);
-      const e = await email({ from: `prop+${RUN}@example.com`, name: "Prop Owner", subject: "Re: your flyer", text: "Saw your flyer. Might want cameras for the shop at some point." });
-      await processEmail(e.id);
-      await settleInspectorQueue();
-      const ins = (await latestFor(e.id))!;
-      expect(ins).toMatchObject({ engine: "hermes", status: "needs_review", reviewKind: "hermes_proposed_lead", leadId: null });
-      expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
-      await expect(acceptProposedLead(ins.id, INSPECTOR_ACTOR)).rejects.toBeInstanceOf(GuardrailError);
-      await acceptProposedLead(ins.id, chris);
-      const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
-      leadIds.push(lead.id);
-      expect(lead).toMatchObject({ createdById: chris.userId });
-      await expect(acceptProposedLead(ins.id, chris)).rejects.toThrow();
-    } finally {
-      setClassifier(yesLead as never);
-    }
-  });
-
-  it("Hermes agrees it is not a lead: nothing for Chris, nothing written", async () => {
-    setClassifier(notLead as never);
-    try {
-      script = () => ({ conversation_type: "supplier", intent: "not_relevant", lead_decision: "not_lead", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.9, reason: "A supplier's delivery note." });
-      const e = await email({ from: `supp+${RUN}@example.com`, name: "Supplier", subject: "Your delivery", text: "Your order has been dispatched." });
-      await processEmail(e.id);
-      await settleInspectorQueue();
-      expect(calls).toBe(1);
-      expect(await latestFor(e.id)).toMatchObject({ engine: "hermes", status: "analysed", reviewKind: null, leadId: null });
-      expect(await actionsOf((await latestFor(e.id))!.id)).toEqual([]);
-    } finally {
-      setClassifier(yesLead as never);
-    }
-  });
-
-  it("the rules made a lead, Hermes is sure it is not one: the untouched lead is marked lost (reversible); a worked lead is left for Chris", async () => {
-    script = () => ({ conversation_type: "spam_or_marketing", intent: "not_relevant", lead_decision: "not_lead", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.92, reason: "A marketing email about SEO." });
-    const e = await email({ from: `seo+${RUN}@example.com`, name: "SEO Agency", subject: "Grow your camera business", text: "We can get your CCTV business to page one of Google." });
-    expect((await processEmail(e.id)).classification).toBe("lead");
+  it("an unknown sender's email is 'reading' until Hermes decides; sure it is a lead → the lead is created from Hermes's reading", async () => {
+    script = () => enquiry(0.9);
+    const e = await email({ from: `hermeslead+${RUN}@example.com`, name: "Shop Owner", subject: "Re: your flyer", text: "Saw your flyer. We'd like 6 cameras for the shop at 5 Depot Road, Penrose, can someone call me?" });
+    expect((await processEmail(e.id)).classification).toBe("reading");
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("reading");
     await settleInspectorQueue();
     const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
     leadIds.push(lead.id);
-    expect(lead.status).toBe("lost");
-    expect(lead.lostReason).toMatch(/^Not a lead \(Hermes\)/);
+    expect(lead).toMatchObject({ status: "new", createdById: null, name: "Shop Owner", site: "5 Depot Road, Penrose", summary: "Wants cameras for a shop.", nextAction: "Create a task" });
+    expect(Number(lead.aiConfidence)).toBeCloseTo(0.9);
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ classification: "lead", leadId: lead.id });
+    const ins = (await latestFor(e.id))!;
+    expect(ins).toMatchObject({ engine: "hermes", status: "analysed", leadId: lead.id });
+    expect(await db.query.tasks.findFirst({ where: and(eq(S.tasks.leadId, lead.id), eq(S.tasks.title, `Ring about the shop cameras ${RUN}`)) })).toBeTruthy();
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, lead.id), eq(S.activityLog.action, "lead_created_by_hermes")) })).toBeTruthy();
+  });
+
+  it("Hermes thinks it is a lead but is not sure: proposed to Chris (the email shows Needs review); only a person accepts, once", async () => {
+    script = () => enquiry(0.5);
+    const e = await email({ from: `prop+${RUN}@example.com`, name: "Prop Owner", subject: "Re: your flyer", text: "Saw your flyer. Might want cameras for the shop at some point." });
+    await processEmail(e.id);
+    await settleInspectorQueue();
+    const ins = (await latestFor(e.id))!;
+    expect(ins).toMatchObject({ engine: "hermes", status: "needs_review", reviewKind: "hermes_proposed_lead", leadId: null });
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("needs_review");
+    expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
+    await expect(acceptProposedLead(ins.id, INSPECTOR_ACTOR)).rejects.toBeInstanceOf(GuardrailError);
+    await acceptProposedLead(ins.id, chris);
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+    leadIds.push(lead.id);
+    expect(lead).toMatchObject({ createdById: chris.userId });
+    await expect(acceptProposedLead(ins.id, chris)).rejects.toThrow();
+  });
+
+  it("Hermes says not a lead: the email is filed as not a lead; nothing for Chris, nothing written", async () => {
+    script = () => ({ conversation_type: "supplier", intent: "not_relevant", lead_decision: "not_lead", business_context: "supplier_vendor", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.9, reason: "A supplier's delivery note." });
+    const e = await email({ from: `supp+${RUN}@example.com`, name: "Supplier", subject: "Your delivery", text: "Your order has been dispatched." });
+    await processEmail(e.id);
+    await settleInspectorQueue();
+    expect(calls).toBe(1);
+    expect(await latestFor(e.id)).toMatchObject({ engine: "hermes", status: "analysed", reviewKind: null, leadId: null });
+    expect(await actionsOf((await latestFor(e.id))!.id)).toEqual([]);
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("not_lead");
+  });
+
+  it("a lead Hermes created and then, on a re-read, calls not a lead: the untouched lead is marked lost (reversible); a worked lead is left for Chris", async () => {
+    script = () => enquiry(0.92);
+    const e = await email({ from: `seo+${RUN}@example.com`, name: "SEO Agency", subject: "Grow your camera business", text: "We can get your CCTV business to page one of Google." });
+    await processEmail(e.id);
+    await settleInspectorQueue();
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+    leadIds.push(lead.id);
+    script = () => ({ conversation_type: "spam_or_marketing", intent: "not_relevant", lead_decision: "not_lead", service: null, property_type: null, recommended_action: "NO_ACTION", confidence: 0.92, reason: "A marketing email about SEO." });
+    await inspect("email", e.id, { force: true });
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, lead.id) }))!.status).toBe("lost");
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, lead.id) }))!.lostReason).toMatch(/^Not a lead \(Hermes\)/);
     expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("not_lead");
 
     // Once someone has worked on a lead (a quote exists), Hermes cannot close it: Chris decides.
     const notLeadScript = script;
-    script = () => ({ lead_decision: "undecided", recommended_action: "NEEDS_REVIEW", confidence: 0.9, reason: "Unsure." });
+    script = () => enquiry(0.9);
     const e2 = await email({ from: `seo2+${RUN}@example.com`, name: "SEO Agency 2", subject: "Cameras for our office", text: "We'd like cameras for our office." });
     await processEmail(e2.id);
     await settleInspectorQueue();
@@ -787,18 +755,14 @@ describe("Hermes decides lead / not lead (audited and reversible); the rules are
     expect((await actionsOf(out.inspectionId)).find((a) => a.type === "NEEDS_REVIEW")).toMatchObject({ rule: "worked_lead_kept" });
   });
 
-  it("Hermes unavailable for a 'not a lead' email: the rules verdict stands, no review card, retried later", async () => {
-    setClassifier(notLead as never);
-    try {
-      script = () => new HermesUnavailableError("Hermes could not be reached", "network");
-      const e = await email({ from: `nl-down+${RUN}@example.com`, name: "Somebody", subject: "Hello", text: "Just saying hi." });
-      await processEmail(e.id);
-      await settleInspectorQueue();
-      expect(await latestFor(e.id)).toMatchObject({ engine: "fallback", status: "analysed", reviewKind: null, leadId: null });
-      expect(await db.query.inspectorQueue.findFirst({ where: eq(S.inspectorQueue.sourceId, e.id) })).toBeTruthy();
-    } finally {
-      setClassifier(yesLead as never);
-    }
+  it("Hermes unavailable: nothing is invented; the email waits for Chris as 'could not read it' and is retried", async () => {
+    script = () => new HermesUnavailableError("Hermes could not be reached", "network");
+    const e = await email({ from: `nl-down+${RUN}@example.com`, name: "Somebody", subject: "Hello", text: "Just saying hi." });
+    await processEmail(e.id);
+    await settleInspectorQueue();
+    expect(await latestFor(e.id)).toMatchObject({ engine: "fallback", status: "needs_review", reviewKind: "hermes_unavailable", leadId: null });
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("needs_review");
+    expect(await db.query.inspectorQueue.findFirst({ where: eq(S.inspectorQueue.sourceId, e.id) })).toBeTruthy();
   });
 
   it("obvious automated mail is filtered before Hermes and never sent to it", async () => {
@@ -1007,14 +971,13 @@ describe("business context first: route by what kind of business it is; 'Who is 
     expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
   });
 
-  it("a monitoring provider's statement the rules took for a lead: Hermes routes it as provider/accounting, the untouched lead is closed", async () => {
+  it("a monitoring provider's statement: Hermes routes it as provider/accounting; no lead is ever made from it", async () => {
     script = () => ({ conversation_type: "supplier", intent: "information", business_context: "service_provider", counterparty: { name: "Alarm Watch", kind: "service_provider" }, accounting: { document: "statement", reference: null, amount: null, due: null }, service: null, property_type: null, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Check the Alarm Watch statement ${RUN}`, due: null, detail: null }, confidence: 0.9, reason: "Monitoring provider statement." });
     const e = await email({ from: `billing+${RUN}@alarmwatch.example`, name: "Alarm Watch", subject: "Your monitoring statement", text: "Monitoring statement for your alarm monitoring accounts. Need anything? Contact us." });
-    expect((await processEmail(e.id)).classification).toBe("lead"); // the old rules' guess
+    expect((await processEmail(e.id)).classification).toBe("reading"); // nothing is guessed from the words
     await settleInspectorQueue();
-    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
-    leadIds.push(lead.id);
-    expect(lead.status).toBe("lost"); // lead_decision was left open; a provider is never a lead
+    expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.classification).toBe("not_lead");
     const ins = (await latestFor(e.id))!;
     expect(ins.reviewKind).toBeNull();
     expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Check the Alarm Watch statement ${RUN}`) })).toBeTruthy();

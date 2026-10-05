@@ -39,10 +39,10 @@ export const HERMES_INTERNAL_ACTIONS = ["CREATE_INTERNAL_TASK", "FOLLOW_UP", "CA
  *   form:<Field>       a website form field as shown in source.form.fields ("form:Cameras"), or
  *                      form:name / form:email / form:phone / form:address / form:service
  *   turn:<n>           transcript turn n (source.transcript.turns[].n)
- *   email:subject      the subject; email:from the sender's name, address or phone
+ *   email:subject      the subject; email:body the message text; email:from the sender's name, address or phone
  *   crm:<fact key>     a value already on the CRM record (crm:site_address)
  */
-export const EVIDENCE_REF_HINT = "form:<Field> | form:name|email|phone|address|service | turn:<n> | email:subject | email:from | crm:<fact key>";
+export const EVIDENCE_REF_HINT = "form:<Field> | form:name|email|phone|address|service | turn:<n> | email:body | email:subject | email:from | crm:<fact key>";
 
 /**
  * What kind of business relationship a message belongs to: Hermes's judgement, decided before (and

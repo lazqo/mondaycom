@@ -259,7 +259,6 @@ test.describe("Lead + Conversation Inspector", () => {
     await row.locator("summary").click();
     await expect(row.getByTestId("hermes-recommendation")).toContainText("Recommended next action: Prepare quote");
     await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: 94%");
-    await expect(row).toContainText("Old rules (comparison only)");
   });
 
   test("6. Hermes unavailable: the email waits for review, never 'no action'", async ({ page }) => {

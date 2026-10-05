@@ -1,17 +1,16 @@
 import { and, asc, desc, eq, inArray, isNull, max, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, emailClassifications, emailThreads, emails, jobs, leads, users, type ExtractedLead } from "@/db/schema";
+import { contacts, emailThreads, emails, jobs, leads, users, type ExtractedLead } from "@/db/schema";
 import { env } from "@/lib/env";
 import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
-import { getClassifier, type ClassificationInput } from "@/lib/ai";
-import { isAutomatedMail, stripQuotedReply } from "./parse";
+import { isAutomatedMail } from "./parse";
 import { isWebsiteLeadSender, parseWebsiteLead, personalEmail } from "./website-lead";
 
 
 export type ProcessOutcome = {
   emailId: string;
-  classification: "lead" | "needs_review" | "not_lead" | "existing" | "outbound" | "error";
+  classification: "lead" | "reading" | "needs_review" | "not_lead" | "existing" | "outbound" | "error";
   leadId: string | null;
   contactId: string | null;
   detail: string;
@@ -20,19 +19,19 @@ export type ProcessOutcome = {
 };
 
 /**
- * Classify one stored email and create/link the lead, then queue it for the Lead + Conversation
- * Inspector (Hermes, validated; see src/lib/inspector/inspect.ts). The rules classifier's verdict is
- * a first signal: emails it calls "not a lead" are still inspected by Hermes, unless the
- * deterministic pre-filter is sure they are automated mail. The Inspector never sends
- * anything; if it fails, the email is still classified and filed as before. Safe to re-run: an already classified
- * email is skipped unless `force`.
+ * File one stored email mechanically, then hand it to Hermes (the Lead + Conversation Inspector,
+ * src/lib/inspector/inspect.ts), which is the only thing that decides what it is. The mechanical
+ * steps are: a website form is parsed exactly and becomes a lead; a reply on a thread already
+ * linked, or from a known sender, is filed on that lead or customer; obvious automated mail
+ * (bulk, list, bounce, auto-reply) is filtered. Everything else is marked "reading" until Hermes
+ * decides lead / not a lead / existing work / needs Chris. Safe to re-run: an already filed email
+ * is skipped unless `force`.
  */
 export async function processEmail(emailId: string, opts: { force?: boolean } = {}): Promise<ProcessOutcome> {
   const out = await classifyEmail(emailId, opts);
-  // The rules classifier is an initial signal, not the final word: a "not a lead" from the classifier
-  // still goes to Hermes (which may propose it as a lead for Chris). Only mail the deterministic
-  // pre-filter is sure about (auto-submitted, bulk, list, bounce, auto-reply) skips Hermes.
-  const forHermes = ["lead", "existing", "needs_review", "outbound"].includes(out.classification) || (out.classification === "not_lead" && !out.prefiltered);
+  // Everything Hermes should read: filed mail (it may still have work in it) and anything undecided.
+  // Only mail the pre-filter is sure is automated skips Hermes.
+  const forHermes = ["lead", "existing", "reading", "needs_review", "outbound"].includes(out.classification) || (out.classification === "not_lead" && !out.prefiltered);
   if (out.detail !== "already classified" && forHermes) {
     try {
       // Queued, not awaited: ingestion never waits for Hermes. The queue is worked in the background.
@@ -80,16 +79,9 @@ async function classifyEmail(emailId: string, opts: { force?: boolean } = {}): P
       const enquirerContact = enquirerEmail
         ? await db.query.contacts.findFirst({ where: sql`lower(${contacts.email}) = ${enquirerEmail}`, columns: { id: true } })
         : null;
-      await recordClassification(emailId, {
-        provider: "website-form",
-        model: null,
-        isLead: true,
-        confidence: 1,
-        result: website.extraction,
-        durationMs: 0,
-      });
       const leadId = await createLeadFromEmail(emailId, {
         actorId: null,
+        overrides: website.extraction,
         contactId: enquirerContact?.id ?? null,
         jobId: null,
       });
@@ -151,14 +143,6 @@ async function classifyEmail(emailId: string, opts: { force?: boolean } = {}): P
     // D. Automated mail never goes to the model.
     const automated = isAutomatedMail({ headers: email.headers, from: { name: email.fromName, address: email.fromAddress }, subject: email.subject });
     if (automated) {
-      await recordClassification(emailId, {
-        provider: "prefilter",
-        model: null,
-        isLead: false,
-        confidence: 1,
-        result: emptyExtraction(email, `Automated message (${automated}).`),
-        durationMs: 0,
-      });
       await db
         .update(emails)
         .set({ classification: "not_lead", contactId: contact?.id ?? null, classifiedAt: new Date() })
@@ -166,59 +150,13 @@ async function classifyEmail(emailId: string, opts: { force?: boolean } = {}): P
       return { emailId, classification: "not_lead", leadId: null, contactId: contact?.id ?? null, detail: automated, prefiltered: true };
     }
 
-    // E. Ask the classifier.
-    const prior = await db.query.emails.findMany({
-      where: and(eq(emails.threadId, thread.id), ne(emails.id, emailId)),
-      orderBy: [asc(emails.receivedAt)],
-      columns: { fromAddress: true, fromName: true, receivedAt: true, textBody: true },
-      limit: 5,
-    });
-    const input: ClassificationInput = {
-      from: { name: email.fromName, address: email.fromAddress },
-      to: email.to.map((t) => t.address),
-      subject: email.subject,
-      receivedAt: email.receivedAt.toISOString(),
-      text: stripQuotedReply(email.textBody ?? "") || (email.textBody ?? ""),
-      attachments: email.attachments,
-      priorMessages: prior.map((p) => ({
-        from: p.fromName ? `${p.fromName} <${p.fromAddress}>` : p.fromAddress,
-        date: p.receivedAt.toISOString(),
-        text: stripQuotedReply(p.textBody ?? ""),
-      })),
-      knownContact: contact ? { name: contact.name, company: contact.company } : null,
-    };
-    const classifier = getClassifier();
-    const out = await classifier.classify(input);
-    const r = out.result;
-    await recordClassification(emailId, {
-      provider: out.provider,
-      model: out.model,
-      isLead: r.is_lead,
-      confidence: r.confidence,
-      result: r,
-      raw: out.raw,
-      usage: out.usage,
-      durationMs: out.durationMs,
-    });
-
-    const threshold = env.AI_LEAD_CONFIDENCE_THRESHOLD;
-    if (r.is_lead && r.confidence >= threshold) {
-      const leadId = await createLeadFromEmail(emailId, { actorId: null, contactId: contact?.id ?? null, jobId: openJob?.id ?? null });
-      return { emailId, classification: "lead", leadId, contactId: contact?.id ?? null, detail: `auto-created (confidence ${r.confidence.toFixed(2)})` };
-    }
-    if (!r.is_lead && r.confidence >= threshold) {
-      await db
-        .update(emails)
-        .set({ classification: "not_lead", contactId: contact?.id ?? null, classifiedAt: new Date() })
-        .where(eq(emails.id, emailId));
-      if (contact) await db.update(emailThreads).set({ contactId: contact.id }).where(eq(emailThreads.id, thread.id));
-      return { emailId, classification: "not_lead", leadId: null, contactId: contact?.id ?? null, detail: r.reason };
-    }
+    // E. Everything else is Hermes's to decide. The email is marked "reading" and queued (processEmail).
     await db
       .update(emails)
-      .set({ classification: "needs_review", contactId: contact?.id ?? null, classifiedAt: new Date() })
+      .set({ classification: "reading", contactId: contact?.id ?? null, classifiedAt: new Date(), classificationError: null })
       .where(eq(emails.id, emailId));
-    return { emailId, classification: "needs_review", leadId: null, contactId: contact?.id ?? null, detail: `confidence ${r.confidence.toFixed(2)} below ${threshold}` };
+    if (contact) await db.update(emailThreads).set({ contactId: contact.id }).where(eq(emailThreads.id, thread.id));
+    return { emailId, classification: "reading", leadId: null, contactId: contact?.id ?? null, detail: "with Hermes" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db.update(emails).set({ classification: "error", classificationError: message, classifiedAt: new Date() }).where(eq(emails.id, emailId));
@@ -242,7 +180,7 @@ async function touchLead(tx: Tx, leadId: string, at: Date) {
 
 function emptyExtraction(email: { fromName: string | null; fromAddress: string; subject: string }, reason: string): ExtractedLead {
   return {
-    is_lead: false,
+    is_lead: true,
     confidence: 1,
     contact_name: email.fromName,
     company: null,
@@ -257,35 +195,10 @@ function emptyExtraction(email: { fromName: string | null; fromAddress: string; 
   };
 }
 
-async function recordClassification(
-  emailId: string,
-  c: { provider: string; model: string | null; isLead: boolean; confidence: number; result: ExtractedLead; raw?: unknown; usage?: { inputTokens?: number; outputTokens?: number }; durationMs: number },
-) {
-  await db.insert(emailClassifications).values({
-    emailId,
-    provider: c.provider,
-    model: c.model,
-    isLead: c.isLead,
-    confidence: Math.max(0, Math.min(1, c.confidence)).toFixed(3),
-    result: c.result,
-    rawResponse: (c.raw ?? null) as Record<string, unknown> | null,
-    inputTokens: c.usage?.inputTokens ?? null,
-    outputTokens: c.usage?.outputTokens ?? null,
-    durationMs: Math.round(c.durationMs),
-  });
-}
-
-/** Latest classification for an email (the AI's suggestion), if any. */
-export async function latestClassification(emailId: string) {
-  return db.query.emailClassifications.findFirst({
-    where: eq(emailClassifications.emailId, emailId),
-    orderBy: [desc(emailClassifications.createdAt)],
-  });
-}
-
 /**
- * Create a Lead from an email using the stored extraction (optionally overridden by a reviewer),
- * link the thread and email to it, and mark the email as a lead.
+ * Create a Lead from an email: from the website form's exact fields, Hermes's checked reading, or a
+ * person's edits (the overrides); otherwise from the sender alone. Links the thread and email to it
+ * and marks the email as a lead.
  */
 export async function createLeadFromEmail(
   emailId: string,
@@ -293,8 +206,7 @@ export async function createLeadFromEmail(
 ): Promise<string> {
   const email = await db.query.emails.findFirst({ where: eq(emails.id, emailId), with: { thread: true } });
   if (!email) throw new Error("Email not found");
-  const latest = await latestClassification(emailId);
-  const x: ExtractedLead = { ...(latest?.result ?? emptyExtraction(email, "manual")), ...(opts.overrides ?? {}) };
+  const x: ExtractedLead = { ...emptyExtraction(email, "manual"), ...(opts.overrides ?? {}) };
   // A website enquiry is only ever tied to a customer by the enquirer's own details, which the
   // caller has already looked up. Whatever the email was filed under before (by older code that
   // matched the robot's address to a customer) must not carry over.
@@ -317,7 +229,7 @@ export async function createLeadFromEmail(
         summary: x.summary,
         urgency: x.urgency,
         nextAction: x.next_action,
-        aiConfidence: latest ? Number(latest.confidence).toFixed(3) : null,
+        aiConfidence: opts.overrides?.confidence != null ? Number(opts.overrides.confidence).toFixed(3) : null,
         emailThreadId: email.threadId,
         sourceEmailId: email.id,
         contactId,
@@ -342,30 +254,22 @@ export async function createLeadFromEmail(
       .update(emails)
       .set({ classification: "existing", leadId: row.id, contactId })
       .where(and(eq(emails.threadId, email.threadId), ne(emails.id, emailId), eq(emails.direction, "inbound"), notInArray(emails.classification, ["outbound"])));
-    if (latest && opts.actorId) {
-      await tx
-        .update(emailClassifications)
-        .set({ reviewedById: opts.actorId, reviewedAt: new Date(), reviewOutcome: opts.overrides && Object.keys(opts.overrides).length ? "edited" : "accepted" })
-        .where(eq(emailClassifications.id, latest.id));
-    }
     await logActivity({
       entity: "lead",
       entityId: row.id,
       actorId: opts.actorId,
       action: opts.actorId ? "created_from_email" : "auto_created_from_email",
-      detail: { emailId, subject: email.subject, confidence: latest?.confidence ?? null, provider: latest?.provider ?? null },
+      detail: { emailId, subject: email.subject, confidence: opts.overrides?.confidence ?? null, reason: opts.overrides?.reason ?? null },
     });
     return row.id;
   });
   return leadId;
 }
 
-export async function markEmailNotLead(emailId: string, actorId: string) {
-  const latest = await latestClassification(emailId);
-  await db.transaction(async (tx) => {
-    await tx.update(emails).set({ classification: "not_lead", classifiedAt: new Date(), classificationError: null }).where(eq(emails.id, emailId));
-    if (latest) await tx.update(emailClassifications).set({ reviewedById: actorId, reviewedAt: new Date(), reviewOutcome: "rejected" }).where(eq(emailClassifications.id, latest.id));
-  });
+export async function markEmailNotLead(emailId: string, actorId: string | null) {
+  await db.update(emails).set({ classification: "not_lead", classifiedAt: new Date(), classificationError: null }).where(eq(emails.id, emailId));
+  const e = await db.query.emails.findFirst({ where: eq(emails.id, emailId), columns: { leadId: true, subject: true } });
+  if (e?.leadId) await logActivity({ entity: "lead", entityId: e.leadId, actorId, action: "email_not_lead", detail: { emailId, subject: e.subject } });
 }
 
 /** Link a whole thread (and its inbound emails) to an existing lead, customer and/or job. */

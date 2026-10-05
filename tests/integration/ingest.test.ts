@@ -1,14 +1,14 @@
 /**
  * Integration tests for email ingestion against the real Postgres database and, when a local
  * Dovecot is running (tests/support/dovecot/start.sh), the real IMAP + SMTP path.
- * Run: pnpm test:integration   (needs DATABASE_URL; uses AI_PROVIDER=rules)
+ * Run: pnpm test:integration   (needs DATABASE_URL). Hermes is not reachable here: mail is stored,
+ * pre-filtered and handed to Hermes; the lead itself is Hermes's call (tests/integration/inspector.test.ts).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 
-process.env.AI_PROVIDER = "rules";
 process.env.AI_LEAD_CONFIDENCE_THRESHOLD = "0.75";
 
 const { db } = await import("@/db");
@@ -85,13 +85,19 @@ afterAll(async () => {
 });
 
 describe("store + classify", () => {
-  it("creates a lead automatically from a confident enquiry, with the original email attached", async () => {
+  it("stores a confident enquiry with the original attached and hands it to Hermes; Hermes's reading becomes the lead", async () => {
     const r = await ingestRawMessage({ mailboxId, raw: fx("01-cctv-quote.eml") });
     expect(r.created).toBe(true);
     const out = await processEmail(r.emailId);
-    expect(out.classification).toBe("lead");
-    expect(out.leadId).toBeTruthy();
-    const lead = await db.query.leads.findFirst({ where: eq(leads.id, out.leadId!), with: { sourceEmail: true } });
+    // Nothing is filed from the words alone: the pipeline only pre-filters, Hermes reads.
+    expect(out.classification).toBe("reading");
+    expect(out.leadId).toBeNull();
+    // What Hermes reads (checked by the guardrails) is what the lead is made from.
+    const leadId = await createLeadFromEmail(r.emailId, {
+      actorId: null,
+      overrides: { contact_name: "Sarah Mitchell", company: "Harbourview Apartments", phone: "021 555 0142", service: "CCTV", site_address: "12 Quay St, Auckland CBD", summary: "CCTV quote for an apartment block.", confidence: 0.92, reason: "Asks for a CCTV quote" },
+    });
+    const lead = await db.query.leads.findFirst({ where: eq(leads.id, leadId), with: { sourceEmail: true } });
     expect(lead?.name).toBe("Sarah Mitchell");
     expect(lead?.company).toBe("Harbourview Apartments");
     expect(lead?.phone).toBe("021 555 0142");
@@ -104,7 +110,9 @@ describe("store + classify", () => {
     expect(lead?.emailThreadId).toBe(r.threadId);
     expect(lead?.sourceEmail?.rawMime).toContain(`Message-ID: ${mid("<cctv-quote-001@harbourview.co.nz>")}`);
     const thread = await db.query.emailThreads.findFirst({ where: eq(emailThreads.id, r.threadId) });
-    expect(thread?.leadId).toBe(out.leadId);
+    expect(thread?.leadId).toBe(leadId);
+    const email = await db.query.emails.findFirst({ where: eq(emails.id, r.emailId) });
+    expect(email?.classification).toBe("lead");
   });
 
   it("is idempotent on Message-ID", async () => {
@@ -128,40 +136,34 @@ describe("store + classify", () => {
     expect(lead?.lastContactAt).toBe("2026-09-22"); // 08:30 NZST on the 22nd, in app timezone not UTC
   });
 
-  it("sends a vague enquiry to Needs review without creating a lead", async () => {
+  it("leaves a vague enquiry with Hermes without creating a lead", async () => {
     const before = (await db.query.leads.findMany({ columns: { id: true } })).length;
     const r = await ingestRawMessage({ mailboxId, raw: fx("09-vague.eml") });
     const out = await processEmail(r.emailId);
-    expect(out.classification).toBe("needs_review");
+    expect(out.classification).toBe("reading");
     expect(out.leadId).toBeNull();
     const after = (await db.query.leads.findMany({ columns: { id: true } })).length;
     expect(after).toBe(before);
   });
 
-  it("files newsletters and invoices as not_lead (newsletter never reaches the model)", async () => {
+  it("files bulk mail as not_lead before Hermes; a supplier invoice is Hermes's to read", async () => {
     const a = await processEmail((await ingestRawMessage({ mailboxId, raw: fx("07-newsletter.eml") })).emailId);
     expect(a.classification).toBe("not_lead");
     expect(a.detail).toMatch(/list-unsubscribe|bulk/);
     const b = await processEmail((await ingestRawMessage({ mailboxId, raw: fx("08-invoice.eml") })).emailId);
-    expect(b.classification).toBe("not_lead");
+    expect(["not_lead", "reading"]).toContain(b.classification);
+    expect(b.leadId).toBeNull();
     const inv = await db.query.emails.findFirst({ where: eq(emails.messageId, mid("<inv-008@accounts.wholesaler.example>")), with: { attachments: true } });
     expect(inv?.attachments[0]?.filename).toBe("INV-20419.pdf");
   });
 
-  it("classifies the other realistic enquiries as leads with the right service", async () => {
-    const expected: Record<string, string> = {
-      "02-ajax-alarm.eml": "Ajax alarm",
-      "03-access-control.eml": "Access control",
-      "04-intercom.eml": "Intercom",
-      "05-service-call.eml": "Alarm service",
-      "06-maintenance.eml": "CCTV service",
-    };
-    for (const [file, service] of Object.entries(expected)) {
+  it("hands every realistic enquiry to Hermes rather than guessing the service from the words", async () => {
+    for (const file of ["02-ajax-alarm.eml", "03-access-control.eml", "04-intercom.eml", "05-service-call.eml", "06-maintenance.eml"]) {
       const out = await processEmail((await ingestRawMessage({ mailboxId, raw: fx(file) })).emailId);
-      expect(out.classification, file).toBe("lead");
-      const lead = await db.query.leads.findFirst({ where: eq(leads.id, out.leadId!) });
-      expect(lead?.service, file).toBe(service);
-      if (file === "05-service-call.eml") expect(lead?.urgency).toBe("urgent");
+      expect(out.classification, file).toBe("reading");
+      expect(out.leadId, file).toBeNull();
+      // Hermes's reading of the maintenance request becomes St John's open lead (used below).
+      if (file === "06-maintenance.eml") createdLeadIds.push(await createLeadFromEmail(out.emailId, { actorId: null, overrides: { contact_name: "Karen Liu", service: "CCTV service", confidence: 0.9, reason: "Annual maintenance" } }));
     }
   });
 
@@ -282,7 +284,8 @@ describe.skipIf(!dovecotUp)("IMAP + SMTP against local Dovecot", () => {
     expect(s1.stored).toBeGreaterThanOrEqual(1);
     const stored = await db.query.emails.findFirst({ where: eq(emails.messageId, `<${id}@imap.test>`) });
     expect(stored?.imapUid).toBeGreaterThan(0);
-    expect(stored?.classification).toBe("lead");
+    // With Hermes; or already waiting for Chris, since Hermes is not reachable in this test.
+    expect(["reading", "needs_review"]).toContain(stored?.classification);
     // Nothing new → nothing stored, cursor unchanged.
     const s2 = await syncMailboxOnce(mailboxId);
     expect(s2.stored).toBe(0);
@@ -310,7 +313,7 @@ describe.skipIf(!dovecotUp)("IMAP + SMTP against local Dovecot", () => {
     controller.abort();
     await watcher;
     expect(stored, logs.join("\n")).toBeTruthy();
-    expect(stored?.classification).toBe("lead");
+    expect(["reading", "needs_review"]).toContain(stored?.classification);
   });
 
   it("sends a reply over SMTP and stores it on the same thread", async () => {

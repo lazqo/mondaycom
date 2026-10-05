@@ -25,29 +25,23 @@ Mailbox credentials themselves are entered in the app (Settings → Email accoun
 
 ## Lead classification
 
-Production runs the built-in offline classifier. There is no Anthropic account or API key.
+Hermes reads every email and conversation. There is no separate classifier, Anthropic account or API key.
 
 | Variable | Example | Why |
 | --- | --- | --- |
-| `AI_PROVIDER` | `rules` | **Production value.** Built-in offline classifier: keyword and pattern matching, no external service, no cost. `auto` would use Claude when a key is present; `anthropic` forces it and fails without a key. |
-| `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Auto-create leads at or above this; below goes to Needs review. Raise to `0.9` to be cautious. |
-| `ANTHROPIC_API_KEY` | `sk-ant-…` | Only if you ever switch `AI_PROVIDER` away from `rules`. From console.anthropic.com; costs roughly 2 US cents per email classified. |
-| `AI_MODEL` | `claude-opus-5` | Only used when the provider is Anthropic. |
 | `HERMES_API_URL` | `http://host.docker.internal:8642/p/inspector` | Hermes Agent's API server, on the restricted `inspector` profile (CRM tools only, no terminal or file access). With this and `HERMES_API_KEY` unset, Hermes is not connected and every new email and conversation waits in the Inspector for Chris. See section 17 of `docs/DEPLOYMENT_HANDOFF.md`. |
 | `HERMES_API_KEY` | `openssl rand -hex 32` | The inspector profile's `API_SERVER_KEY` (in `~/.hermes/profiles/inspector/.env`). |
 | `HERMES_MCP_TOKEN` | `openssl rand -hex 32` | Turns on `/api/mcp`, the CRM's tools for Hermes (read, and prepare/propose only). At least 24 characters. Unset = the endpoint is off. |
 | `HERMES_MODEL` | `hermes-agent` | Optional: the model/profile name Hermes exposes. |
 | `HERMES_TIMEOUT_MS` | `120000` | Optional: how long to wait for Hermes before falling back to review. |
-| `HERMES_MIN_CONFIDENCE` | `0.6` | Optional: below this, Hermes's recommendation waits for Chris. |
+| `HERMES_MIN_CONFIDENCE` | `0.6` | Optional floor for every threshold on the autonomy dial. Normally unset: Settings → Hermes sets the dial. |
 | `HERMES_RESEARCH_API_URL` | `http://host.docker.internal:8642/p/research` | Optional: Hermes's separate **research** profile (web access and the CRM's supplier tools; never customer email). Unset = research is off (questions are recorded, not answered). |
 | `HERMES_RESEARCH_API_KEY` | `openssl rand -hex 32` | The research profile's `API_SERVER_KEY` (in `~/.hermes/profiles/research/.env`). |
 | `HERMES_RESEARCH_MCP_TOKEN` | `openssl rand -hex 32` | The research profile's bearer token for `/api/mcp`: it sees only the supplier and candidate-update tools. At least 24 characters, different from `HERMES_MCP_TOKEN`. |
 | `HERMES_RESEARCH_MODEL` / `HERMES_RESEARCH_TIMEOUT_MS` | `hermes-agent` / `180000` | Optional. |
-| `JEV_SHADOW` | `off` | Leave off. `on` (together with `ANTHROPIC_API_KEY`) runs Jev beside the Inspector's rules in shadow mode: it classifies only, never drives an action, and sends the email or transcript text to Anthropic. See section 17 of `docs/DEPLOYMENT_HANDOFF.md`. |
-| `JEV_MODEL` | `claude-opus-5-5` | Only used when Jev is on. |
 
-Note: forwarded enquiries lose their details during extraction whichever classifier is active — see
-section 9 of `docs/DEPLOYMENT_HANDOFF.md`.
+Note: a forwarded enquiry's sender is the forwarder, not the customer — see section 9 of
+`docs/DEPLOYMENT_HANDOFF.md`.
 
 ## Operations
 
@@ -78,6 +72,6 @@ Not needed once the first admin exists. Either open `/setup` after deploying (re
 - [ ] `APP_URL` is the HTTPS domain; the host terminates TLS (cookies are `Secure` in production).
 - [ ] `APP_TIMEZONE=Pacific/Auckland`.
 - [ ] `INGEST_IN_PROCESS=true` on exactly one running instance.
-- [ ] `AI_PROVIDER=rules`. No Anthropic key is needed or wanted.
+- [ ] No `AI_PROVIDER`, `ANTHROPIC_API_KEY` or `JEV_*` variables: they are gone. Hermes is set up per section 17 of `docs/DEPLOYMENT_HANDOFF.md`.
 - [ ] `HEALTH_TOKEN` set and an uptime monitor polling `/api/health` every 5 minutes.
 - [ ] Opened `/setup` and completed the checklist; the seed variables are removed afterwards.

@@ -5,9 +5,10 @@
  *   recommendation) → validator (hard guardrails, business rules, advisories) → Unified Action
  *   Router (internal work now; Business Brain; customer-facing work prepared for Chris) → timeline
  *
- * The old deterministic rules no longer decide what a customer means: they find identity signals,
- * provide the fallback when Hermes is unavailable, and are kept beside Hermes's reading for
- * comparison. Jev is redundant (off by default); if switched on it only classifies in shadow.
+ * Hermes is the only reader. The CRM finds identity signals (signals.ts) before Hermes is asked and
+ * decides who the sender is by its own rules; everything else is Hermes's judgement, checked by the
+ * guardrails. When Hermes cannot be reached the item waits in the queue and is retried; after the
+ * retries it goes to Chris as "Hermes could not read it", with nothing invented.
  */
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
@@ -16,23 +17,22 @@ import { logActivity } from "@/lib/activity";
 import { createLeadFromEmail, markEmailNotLead } from "@/lib/email/pipeline";
 import { type Actor, assertApprover, GuardrailError } from "@/lib/guard/actor";
 import { NON_CUSTOMER_CONTEXTS, type HermesResult } from "@/lib/hermes/contract";
-import { analyse } from "./analyse";
 import { decideFact, diffFacts, storeFacts } from "./facts";
 import { decideIdentity, mergeCandidates } from "./identity";
-import { recordDecision, shadow } from "./jev";
 import { recordFeedback } from "./feedback";
-import { planActions } from "./plan";
+import { HERMES_ACTION_LABELS } from "./labels";
 import { alreadyInHand, routeActions, type RoutedAction } from "./router";
-import { validateHermes, type Validation } from "./validate";
+import { collectSignals } from "./signals";
+import { validateHermes, type Validation, SERVICE_DISPLAY } from "./validate";
 import { askHermes, type HermesStatus } from "@/lib/hermes/inspector";
-import { hermesMinConfidence } from "@/lib/hermes/runtime";
-import { collectSignals, crmKnown, crmState, emailInput, recordingInput, staffNames } from "./sources";
+import { hermesAutonomy } from "@/lib/hermes/autonomy";
+import { crmKnown, crmState, emailInput, recordingInput, staffNames } from "./sources";
 import { INSPECTOR_VERSION, type IdentityResult, type InspectorInput, type PlannedAction, type SourceType, type Understanding } from "./types";
 
 export type InspectOutcome = {
   inspectionId: string;
   status: string;
-  engine: "hermes" | "fallback" | "rules";
+  engine: "hermes" | "fallback";
   /** How the Hermes call went (ok, not_configured, unavailable, timeout, invalid_output, error). */
   hermesStatus: HermesStatus | null;
   hermesError: string | null;
@@ -46,13 +46,13 @@ async function loadInput(sourceType: SourceType, sourceId: string) {
 /**
  * Read one email or recording and act on it.
  *
- *   identity (the CRM's hard rules) → Hermes (understanding and recommendation) → validator (hard
- *   guardrails, business rules, advisories) → Unified Action Router (Business Brain, prepared
- *   drafts and quotes, tasks) → Chris approves anything customer-facing.
+ *   identity (the CRM's hard rules) → Hermes (understanding and recommendation) → validator (the
+ *   guardrails) → Unified Action Router (Business Brain, prepared drafts and quotes, tasks) →
+ *   Chris approves anything customer-facing.
  *
- * If Hermes is not connected, unavailable, slow or returns something unusable, the fallback keeps
- * the item: the deterministic extraction is used where it is safe (identity, blank facts,
- * commitments) and the item goes to Chris as NEEDS_REVIEW, never "no action".
+ * If Hermes is not connected, unavailable, slow or returns something unusable, the item is kept
+ * and retried; after the retries it goes to Chris as NEEDS_REVIEW ("Hermes could not read it"),
+ * never "no action" and never read by anything else.
  *
  * Safe to call again: a source already inspected by this version is skipped unless `force` (a
  * re-read supersedes the earlier one).
@@ -65,49 +65,16 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
 
   // ---- Identity: the CRM's hard rules, before and regardless of Hermes ----
   const staff = await staffNames();
-  const first = analyse(input, { staffNames: staff, hasQuote: false, hasSentQuote: false, hasOpenJob: false, known: false }, {}, null);
   let identity: IdentityResult;
   if (opts.identityOverride) identity = opts.identityOverride;
   else if (input.direction === "outbound" && !input.linked.leadId && !input.linked.contactId) identity = { status: "not_applicable", chosen: null, candidates: [], confidence: 0, reason: "Our own email with no customer linked." };
-  else {
-    const raw = await collectSignals(input, first.understanding);
-    identity = decideIdentity(mergeCandidates(raw), { allowNew: false });
-  }
+  else identity = decideIdentity(mergeCandidates(await collectSignals(input)), { allowNew: false });
   let leadId = identity.status === "matched" ? (identity.chosen?.leadId ?? null) : null;
   const contactIdChosen = identity.status === "matched" ? (identity.chosen?.contactId ?? null) : null;
   let state = await crmState(leadId, contactIdChosen, input);
   let contactId = contactIdChosen ?? state.contactId;
   let known = identity.status === "matched" ? await crmKnown(leadId, contactId) : {};
-  const who = state.lead?.name ?? identity.chosen?.label ?? input.from.name ?? null;
-
-  // ---- The old deterministic reading: comparison, debugging and the fallback only ----
-  const rules = analyse(input, { staffNames: staff, hasQuote: state.hasQuote, hasSentQuote: state.hasSentQuote, hasOpenJob: state.hasOpenJob, known: !!(leadId || contactId) }, known, who);
-  const rulesDiffs = identity.status === "matched" ? await diffFacts(rules.understanding.facts, leadId, contactId) : [];
-  const crmForPlan = {
-    leadId,
-    contactId,
-    jobId: state.jobId,
-    leadStatus: state.lead?.status ?? null,
-    hasOpenBrainQuote: state.hasOpenBrainQuote,
-    hasSentQuote: state.hasSentQuote,
-    hasOpenJob: state.hasOpenJob,
-    recordingLinked: state.recordingLinked,
-    newFacts: rulesDiffs.filter((d) => d.outcome !== "same").length,
-    customerEmail: state.customerEmail,
-    customerPhone: state.customerPhone,
-  };
-  const rulesPlan = identity.status === "not_applicable" ? [] : planActions(input, rules.understanding, identity, rules.known, crmForPlan);
-  const BASE = ["ADD_INTERNAL_NOTE", "LINK_RECORDING", "PROPOSE_LEAD_FACT_UPDATE"];
-  const rulesView = {
-    /** The rules classifier's verdict on an email (lead / not_lead / existing…): comparison only. */
-    classification: input.rulesClassification ?? null,
-    primaryIntent: rules.understanding.primaryIntent,
-    intents: rules.understanding.intents,
-    urgency: rules.understanding.urgency,
-    summary: rules.understanding.summary,
-    firstAction: rulesPlan.find((p) => !BASE.includes(p.type))?.type ?? null,
-    plan: rulesPlan.map((p) => ({ type: p.type, rule: p.rule })),
-  };
+  const autonomy = await hermesAutonomy();
 
   // ---- Hermes: the operational judgement ----
   const hermes = await askHermes(input, { identity, leadId, contactId, staffNames: staff });
@@ -119,7 +86,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
   let jobId = state.jobId;
   let senderUnverified = false;
   let storeCommitmentsFor = true;
-  const minConfidence = hermesMinConfidence();
+  const minConfidence = autonomy.thresholds.operational_state;
   if (hermes.status === "ok" && hermes.result) {
     engine = "hermes";
     const h = hermes.result;
@@ -134,17 +101,16 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
         identity,
         known,
         crm: { leadId, contactId, hasOpenBrainQuote: state.hasOpenBrainQuote, hasSentQuote: state.hasSentQuote, recordingLinked: state.recordingLinked, customerEmail: state.customerEmail, customerPhone: state.customerPhone },
-        minConfidence,
+        autonomy,
         citable: [...citable, ...(context?.accepted ? [context.ref] : [])],
         context,
-        rules: { primaryIntent: rulesView.primaryIntent, firstAction: rulesView.firstAction, urgency: rulesView.urgency },
       });
     validation = validate();
     planned = validation.plan;
     reviewKind = validation.reviewKind;
 
     // Hermes's lead decision (emails), carried out internally: audited, and Chris can reverse it.
-    const decision = validation.workContext ? null : await applyLeadDecision(h, input, minConfidence);
+    const decision = validation.workContext ? null : await applyLeadDecision(h, input, validation.understanding, minConfidence);
     if (decision?.kind === "created") {
       identity = { status: "matched", chosen: { leadId: decision.leadId, contactId: decision.contactId, jobId: null, label: decision.label, score: 1, signals: [{ kind: "linked", detail: "the lead Hermes created from this email", weight: 1 }] }, candidates: identity.candidates, confidence: 1, reason: "Hermes decided this is a new lead; the CRM created it from this email." };
       leadId = decision.leadId;
@@ -188,40 +154,23 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     }
     understanding = validation.understanding;
   } else {
-    // FALLBACK: keep the item, use the rules only where safe, and hand it to Chris.
+    // FALLBACK: Hermes could not read it. Nothing is invented: the item goes to Chris as it is.
     engine = "fallback";
-    understanding = rules.understanding;
+    understanding = emptyUnderstanding(input);
+    storeCommitmentsFor = false;
     const why = hermes.status === "not_configured" ? "Hermes is not connected" : `Hermes could not read it (${hermes.status.replace(/_/g, " ")}${hermes.error ? `: ${hermes.error}` : ""})`;
-    if (input.sourceType === "email" && input.rulesClassification === "not_lead") {
-      // The rules' "not a lead" stands until Hermes can read it (it is retried): nothing for Chris yet.
+    if (identity.status === "not_applicable" || input.direction === "outbound") {
       planned = [];
       reviewKind = null;
-      storeCommitmentsFor = false;
-    } else if (identity.status === "needs_review") {
-      planned = rulesPlan.map((p) => (p.type === "NEEDS_REVIEW" ? { ...p, payload: { ...p.payload, kind: "identity", hermesUnavailable: why } } : p));
-      reviewKind = "identity";
-    } else if (identity.status === "not_applicable" || input.direction === "outbound") {
-      // Our own email: commitments and a note only, nothing for Chris to decide.
-      planned = rulesPlan.filter((p) => BASE.includes(p.type));
-      reviewKind = null;
     } else {
-      planned = [
-        ...rulesPlan.filter((p) => BASE.includes(p.type)),
-        {
-          type: "NEEDS_REVIEW",
-          mode: "approval",
-          rule: "hermes_unavailable",
-          reason: `${why}. Nothing was prepared; read it again once Hermes is back, or deal with it by hand.`,
-          payload: { kind: "hermes_unavailable", hermesStatus: hermes.status, error: hermes.error, rulesSuggestion: rulesView.plan.filter((p) => !BASE.includes(p.type)) },
-        },
-      ];
+      planned = [{ type: "NEEDS_REVIEW", mode: "approval", rule: "hermes_unavailable", reason: `${why}. Nothing was prepared; read it again once Hermes is back, or deal with it by hand.`, payload: { kind: "hermes_unavailable", hermesStatus: hermes.status, error: hermes.error, question: "Hermes could not read this. Read it again, or deal with it by hand." } }];
       reviewKind = "hermes_unavailable";
     }
   }
 
   // Facts: filled in only for a verified customer; an unverified sender's facts are proposed to Chris.
   const factsAbout = identity.status === "matched" || senderUnverified;
-  const diffs = factsAbout && storeCommitmentsFor ? (engine === "fallback" ? rulesDiffs : await diffFacts(understanding.facts, leadId, contactId)) : [];
+  const diffs = factsAbout && storeCommitmentsFor ? await diffFacts(understanding.facts, leadId, contactId) : [];
   const factDiffs = senderUnverified ? diffs.map((d) => (d.outcome === "new" ? { ...d, outcome: "low_confidence" as const } : d)) : diffs;
 
   if (previous) {
@@ -250,7 +199,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       validation: validation
         ? { hard: validation.hard, business: validation.business, advisories: validation.advisories, rejectedFacts: validation.rejectedFacts, headline: validation.headline, reviewKind: validation.reviewKind, decisions: validation.decisions }
         : { fallback: { hermesStatus: hermes.status, error: hermes.error } },
-      rulesView,
+      rulesView: null,
       summary: understanding.summary,
       error: engine === "fallback" ? hermes.error : null,
     })
@@ -279,6 +228,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     .returning({ id: inspectorRuns.id });
 
   if (storeCommitmentsFor) await storeCommitments(row.id, input, understanding, factsAbout ? { leadId, contactId, jobId } : { leadId: null, contactId: null, jobId: null });
+  await settleClassification(input, { status, leadId, contactId, engine, verified: identity.status === "matched" && !senderUnverified });
   const detail = { inspectionId: row.id, sourceType, sourceId, title: input.title, summary: understanding.summary, engine, recommended: hermes.result?.recommended_action ?? null, confidence: hermes.result?.confidence ?? null };
   if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
   else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
@@ -306,8 +256,30 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       finalActions: actions.map((a) => ({ id: a.id, type: a.type, status: a.status, rule: a.rule, blocked: a.status === "blocked" ? (a.result?.reason ?? null) : null })),
     })
     .where(eq(inspectorRuns.id, run.id));
-  await shadow(row.id, input, rules.understanding, rulesPlan).catch(() => {});
   return { inspectionId: row.id, status, engine, hermesStatus: hermes.status, hermesError: hermes.error, actions };
+}
+
+/** What is known when Hermes could not read the source: nothing, honestly. */
+function emptyUnderstanding(input: InspectorInput): Understanding {
+  return { service: null, propertyType: null, intents: ["information"], primaryIntent: "information", urgency: "normal", facts: [], requested: [], timing: [], budget: [], objections: [], decisions: [], commitments: [], missing: [], quoteRefs: [], summary: input.title || "(no subject)" };
+}
+
+/**
+ * The email's filing follows Hermes's decision: an email "reading" becomes a lead (createLeadFromEmail
+ * does that), existing work when filed on a lead or customer, "needs review" when Chris has to decide
+ * (or Hermes could not read it), and otherwise stays read with nothing to file. A not-a-lead decision
+ * is applied by applyLeadDecision.
+ */
+async function settleClassification(input: InspectorInput, s: { status: string; leadId: string | null; contactId: string | null; engine: "hermes" | "fallback"; verified: boolean }) {
+  if (input.sourceType !== "email" || input.direction !== "inbound") return;
+  const e = await db.query.emails.findFirst({ where: eq(emails.id, input.sourceId), columns: { classification: true, leadId: true, contactId: true } });
+  if (!e || !["reading", "pending", "needs_review"].includes(e.classification)) return;
+  const next = s.status === "needs_review" ? "needs_review" : s.leadId || e.leadId || s.contactId || e.contactId ? "existing" : s.engine === "hermes" ? "not_lead" : null;
+  if (!next || next === e.classification) return;
+  // The sender is linked to a lead or customer only when the CRM verified who they are (an email
+  // address, phone number or thread). Work filed in Hermes's evidenced context stays unlinked.
+  const link = next === "existing" && s.verified ? { leadId: e.leadId ?? s.leadId, contactId: e.contactId ?? s.contactId } : {};
+  await db.update(emails).set({ classification: next as "existing", ...link, classifiedAt: new Date() }).where(eq(emails.id, input.sourceId));
 }
 
 /** Store what people said they would do. Never duplicates one already stored from the same source. */
@@ -345,7 +317,16 @@ async function storeCommitments(inspectionId: string, input: InspectorInput, u: 
 // ---------------- Hermes's operational decisions ----------------
 
 /** Supplier, provider, internal and irrelevant mail is never a lead, even when Hermes left the decision open. */
-const effectiveLeadDecision = (h: HermesResult) => (h.lead_decision !== "undecided" ? h.lead_decision : NON_CUSTOMER_CONTEXTS.includes(h.business_context) ? "not_lead" : "undecided");
+/**
+ * Hermes's lead decision, or what its reading amounts to when it left the field blank: a supplier,
+ * provider or internal message is not a lead; a new enquiry or quote request from a customer is one.
+ */
+const effectiveLeadDecision = (h: HermesResult) => {
+  if (h.lead_decision !== "undecided") return h.lead_decision;
+  if (NON_CUSTOMER_CONTEXTS.includes(h.business_context)) return "not_lead";
+  if (h.business_context !== "accounting_payment" && (h.conversation_type === "new_enquiry" || h.intent === "new_enquiry" || h.intent === "quote_request")) return "lead";
+  return "undecided";
+};
 
 type LeadDecision = { kind: "created"; leadId: string; contactId: string | null; label: string } | { kind: "proposed" } | { kind: "reversed"; leadId: string } | { kind: "kept_for_chris"; leadId: string } | { kind: "not_lead" };
 
@@ -356,7 +337,7 @@ type LeadDecision = { kind: "created"; leadId: string; contactId: string | null;
  * lost ("Not a lead"); a lead someone has worked on is left for Chris. Every step is on the timeline
  * and reversible.
  */
-async function applyLeadDecision(h: HermesResult, input: InspectorInput, minConfidence: number): Promise<LeadDecision | null> {
+async function applyLeadDecision(h: HermesResult, input: InspectorInput, u: Understanding, minConfidence: number): Promise<LeadDecision | null> {
   if (input.sourceType !== "email" || input.direction !== "inbound") return null;
   const e = await db.query.emails.findFirst({ where: eq(emails.id, input.sourceId), columns: { id: true, leadId: true, classification: true, contactId: true } });
   if (!e) return null;
@@ -364,14 +345,32 @@ async function applyLeadDecision(h: HermesResult, input: InspectorInput, minConf
   if (decision === "lead") {
     if (e.leadId) return null;
     if (h.confidence < minConfidence) return { kind: "proposed" };
-    const leadId = await createLeadFromEmail(e.id, { actorId: null });
+    // The lead carries Hermes's reading of the email (checked facts), not a second extraction.
+    const fact = (k: string) => u.facts.find((f) => f.key === k);
+    const leadId = await createLeadFromEmail(e.id, {
+      actorId: null,
+      overrides: {
+        is_lead: true,
+        confidence: h.confidence,
+        contact_name: (fact("contact_name")?.value as string | undefined) ?? input.form?.name ?? input.from.name ?? null,
+        company: (fact("company")?.value as string | undefined) ?? null,
+        email: (fact("email")?.value as string | undefined) ?? input.form?.email ?? input.from.email ?? null,
+        phone: fact("phone")?.display ?? input.form?.phone ?? input.from.phone ?? null,
+        service: fact("service")?.display ?? (u.service ? (SERVICE_DISPLAY[u.service] ?? null) : null) ?? input.form?.service ?? null,
+        site_address: (fact("site_address")?.value as string | undefined) ?? input.form?.address ?? null,
+        summary: h.summary,
+        urgency: h.urgency,
+        next_action: HERMES_ACTION_LABELS[h.recommended_action] ?? h.recommended_action,
+        reason: h.reason,
+      },
+    });
     const lead = (await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { name: true, contactId: true } }))!;
-    await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "lead_created_by_hermes", detail: { emailId: e.id, reason: h.reason, confidence: h.confidence, rulesClassification: e.classification } });
+    await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "lead_created_by_hermes", detail: { emailId: e.id, reason: h.reason, confidence: h.confidence } });
     return { kind: "created", leadId, contactId: lead.contactId, label: lead.name };
   }
   if (decision === "not_lead" && h.confidence >= minConfidence) {
     if (!e.leadId) {
-      if (e.classification === "needs_review") await db.update(emails).set({ classification: "not_lead", classifiedAt: new Date() }).where(eq(emails.id, e.id));
+      if (e.classification === "needs_review" || e.classification === "reading") await db.update(emails).set({ classification: "not_lead", classifiedAt: new Date() }).where(eq(emails.id, e.id));
       return { kind: "not_lead" };
     }
     const lead = await db.query.leads.findFirst({ where: eq(leads.id, e.leadId), columns: { id: true, status: true, sourceEmailId: true, createdById: true } });
@@ -492,7 +491,6 @@ export async function confirmIdentity(inspectionId: string, choice: { leadId?: s
       const e = await db.query.emails.findFirst({ where: eq(emails.id, ins.sourceId), columns: { classification: true } });
       if (e?.classification === "needs_review") await markEmailNotLead(ins.sourceId, actor.userId);
     }
-    await recordDecision(inspectionId, { identity: "not_a_customer" });
     await recordFeedback({ inspectionId, kind: "not_a_customer", userId: actor.userId });
     return null;
   }
@@ -511,7 +509,6 @@ export async function confirmIdentity(inspectionId: string, choice: { leadId?: s
   }
   await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date() }).where(and(eq(inspectorActions.inspectionId, inspectionId), eq(inspectorActions.status, "awaiting_approval"), inArray(inspectorActions.type, ["NEEDS_REVIEW", "LINK_RECORDING"])));
   await db.update(inspections).set({ reviewedById: actor.userId, reviewedAt: new Date() }).where(eq(inspections.id, inspectionId));
-  await recordDecision(inspectionId, { identity: { leadId, contactId } });
   await recordFeedback({ inspectionId, leadId, contactId, kind: "identity_confirmed", value: { suggested: ((ins.hermes as { identity?: unknown } | null)?.identity ?? null) as Record<string, unknown> | null, leadId, contactId }, userId: actor.userId });
   const lead = leadId ? await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { name: true } }) : null;
   return inspect(ins.sourceType as SourceType, ins.sourceId, {
@@ -573,7 +570,6 @@ export async function acceptAction(actionId: string, actor: Actor): Promise<Reco
   const done = inHand ? [] : await routeActions(follow, routeCtx);
   result = inHand ? { followUp: [], ...inHand } : { followUp: done };
   await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result }).where(eq(inspectorActions.id, actionId));
-  await recordDecision(ins.id, { [`action:${a.type}`]: "accepted" });
   await recordFeedback({ inspectionId: ins.id, kind: "action_accepted", subject: a.type, value: { rule: a.rule, followUp: done.map((d) => ({ type: d.type, status: d.status })) }, userId: actor.userId });
   if (a.leadId) await logActivity({ entity: "lead", entityId: a.leadId, actorId: actor.userId, action: "inspector_action_accepted", detail: { type: a.type, reason: a.reason } });
   return result;
@@ -584,7 +580,6 @@ export async function dismissAction(actionId: string, actor: Actor, note: string
   const a = await db.query.inspectorActions.findFirst({ where: eq(inspectorActions.id, actionId) });
   if (!a) throw new Error("Action not found");
   await db.update(inspectorActions).set({ status: "dismissed", decidedById: actor.userId, decidedAt: new Date(), result: { ...(a.result ?? {}), note } }).where(eq(inspectorActions.id, actionId));
-  await recordDecision(a.inspectionId, { [`action:${a.type}`]: "dismissed" });
   await recordFeedback({ inspectionId: a.inspectionId, kind: "action_dismissed", subject: a.type, value: { rule: a.rule, note }, userId: actor.userId });
   // Dismissing the review card itself settles the review.
   if (a.type === "NEEDS_REVIEW") await db.update(inspections).set({ status: "analysed", reviewedById: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(and(eq(inspections.id, a.inspectionId), eq(inspections.status, "needs_review")));
@@ -626,7 +621,6 @@ export async function resolveFact(factId: string, decision: "apply" | "reject", 
   if (actor.kind !== "human") throw new GuardrailError("Only a person can resolve a conflicting fact.");
   await decideFact(factId, decision, actor.userId);
   const f = await db.query.facts.findFirst({ where: eq(facts.id, factId), columns: { inspectionId: true, key: true, leadId: true } });
-  if (f?.inspectionId) await recordDecision(f.inspectionId, { [`fact:${f.key}`]: decision });
   await recordFeedback({ inspectionId: f?.inspectionId ?? null, kind: decision === "apply" ? "fact_applied" : "fact_rejected", subject: f?.key ?? null, userId: actor.userId });
 }
 

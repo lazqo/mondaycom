@@ -8,7 +8,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 
-process.env.AI_PROVIDER = "rules";
 
 const { db } = await import("@/db");
 const { drafts, emailThreads, installationPackages, leads, mailboxes, products, quoteDocuments, quotes, supplierProducts, suppliers, users, catalogueImages } = await import("@/db/schema");

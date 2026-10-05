@@ -1,11 +1,11 @@
 /**
  * Reads for the Lead + Conversation Inspector: the review queue, the panels on a lead or job, the
- * commitments on Today, and Jev's shadow answers beside the rules' and Chris's.
+ * commitments on Today.
  */
 import { and, asc, desc, eq, inArray, lt, ne, notInArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { commitments, contacts, emails, facts, inspections, inspectorActions, jevObservations, jobs, leads, recordings } from "@/db/schema";
+import { commitments, contacts, emails, facts, inspections, inspectorActions, jobs, leads, recordings } from "@/db/schema";
 import type { CommitmentRow, Fact, Inspection, InspectorActionRow } from "@/db/schema";
 import type { IdentityCandidate, IdentityResult, Understanding } from "@/lib/inspector/types";
 
@@ -203,24 +203,4 @@ export async function getInspectorPanel(scope: { leadId?: string | null; jobId?:
     conflicts: conflicts.map((f): ConflictItem => ({ fact: f, source: src.get(f.sourceId) ?? null, subject: null })),
     commitments: commitmentItems,
   };
-}
-
-/** Jev's shadow answers beside the rules' answer and what Chris actually did. */
-export async function getJevComparison(limit = 50) {
-  const rows = await db
-    .select({ obs: jevObservations, sourceType: inspections.sourceType, sourceId: inspections.sourceId, summary: inspections.summary })
-    .from(jevObservations)
-    .innerJoin(inspections, eq(inspections.id, jevObservations.inspectionId))
-    .orderBy(desc(jevObservations.createdAt))
-    .limit(limit);
-  const src = await sourcesFor(rows);
-  const FIELDS = ["intent", "urgency", "quote_readiness", "next_move", "objection_type"] as const;
-  const agreement = Object.fromEntries(
-    FIELDS.map((f) => {
-      const comparable = rows.filter((r) => r.obs.output && r.obs.output[f] !== undefined);
-      const same = comparable.filter((r) => r.obs.output![f] === r.obs.deterministic[f]).length;
-      return [f, { same, of: comparable.length }];
-    }),
-  ) as Record<(typeof FIELDS)[number], { same: number; of: number }>;
-  return { fields: FIELDS, agreement, rows: rows.map((r) => ({ ...r.obs, source: src.get(r.sourceId) ?? null, summary: r.summary })) };
 }

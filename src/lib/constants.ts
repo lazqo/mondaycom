@@ -118,9 +118,10 @@ export const SERVICE_SUGGESTIONS = [
 export const DEFAULT_TAX_RATE = 15; // NZ GST
 
 export const EMAIL_CLASSIFICATIONS = [
-  "pending", // stored, not yet classified
-  "lead", // AI confident: lead created automatically
-  "needs_review", // AI unsure or low confidence: waiting for a human
+  "pending", // stored, not yet looked at
+  "reading", // with Hermes: it decides what it is
+  "lead", // a lead was created (a website form, Hermes, or a person)
+  "needs_review", // Hermes could not decide, or could not read it: waiting for a person
   "not_lead", // newsletter, invoice, supplier, spam, etc.
   "existing", // reply on a thread already linked to a lead/customer/job
   "outbound", // sent from the CRM
@@ -129,6 +130,7 @@ export const EMAIL_CLASSIFICATIONS = [
 export type EmailClassification = (typeof EMAIL_CLASSIFICATIONS)[number];
 export const EMAIL_CLASSIFICATION_META: Record<EmailClassification, { label: string; bg: string; text: string }> = {
   pending: { label: "Waiting", bg: "bg-gray-200", text: "text-gray-700" },
+  reading: { label: "Hermes is reading", bg: "bg-gray-200", text: "text-gray-700" },
   lead: { label: "New lead", bg: "bg-[#00c875]", text: "text-white" },
   needs_review: { label: "Needs review", bg: "bg-[#ffcb00]", text: "text-gray-900" },
   not_lead: { label: "Not a lead", bg: "bg-gray-400", text: "text-white" },

@@ -3,8 +3,8 @@
  * it appears on the Leads board with extracted fields and the original email attached →
  * a Needs-review email is accepted by a person → a reply is sent through SMTP and kept on the thread.
  *
- * Requires tests/support/dovecot/start.sh to be running (skipped otherwise) and uses the offline
- * rules classifier (AI_PROVIDER=rules) so results are deterministic.
+ * Requires tests/support/dovecot/start.sh to be running (skipped otherwise). Hermes is the stand-in
+ * in tests/support/hermes-mock.ts, so what it reads is deterministic.
  */
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -15,6 +15,9 @@ const EMAIL = process.env.E2E_EMAIL ?? process.env.SEED_ADMIN_EMAIL ?? "admin@ge
 const PASSWORD = process.env.E2E_PASSWORD ?? process.env.SEED_ADMIN_PASSWORD ?? "change-me";
 const IMAP_PORT = process.env.DOVECOT_TEST_PORT ?? "1143";
 const RUN = `e2e${Date.now().toString(36)}`;
+// A phone number of this run's own: the local IMAP inbox keeps earlier runs' copies of the same
+// fixture, and a repeated phone number would (rightly) file this run's email on that earlier lead.
+const PHONE = `027 ${String(Date.now()).slice(-7, -4)} ${String(Date.now()).slice(-4)}`;
 
 function dovecotUp(): boolean {
   try {
@@ -31,13 +34,21 @@ function deliver(fixture: string, tag: string, subjectSuffix = ""): { from: stri
   const from = raw.match(/^From: .*?<?([\w.+-]+@[\w.-]+)>?\s*$/m)![1];
   const unique = from.replace("@", `+${RUN}${tag}@`);
   raw = raw.split(from).join(unique);
-  raw = raw.replace(/^Message-ID: .*$/m, `Message-ID: <${RUN}-${tag}@e2e.test>`);
+  raw = raw.replace(/^Message-ID: .*$/m, `Message-ID: <${RUN}-${tag}@e2e.test>`).split("027 555 0311").join(PHONE);
   const subject = raw.match(/^Subject: (.*)$/m)![1] + subjectSuffix;
   raw = raw.replace(/^Subject: .*$/m, `Subject: ${subject}`);
   const path = `test-results/${RUN}-${tag}.eml`;
   writeFileSync(path, raw);
   execFileSync("tests/support/dovecot/deliver.sh", [path]);
   return { from: unique, subject };
+}
+
+/** Hermes reads in the background: reload until what we expect is there. */
+async function eventually(page: Page, url: string, check: () => Promise<void>) {
+  await expect(async () => {
+    await page.goto(url);
+    await check();
+  }).toPass({ timeout: 45_000, intervals: [500, 1000, 2000] });
 }
 
 async function login(page: Page) {
@@ -93,16 +104,18 @@ test.describe("Titan-style email ingestion", () => {
     await page.getByTestId("sync-now").click();
     await expect(page.getByText(/stored \d+|new,/)).toBeVisible({ timeout: 30_000 });
 
-    // Inbox shows sender, subject, received time, classification, linked lead.
+    // Inbox shows sender, subject, received time, Hermes's verdict, linked lead. Bulk mail is filed
+    // at once; the rest a moment later, once Hermes has read it.
     const ajaxRow = page.locator("tr", { hasText: ajax.subject });
-    await expect(ajaxRow).toBeVisible();
+    const vagueRow = page.locator("tr", { hasText: vague.subject });
+    await eventually(page, "/inbox", async () => {
+      await expect(ajaxRow.getByText("New lead", { exact: true })).toBeVisible({ timeout: 1000 });
+      await expect(vagueRow.getByText("Needs review")).toBeVisible({ timeout: 1000 });
+    });
     await expect(ajaxRow).toContainText("Dean Walker");
-    await expect(ajaxRow.getByText("New lead", { exact: true })).toBeVisible();
     await expect(ajaxRow.getByRole("link", { name: /Dean Walker/ })).toBeVisible();
     const newsRow = page.locator("tr", { hasText: newsletter.subject });
     await expect(newsRow.getByText("Not a lead")).toBeVisible();
-    const vagueRow = page.locator("tr", { hasText: vague.subject });
-    await expect(vagueRow.getByText("Needs review")).toBeVisible();
 
     // Not-lead mail is searchable but stays out of Leads.
     await page.goto(`/inbox?filter=not_lead&q=${encodeURIComponent(RUN)}`);
@@ -113,8 +126,8 @@ test.describe("Titan-style email ingestion", () => {
     const newGroup = page.getByRole("region", { name: "New leads" });
     const leadRow = newGroup.locator("tr", { hasText: "Dean Walker" }).filter({ hasText: ajax.from });
     await expect(leadRow).toBeVisible();
-    await expect(leadRow.getByRole("button", { name: "Phone" })).toHaveText("027 555 0311");
-    await expect(leadRow.getByRole("button", { name: "Service" })).toHaveText("Ajax alarm");
+    await expect(leadRow.getByRole("button", { name: "Phone" })).toHaveText(PHONE);
+    await expect(leadRow.getByRole("button", { name: "Service" })).toHaveText("Alarm");
     await expect(leadRow.getByRole("button", { name: "Site" })).toHaveText(/27 Kauri Grove/);
     await expect(leadRow.getByRole("combobox", { name: "Source" })).toHaveValue("email");
     await expect(page.locator("tr", { hasText: "Security Supplies" })).toHaveCount(0);
@@ -152,9 +165,8 @@ test.describe("Titan-style email ingestion", () => {
     await page.goto("/inbox");
     await page.getByTestId("sync-now").click();
     await expect(page.getByText(/new,/)).toBeVisible({ timeout: 30_000 });
-    await page.goto(`/inbox?filter=needs_review&q=${encodeURIComponent(RUN)}`);
     const row = page.locator("tr", { hasText: vague2.subject });
-    await expect(row).toBeVisible();
+    await eventually(page, `/inbox?filter=needs_review&q=${encodeURIComponent(RUN)}`, async () => expect(row).toBeVisible({ timeout: 1000 }));
     await row.locator("[data-testid^=row-reject-]").click();
     await expect(page.locator("tr", { hasText: vague2.subject })).toHaveCount(0);
     await page.goto(`/inbox?filter=not_lead&q=${encodeURIComponent(RUN)}`);

@@ -20,10 +20,10 @@
  *
  * Every call, allowed, refused or failed, is written to agent_audit.
  */
-import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, desc, eq, notInArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { agentAudit, drafts, facts, inspections, inspectorActions, leads, tasks, users } from "@/db/schema";
+import { agentAudit, facts, inspections, inspectorActions, leads } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
@@ -31,9 +31,8 @@ import { type Actor, assertAgentMay, GuardrailError, type AgentCapability } from
 import { enquiryWithFacts } from "@/lib/inspector/brain";
 import { normaliseFact, replyProblem } from "@/lib/inspector/validate";
 import { crmKnown, serviceKey } from "@/lib/inspector/sources";
-import { alreadyInHand, openTaskTitled } from "@/lib/inspector/router";
+import { alreadyInHand, createTask, waitingDraft } from "@/lib/inspector/work";
 import { FACT_KEYS, type FactKey } from "@/lib/inspector/types";
-import { dateInAppTz } from "@/lib/email/pipeline";
 import { compareSuppliers, listSuppliers, searchCatalogue } from "@/lib/brain/suppliers/lookup";
 import { liveSupplierLookup } from "@/lib/brain/suppliers/connector";
 import { findPatterns, listPackages, packageProposalSchema, proposePackage, quotedConfigurations } from "@/lib/brain/packages";
@@ -69,9 +68,6 @@ async function requireLead(leadId: string) {
   const l = await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { id: true, name: true, contactId: true, email: true } });
   if (!l) throw new Error("Lead not found.");
   return l;
-}
-async function chrisId() {
-  return (await db.query.users.findFirst({ where: and(eq(users.canApprove, true), eq(users.active, true)), columns: { id: true } }))?.id ?? null;
 }
 
 export const TOOLS: Tool[] = [
@@ -155,12 +151,8 @@ export const TOOLS: Tool[] = [
     description: "Create a task for Chris on a lead or customer (internal; nothing is sent).",
     input: z.object({ lead_id: uuid.optional(), customer_id: uuid.optional(), title: z.string().min(1).max(200), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), detail: z.string().max(2000).optional() }).refine((v) => v.lead_id || v.customer_id, "lead_id or customer_id is required"),
     run: async (a) => {
-      const today = dateInAppTz(new Date());
-      // Never a second open task with the same title on the same lead or customer.
-      const same = await openTaskTitled({ leadId: a.lead_id ?? null, contactId: a.customer_id ?? null }, a.title);
-      if (same) return { taskId: same.id, alreadyOpen: true };
-      const [t] = await db.insert(tasks).values({ title: a.title, detail: a.detail ? `${a.detail}\n(From Hermes)` : "From Hermes", dueAt: a.due && a.due >= today ? a.due : today, kind: "task", leadId: a.lead_id ?? null, contactId: a.customer_id ?? null, assignedToId: await chrisId() }).returning({ id: tasks.id });
-      return { taskId: t.id };
+      const r = await createTask({ leadId: a.lead_id ?? null, contactId: a.customer_id ?? null }, { title: a.title, due: a.due ?? "today", detail: a.detail ? `${a.detail}\n(From Hermes)` : "From Hermes", kind: "task", ruleKey: "hermes:mcp" });
+      return { taskId: r.taskId, alreadyOpen: r.alreadyOpen };
     },
     leadOf: ids,
   }),
@@ -197,10 +189,10 @@ export const TOOLS: Tool[] = [
       if (run.packet.siteVisit?.required) return { blocked: true, reason: "The Business Brain requires a site visit first.", reasons: run.packet.siteVisit.reasons };
       const priced = run.packet.costing.lines.filter((l) => l.priced && l.unitSellExGst != null && !l.internalOnly).length;
       if (!priced) {
-        const [t] = await db.insert(tasks).values({ title: `Price the quote for ${lead.name}`, detail: "Hermes asked for a quote; nothing in the Business Brain's design has an approved price yet.", dueAt: dateInAppTz(new Date()), kind: "quote", leadId: lead.id, contactId: lead.contactId, assignedToId: await chrisId() }).returning({ id: tasks.id });
-        return { blocked: true, reason: "Nothing in the design has an approved price yet, so no quote was prepared.", taskId: t.id };
+        const t = await createTask({ leadId: lead.id, contactId: lead.contactId }, { title: `Price the quote for ${lead.name}`, detail: "Hermes asked for a quote; nothing in the Business Brain's design has an approved price yet.", kind: "quote", due: "today", ruleKey: "hermes:mcp" });
+        return { blocked: true, reason: "Nothing in the design has an approved price yet, so no quote was prepared.", taskId: t.taskId };
       }
-      const waiting = await db.query.drafts.findFirst({ where: and(eq(drafts.leadId, lead.id), eq(drafts.kind, "email"), inArray(drafts.status, ["draft", "ready_for_review", "approved"])), columns: { id: true } });
+      const waiting = await waitingDraft(lead.id);
       const r = await prepareFromAssessment(run.id, { quote: true, email: !waiting }, HERMES_ACTOR);
       await logActivity({ entity: "lead", entityId: lead.id, actorId: null, action: "quote_prepared_by_inspector", detail: { quoteId: r.quoteId, quoteNumber: r.quoteNumber, draftId: r.draftId ?? null, by: "Hermes" } });
       return { prepared: true, quoteNumber: r.quoteNumber ? `Q-${r.quoteNumber}` : null, waitsFor: "Chris's approval in Approvals" };
@@ -218,6 +210,8 @@ export const TOOLS: Tool[] = [
       const problem = replyProblem(a.body);
       if (problem) throw new GuardrailError(`Draft refused: ${problem}.`);
       if (!lead.email) throw new Error("The lead has no email address.");
+      const already = await waitingDraft(lead.id);
+      if (already) return { draftId: already.id, status: "already_waiting", waitsFor: "Chris's approval (a reply was already waiting; a second is never stacked on it)" };
       const d = await createDraft({ kind: "email", leadId: lead.id, contactId: lead.contactId, to: [lead.email], subject: a.subject, body: a.body }, HERMES_ACTOR, { submit: true });
       return { draftId: d.id, status: d.status, waitsFor: "Chris's approval" };
     },
@@ -274,8 +268,8 @@ export const TOOLS: Tool[] = [
         return { queued: "Inspector review" };
       }
       const lead = await requireLead(a.lead_id!);
-      const [t] = await db.insert(tasks).values({ title: `Hermes asks you to review ${lead.name}`, detail: a.reason, dueAt: dateInAppTz(new Date()), kind: "task", leadId: lead.id, contactId: lead.contactId, assignedToId: await chrisId() }).returning({ id: tasks.id });
-      return { taskId: t.id };
+      const t = await createTask({ leadId: lead.id, contactId: lead.contactId }, { title: `Hermes asks you to review ${lead.name}`, detail: a.reason, kind: "task", due: "today", ruleKey: "hermes:mcp" });
+      return { taskId: t.taskId, alreadyOpen: t.alreadyOpen };
     },
     leadOf: ids,
   }),

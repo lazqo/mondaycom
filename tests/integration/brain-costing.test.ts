@@ -9,7 +9,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 
-process.env.AI_PROVIDER = "rules";
 
 const { db } = await import("@/db");
 const { drafts, installationPackages, leads, products, quotes, cctvKits, supplierProducts, suppliers, users } = await import("@/db/schema");

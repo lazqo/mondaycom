@@ -9,9 +9,9 @@ kanban), lead conversion to customer + job (+ optional draft quote), quotes with
 jobs with scheduling onto a built-in calendar, user management, and an activity log.
 
 v0.2: **Titan email ingestion.** A mailbox is connected over IMAP/SMTP; new enquiries are stored with
-their full original message and thread, classified by a pluggable classifier (the built-in offline
-rules by default, optionally Claude), and turned into Leads automatically when confidence is high or
-sent to a Needs-review queue when not.
+their full original message and thread, pre-filtered mechanically (bulk mail, known senders,
+website forms) and otherwise read by Hermes, whose reading becomes the lead or a question for Chris
+on Home (see `docs/DEPLOYMENT_HANDOFF.md` sections 9 and 17).
 Replies are sent from the CRM through Titan SMTP and kept on the same thread.
 
 v0.3: **Today dashboard, calendar & dispatch, My Day, follow-up automations.** A morning
@@ -83,9 +83,9 @@ src/actions/        server actions: leads, contacts, quotes, jobs, events, users
 src/queries/        read queries used by pages (email.ts for inbox/threads)
 src/components/     UI: leads board (table/kanban/cells), inbox, calendar, forms, layout, primitives
 src/db/             Drizzle schema + client
-src/lib/ai/         provider-neutral lead classifier interface + Anthropic and offline-rules providers
+src/lib/hermes/     Hermes contract, context pack, authority matrix, autonomy dial, MCP tools, research
 src/lib/automations/ follow-up rules (one candidate per entity) and the idempotent runner
-src/lib/email/      parse, store/thread, classification pipeline, IMAP sync + IDLE watcher, SMTP replies
+src/lib/email/      parse, store/thread, mechanical filing pipeline, IMAP sync + IDLE watcher, SMTP replies
 src/worker/         standalone ingestion worker entry point (src/instrumentation.ts runs it in-process)
 src/lib/            auth (JWT cookie sessions), env validation, crypto for mailbox secrets, constants
 drizzle/            SQL migrations (generated; commit them)
@@ -103,8 +103,6 @@ tests/              unit (Vitest) and e2e (Playwright)
 | `APP_TIMEZONE` | no | IANA zone for server-rendered times (default `Pacific/Auckland`) |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` / `SEED_ADMIN_NAME` | seed only | Used by `pnpm db:seed` when no users exist |
 | `ENCRYPTION_KEY` | no | Key for mailbox passwords at rest (derived from `AUTH_SECRET` if unset) |
-| `AI_PROVIDER` | no | `auto` (default), `anthropic`, or `rules` |
-| `ANTHROPIC_API_KEY` / `AI_MODEL` | for Claude | Model defaults to `claude-opus-5` |
-| `AI_LEAD_CONFIDENCE_THRESHOLD` | no | Auto-create leads at or above this confidence (default 0.75) |
+| `HERMES_API_URL` / `HERMES_API_KEY` | for Hermes | Hermes Agent's API server (inspector profile); unset = every enquiry waits for a person |
 | `INGEST_IN_PROCESS` | no | `true` runs the IMAP watcher inside the web server |
 | `INGEST_POLL_SECONDS` | no | Backstop poll interval for mailboxes (default 120) |

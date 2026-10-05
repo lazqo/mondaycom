@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import { parseHermesResult, HermesOutputError, type HermesResult } from "@/lib/hermes/contract";
 import { evidenceFound, normaliseFact, replyProblem, sourceHaystack, validateHermes, type ValidateContext } from "@/lib/inspector/validate";
 import type { IdentityResult, InspectorInput } from "@/lib/inspector/types";
+import { AUTONOMY_DEFAULTS } from "@/lib/hermes/autonomy";
 
 const AT = new Date("2026-10-07T01:00:00Z"); // 2pm Wednesday 7 Oct, Auckland
 const input = (text: string, over: Partial<InspectorInput> = {}): InspectorInput => ({
@@ -27,8 +28,6 @@ const ctx = (i: InspectorInput, over: Partial<ValidateContext> = {}): ValidateCo
   identity: matched,
   known: {},
   crm: { leadId: "L1", contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: "aroha@example.com", customerPhone: null },
-  minConfidence: 0.6,
-  rules: null,
   ...over,
 });
 const H = (over: Record<string, unknown>): HermesResult =>
@@ -90,15 +89,29 @@ describe("hard guardrails", () => {
     expect(v.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.question).toMatch(/dealt with/);
   });
 
-  it("low confidence: internal work goes ahead; what prepares customer output waits for Chris with the plan attached", () => {
+  it("the autonomy dial decides what low confidence holds: each class has its own threshold and level", () => {
     const i = input("Interested in cameras");
-    const task = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.3 }), ctx(i));
+    // Internal work at 0.65 clears the internal_work threshold (0.6) and goes ahead.
+    const task = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.65 }), ctx(i));
     expect(task.reviewKind).toBeNull();
     expect(types(task)).toContain("CREATE_INTERNAL_TASK");
-    const quote = validateHermes(H({ recommended_action: "PREPARE_QUOTE", internal_actions: [{ action: "CREATE_INTERNAL_TASK", title: "Check the site on Maps", reason: "x" }], confidence: 0.3 }), ctx(i));
+    // Below the threshold the same task waits for Chris, with the plan attached.
+    const held = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.3 }), ctx(i));
+    expect(held.reviewKind).toBe("hermes_low_confidence");
+    // Turning the dial down for internal work lets it through; the quote still waits at its own threshold.
+    const lowDial = { ...AUTONOMY_DEFAULTS, thresholds: { ...AUTONOMY_DEFAULTS.thresholds, internal_work: 0.2 } };
+    const loose = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.3 }), ctx(i, { autonomy: lowDial }));
+    expect(loose.reviewKind).toBeNull();
+    const quote = validateHermes(H({ recommended_action: "PREPARE_QUOTE", internal_actions: [{ action: "CREATE_INTERNAL_TASK", title: "Check the site on Maps", reason: "x" }], confidence: 0.3 }), ctx(i, { autonomy: lowDial }));
     expect(quote.reviewKind).toBe("hermes_low_confidence");
     expect(types(quote)).toContain("CREATE_INTERNAL_TASK");
     expect((quote.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.plan as { type: string }[]).map((p) => p.type)).toEqual(["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]);
+    // "Never" refuses whatever the confidence.
+    const never = { ...AUTONOMY_DEFAULTS, levels: { ...AUTONOMY_DEFAULTS.levels, internal_work: "never" as const } };
+    const refused = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.95 }), ctx(i, { autonomy: never }));
+    expect(types(refused)).not.toContain("CREATE_INTERNAL_TASK");
+    expect(refused.hard.map((c) => c.rule)).toContain("autonomy_never");
+    expect(refused.decisions).toContainEqual({ action: "CREATE_INTERNAL_TASK", allowed: false, rule: "autonomy_never" });
   });
 
   describe("Hermes decides whether a matter is resolved; the CRM only checks the evidence is real", () => {
@@ -256,18 +269,6 @@ describe("the Business Brain keeps its authority (and decides its own inputs whe
   it("an acceptance never accepts terms: Chris gets the task", () => {
     const v = validateHermes(H({ intent: "acceptance", conversation_type: "quote_follow_up", recommended_action: "WAITING_ON_CUSTOMER" }), ctx(input("Yes let's go ahead")));
     expect(v.plan.find((p) => p.rule === "customer_accepted")).toBeTruthy();
-  });
-});
-
-describe("advisories never block", () => {
-  it("the old rules' different reading is logged; the recommendation stands", () => {
-    const v = validateHermes(
-      H({ facts: [{ key: "camera_count", value: 2, evidence: "Cameras: 2", confidence: 0.95 }, { key: "storeys", value: 2, evidence: "Storeys: Double storey", confidence: 0.95 }], recommended_action: "PREPARE_QUOTE" }),
-      ctx(input("Cameras: 2 Storeys: Double storey"), { rules: { primaryIntent: "information", firstAction: "NO_ACTION", urgency: "normal" } }),
-    );
-    expect(v.advisories.map((a) => a.rule)).toContain("rules_disagree");
-    expect(v.advisories.map((a) => a.rule)).not.toContain("two_storey_complexity");
-    expect(types(v)).toContain("PREPARE_QUOTE");
   });
 });
 

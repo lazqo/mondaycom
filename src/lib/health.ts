@@ -12,7 +12,7 @@ export type Health = {
   ingestion: { mode: "in-process" | "worker" | "off"; mailboxes: { address: string; active: boolean; lastSyncAt: string | null; minutesSinceSync: number | null; lastError: string | null; stale: boolean }[] };
   emails: { pending: number; needsReview: number; errors: number };
   automations: { lastRunAt: string | null; minutesSinceRun: number | null; open: number | null };
-  ai: { provider: "anthropic" | "rules"; model: string | null };
+  hermes: { connected: boolean; model: string | null };
   warnings: string[];
 };
 
@@ -57,7 +57,6 @@ export async function getHealth(): Promise<Health> {
   } else {
     warnings.push("Database is unreachable");
   }
-  const aiLive = env.AI_PROVIDER === "anthropic" || (env.AI_PROVIDER === "auto" && !!env.ANTHROPIC_API_KEY);
   const mode: Health["ingestion"]["mode"] = env.INGEST_IN_PROCESS ? "in-process" : process.env.PROCESS_TYPE === "worker" ? "worker" : "off";
   if (mode === "off" && boxes.some((b) => b.active)) warnings.push("Email ingestion is not running in this process (INGEST_IN_PROCESS is off and this is not the worker)");
   return {
@@ -68,7 +67,7 @@ export async function getHealth(): Promise<Health> {
     ingestion: { mode, mailboxes: boxes },
     emails: { pending, needsReview, errors },
     automations: auto,
-    ai: { provider: aiLive ? "anthropic" : "rules", model: aiLive ? env.AI_MODEL : null },
+    hermes: { connected: !!process.env.HERMES_API_URL && !!process.env.HERMES_API_KEY, model: process.env.HERMES_MODEL || null },
     warnings,
   };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseRecentOutput, parseDuration, cleanTranscript, parseTranscriptOutput } from "@/lib/recordings/plaud";
-import { phoneCandidates, nameCandidates, transcriptPreview, digits } from "@/lib/recordings/match";
+import { phoneCandidates, transcriptPreview, digits } from "@/lib/recordings/match";
 
 // Exactly what `plaud recent` printed on the server.
 const RECENT = `
@@ -66,17 +66,10 @@ describe("matching signals", () => {
     // Spacing is irrelevant: what matters is that the digits match what is stored on the record.
     expect(phoneCandidates("call me on 021 088 5669 2")).toContain("02108856692");
     expect(phoneCandidates("my number is 02108856692")).toContain("02108856692");
-    expect(phoneCandidates("+64 21 555 0123")).toContain("64215550123");
+    expect(phoneCandidates("+64 21 555 0123")).toContain("0215550123"); // stored the NZ way
     expect(digits("021 555-0123")).toBe("0215550123");
   });
 
-  it("finds the business name spoken in the call", () => {
-    expect(nameCandidates(TRANSCRIPT)).toContain("Greyland Firehouse");
-  });
-
-  it("does not offer single common words as a match", () => {
-    expect(nameCandidates("the venue is nice")).toHaveLength(0);
-  });
 
   it("finds nothing to match on when there is nothing distinctive", () => {
     expect(phoneCandidates("no numbers here at all")).toHaveLength(0);

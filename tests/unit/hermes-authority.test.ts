@@ -35,8 +35,6 @@ const ctx = (i: InspectorInput, over: Partial<ValidateContext> = {}): ValidateCo
   identity: matched,
   known: {},
   crm: { leadId: "L1", contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: "sam@example.com", customerPhone: null },
-  minConfidence: 0.6,
-  rules: null,
   ...over,
 });
 const H = (over: Record<string, unknown>): HermesResult => parseHermesResult(JSON.stringify({ conversation_type: "new_enquiry", intent: "new_enquiry", service: "cctv", property_type: "residential", summary: "s", recommended_action: "NO_ACTION", confidence: 0.9, reason: "r", ...over }));

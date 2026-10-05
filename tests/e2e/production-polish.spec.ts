@@ -30,7 +30,7 @@ test.describe("Production polish", () => {
     await expect(page.getByTestId("setup-step-admin").locator("svg").first()).toBeVisible();
     await expect(page.getByTestId("setup-step-titan")).toBeVisible();
     await expect(page.getByTestId("setup-step-done")).toBeVisible();
-    const goBtn = page.getByRole("button", { name: "Go to Today" });
+    const goBtn = page.getByRole("button", { name: "Go to Home" });
     if (await goBtn.count()) {
       await goBtn.click();
       await expect(page).toHaveURL(/\/dashboard$/);
@@ -38,11 +38,13 @@ test.describe("Production polish", () => {
     }
   });
 
-  test("Today greets the user and shows every section", async ({ page }) => {
+  test("Home greets the user, briefs the day and shows the decisions queue", async ({ page }) => {
     await login(page);
     await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
+    await expect(page.getByTestId("brief")).toContainText(/decisions? waiting|nothing waiting on you/);
+    await expect(page.getByTestId("decisions").or(page.getByTestId("decisions-empty"))).toBeVisible();
     await expect(page.getByTestId("section-overdue-reminders")).toBeVisible();
-    await expect(page.getByTestId("section-emails-needing-review")).toBeVisible();
+    await expect(page.getByTestId("hermes-feed")).toBeVisible();
   });
 
   test("global search finds a customer by name, phone digits, email and address", async ({ page }) => {
@@ -103,7 +105,7 @@ test.describe("Production polish", () => {
     await expect(nav.getByRole("link", { name: "Inbox" })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: "Leads" })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: "Staff" })).toHaveCount(0);
-    for (const path of ["/inbox", "/leads", "/quotes", "/settings/users", "/settings/mailboxes", "/settings/ai", "/settings/automations", "/dashboard"]) {
+    for (const path of ["/inbox", "/leads", "/quotes", "/settings/users", "/settings/mailboxes", "/settings/hermes", "/settings/automations", "/dashboard"]) {
       await page.goto(path);
       await expect(page, path).toHaveURL(/\/my-day$/);
     }

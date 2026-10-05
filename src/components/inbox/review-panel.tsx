@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EmailClassificationRow } from "@/db/schema";
 import { acceptEmailAsLead, rejectEmailAsLead, reclassifyEmail, linkThreadTo, unlinkThread, searchLinkTargets } from "@/actions/inbox";
 import { Badge, Button, Card, CardHeader, Field, FormError, Input, Select, Textarea } from "@/components/ui";
 import { EMAIL_CLASSIFICATION_META, LEAD_URGENCIES, LEAD_URGENCY_META, LEAD_STATUS_META, type EmailClassification } from "@/lib/constants";
@@ -14,14 +13,12 @@ type Targets = Awaited<ReturnType<typeof searchLinkTargets>>;
 export function ReviewPanel({
   thread,
   email,
-  classification,
   users,
   nextThreadId = null,
 }: {
   nextThreadId?: string | null;
   thread: { id: string; leadId: string | null; contactId: string | null; jobId: string | null };
   email: { id: string; classification: EmailClassification; classificationError: string | null; fromName: string | null; fromAddress: string } | null;
-  classification: EmailClassificationRow | null;
   users: UserOption[];
 }) {
   const router = useRouter();
@@ -45,7 +42,7 @@ export function ReviewPanel({
     };
   }, [linkOpen, q]);
 
-  const x = classification?.result ?? null;
+  const x = null as { contact_name?: string | null; company?: string | null; email?: string | null; phone?: string | null; service?: string | null; site_address?: string | null; summary?: string | null; urgency?: "low" | "normal" | "high" | "urgent"; next_action?: string | null } | null;
   const linked = thread.leadId || thread.contactId || thread.jobId;
   const canCreate = email && !thread.leadId && email.classification !== "outbound";
 
@@ -100,11 +97,11 @@ export function ReviewPanel({
     <div className="space-y-4">
       <Card>
         <CardHeader
-          title="AI assessment"
+          title="Hermes"
           action={
             email ? (
               <Button size="sm" variant="ghost" onClick={reclassify} disabled={pending}>
-                Re-run
+                Read again
               </Button>
             ) : null
           }
@@ -115,46 +112,14 @@ export function ReviewPanel({
               <Badge className={`${EMAIL_CLASSIFICATION_META[email.classification].bg} ${EMAIL_CLASSIFICATION_META[email.classification].text}`}>
                 {EMAIL_CLASSIFICATION_META[email.classification].label}
               </Badge>
-              {classification ? (
-                <span className="text-xs text-gray-500">
-                  {classification.isLead ? "Lead" : "Not a lead"} · {Math.round(Number(classification.confidence) * 100)}% · {classification.provider}
-                  {classification.model ? ` (${classification.model})` : ""}
-                </span>
-              ) : null}
+              <Link href="/dashboard" className="text-xs text-brand-700 hover:underline">
+                What Hermes made of it is on Home
+              </Link>
             </div>
-          ) : null}
-          {email?.classificationError ? <FormError message={email.classificationError} /> : null}
-          {x ? (
-            <>
-              <p className="text-gray-800">{x.summary}</p>
-              <p className="text-xs text-gray-500">{x.reason}</p>
-              <dl className="grid grid-cols-[110px_1fr] gap-y-1 text-xs">
-                <dt className="text-gray-500">Name</dt>
-                <dd>{x.contact_name ?? "—"}</dd>
-                <dt className="text-gray-500">Company</dt>
-                <dd>{x.company ?? "—"}</dd>
-                <dt className="text-gray-500">Email</dt>
-                <dd>{x.email ?? "—"}</dd>
-                <dt className="text-gray-500">Phone</dt>
-                <dd>{x.phone ?? "—"}</dd>
-                <dt className="text-gray-500">Service</dt>
-                <dd>{x.service ?? "—"}</dd>
-                <dt className="text-gray-500">Site</dt>
-                <dd>{x.site_address ?? "—"}</dd>
-                <dt className="text-gray-500">Urgency</dt>
-                <dd>
-                  <Badge className={`${LEAD_URGENCY_META[x.urgency].bg} ${LEAD_URGENCY_META[x.urgency].text}`}>{LEAD_URGENCY_META[x.urgency].label}</Badge>
-                </dd>
-                <dt className="text-gray-500">Next action</dt>
-                <dd>{x.next_action}</dd>
-              </dl>
-            </>
-          ) : email ? (
-            <p className="text-gray-500">Not classified yet.</p>
           ) : (
             <p className="text-gray-500">No inbound message on this thread.</p>
           )}
-
+          {email?.classificationError ? <FormError message={email.classificationError} /> : null}
           {canCreate ? (
             <div className="space-y-2 border-t border-gray-100 pt-3">
               {!editing ? (

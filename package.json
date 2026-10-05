@@ -20,7 +20,6 @@
     "ingest:eml": "tsx scripts/ingest-eml.ts",
     "mailbox:sync": "tsx scripts/mailbox-sync.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "ai:smoke": "tsx scripts/ai-smoke.ts",
     "env:check": "node scripts/env-check.mjs",
     "secrets:check": "bash scripts/check-secrets.sh",
     "plaud:sync": "tsx scripts/plaud-sync.ts",

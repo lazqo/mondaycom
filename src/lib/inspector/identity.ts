@@ -12,11 +12,14 @@ export const SIGNAL_WEIGHTS: Record<IdentitySignal["kind"], number> = {
   email: 0.9,
   phone: 0.9,
   quote_ref: 0.85,
+  job_ref: 0.5,
   calendar: 0.7,
   address: 0.5,
   company: 0.35,
   name: 0.2,
 };
+// A job number names the work, not the person writing about it (a supplier, a property manager, the
+// customer's accounts team): it places the message in that work, never files the sender as the customer.
 const STRONG: IdentitySignal["kind"][] = ["linked", "thread", "email", "phone", "quote_ref", "calendar"];
 export const MATCH_THRESHOLD = 0.75;
 export const MATCH_MARGIN = 0.25;

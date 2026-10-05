@@ -39,7 +39,6 @@ export default defineConfig({
         // The supplier pricing connector logs in to the IT Plus stand-in from global-setup, never the real site.
         // Plaud is read through a stand-in CLI whose recordings the Inspector e2e test writes.
         env: {
-          AI_PROVIDER: "rules",
           ITPLUS_BASE_URL: "http://127.0.0.1:3199",
           SUPPLIER_SYNC_DELAY_MS: "0",
           PLAUD_ENABLED: "true",

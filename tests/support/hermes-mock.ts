@@ -39,6 +39,15 @@ const base = {
   advisories: [],
 };
 
+/** A street address after "at", as written ("27 Kauri Grove, Albany"). */
+const siteIn = (text: string) => text.match(/\bat (\d+[A-Za-z]? [A-Z][a-z']+(?: [A-Z][a-z']+)* (?:Road|Rd|Street|St|Avenue|Ave|Drive|Dr|Place|Pl|Crescent|Cres|Grove|Lane|Way|Terrace)(?:, [A-Z][a-z]+(?: [A-Z][a-z]+)?)?)/)?.[1] ?? null;
+/** An NZ mobile number as written ("021 555 0311"). */
+const phoneIn = (text: string) => text.match(/\b0\d\d? ?\d{3,4} ?\d{3,4}\b/)?.[0] ?? null;
+const contactFacts = (text: string) => [
+  ...((s) => (s ? [{ key: "site_address", value: s, evidence: s, confidence: 0.95 }] : []))(siteIn(text)),
+  ...((p) => (p ? [{ key: "phone", value: p, evidence: p, confidence: 0.95 }] : []))(phoneIn(text)),
+];
+
 function answer(pack: Pack): Record<string, unknown> | "down" {
   const text = pack.source.text;
   // Hermes decides whether it is a lead: a new enquiry from someone with no lead yet is one.
@@ -100,25 +109,59 @@ function answer(pack: Pack): Record<string, unknown> | "down" {
       reason: "Customer asked for an extra camera.",
     };
   }
-  const corrected = text.match(/the address is actually ([^.]+)\./i);
-  if (corrected) {
-    return { ...base, conversation_type: "existing_lead", intent: "information", summary: "Corrects the site address.", facts: [{ key: "site_address", value: corrected[1], evidence: `the address is actually ${corrected[1]}`, confidence: 0.95 }], reason: "Address correction." };
-  }
-  const cams = text.match(/quote for (\d+) cameras/i);
-  if (cams) {
-    const storey = text.match(/(single|double) storey/i);
+  // A clear alarm enquiry: a lead, with what the email gives (the phone and the site, verbatim).
+  const alarm = text.match(/want an? (Ajax alarm)[^.]*\./i);
+  if (alarm) {
     return {
       ...base,
       conversation_type: "new_enquiry",
       intent: "quote_request",
+      business_context: "customer_prospect",
+      lead_decision: enquiry,
+      service: "alarm",
+      property_type: "residential",
+      summary: "Ajax alarm enquiry for a new build; wants a rough cost and timing.",
+      facts: [
+        { key: "service", value: alarm[1], evidence: alarm[0], confidence: 0.95 },
+        ...contactFacts(text),
+        { key: "property_type", value: "residential", evidence: "building a new house", confidence: 0.9 },
+      ],
+      recommended_action: "CREATE_INTERNAL_TASK",
+      task: { title: "Ring about the Ajax alarm for the new build", due: "today", detail: null },
+      confidence: 0.92,
+      reason: "A clear alarm enquiry with the site and a phone number.",
+    };
+  }
+  // Too little to go on: Hermes thinks it may be a lead but is not sure, so Chris decides.
+  if (/do you guys do houses/i.test(text)) {
+    return { ...base, conversation_type: "new_enquiry", intent: "question", business_context: "customer_prospect", lead_decision: "lead", summary: "Asks whether Get Secure covers West Auckland houses and a rough price; no detail.", recommended_action: "NEEDS_REVIEW", review_question: "Is this worth a reply asking what they need?", confidence: 0.45, reason: "Might be an enquiry, but nothing says what for." };
+  }
+  const corrected = text.match(/the address is actually ([^.]+)\./i);
+  if (corrected) {
+    return { ...base, conversation_type: "existing_lead", intent: "information", summary: "Corrects the site address.", facts: [{ key: "site_address", value: corrected[1], evidence: `the address is actually ${corrected[1]}`, confidence: 0.95 }], reason: "Address correction." };
+  }
+  // A CCTV quote request: how many cameras, the kind of place, the site and the phone number.
+  const cams = /quote/i.test(text) ? text.match(/(\d+) cameras/i) : null;
+  if (cams) {
+    const storey = text.match(/(single|double) storey/i);
+    const home = text.match(/\b(our|my) (house|home)\b/i);
+    const business = text.match(/\b(cafe|shop|office|warehouse|restaurant|store)\b/i);
+    const property = home ? "residential" : business ? "commercial" : null;
+    return {
+      ...base,
+      conversation_type: "new_enquiry",
+      intent: "quote_request",
+      business_context: "customer_prospect",
       lead_decision: enquiry,
       service: "cctv",
-      property_type: /house|home/i.test(text) ? "residential" : null,
-      summary: `Residential CCTV enquiry: ${cams[1]} cameras.`,
+      property_type: property,
+      summary: `${property === "commercial" ? "Commercial" : "Residential"} CCTV enquiry: ${cams[1]} cameras.`,
       facts: [
         { key: "camera_count", value: Number(cams[1]), evidence: cams[0], confidence: 0.95 },
         ...(storey ? [{ key: "storeys", value: storey[1].toLowerCase() === "single" ? 1 : 2, evidence: storey[0], confidence: 0.95 }] : []),
-        ...(/house|home/i.test(text) ? [{ key: "property_type", value: "residential", evidence: text.match(/our (house|home)/i)?.[0] ?? "house", confidence: 0.9 }] : []),
+        ...(home ? [{ key: "property_type", value: "residential", evidence: home[0], confidence: 0.9 }] : []),
+        ...(business ? [{ key: "property_type", value: "commercial", evidence: business[0], confidence: 0.9 }] : []),
+        ...contactFacts(text),
       ],
       recommended_action: "PREPARE_QUOTE",
       run_business_brain: true,

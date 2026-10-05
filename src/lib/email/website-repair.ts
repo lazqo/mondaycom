@@ -12,7 +12,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, emailThreads, emails, leads } from "@/db/schema";
 import { digits } from "@/lib/recordings/match";
-import { latestClassification, linkThread, processEmail } from "./pipeline";
+import { linkThread, processEmail } from "./pipeline";
 import { isWebsiteLeadSender, parseWebsiteLead, websiteLeadSenders, type WebsiteLead } from "./website-lead";
 
 export type RepairReport = { lines: string[]; changes: number };
@@ -119,13 +119,10 @@ export async function repairWebsiteEnquiries(opts: { apply: boolean }): Promise<
       continue;
     }
 
-    // Someone decided by hand that this one is not a lead (spam through the form): respect that.
+    // Someone decided this one is not a lead (spam through the form): respect that.
     if (e.classification === "not_lead") {
-      const latest = await latestClassification(e.id);
-      if (latest?.reviewOutcome === "rejected") {
-        say(`skip "${e.subject}": marked "not a lead" by hand`);
-        continue;
-      }
+      say(`skip "${e.subject}": marked "not a lead"`);
+      continue;
     }
 
     // A lead for this person may already exist, for example one typed in by hand.

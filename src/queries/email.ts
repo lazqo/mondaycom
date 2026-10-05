@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { emailClassifications, emailThreads, emails, mailboxes } from "@/db/schema";
+import { emailThreads, emails, mailboxes } from "@/db/schema";
 import type { EmailClassification } from "@/lib/constants";
 
 export type InboxFilter = "all" | "needs_review" | "lead" | "not_lead" | "existing" | "error";
@@ -66,7 +66,6 @@ export async function getThread(threadId: string) {
         with: {
           attachments: { columns: { id: true, filename: true, contentType: true, size: true } },
           sentBy: { columns: { id: true, name: true } },
-          classifications: { orderBy: [desc(emailClassifications.createdAt)], limit: 1 },
         },
         columns: { rawMime: false },
       },

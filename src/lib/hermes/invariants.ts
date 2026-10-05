@@ -10,6 +10,7 @@ import { blankEnquiry, enquiryFromForm } from "@/lib/brain/form-input";
 import { normaliseFact, replyProblem, type Validation, type ValidateContext } from "@/lib/inspector/validate";
 import type { FactKey } from "@/lib/inspector/types";
 import { AUTHORITY } from "./authority";
+import { AUTONOMY_DEFAULTS } from "./autonomy";
 import type { HermesResult } from "./contract";
 
 export type InvariantCase = { hermes: HermesResult; validation: Validation; ctx: ValidateContext; pack?: { source?: { form?: unknown; transcript?: { turns?: unknown[] } | null } } | null };
@@ -139,7 +140,7 @@ export const INVARIANTS: Invariant[] = [
     applies: (c) => unknownSender(c) && !c.ctx.context?.accepted,
     check: (c) => {
       const needsRecord = auto(c.validation).filter((p) => AUTHORITY[p.type].needs && p.type !== "ADD_INTERNAL_NOTE");
-      const willHaveLead = c.hermes.lead_decision === "lead" && c.ctx.input.sourceType === "email" && c.ctx.input.direction === "inbound" && c.hermes.confidence >= c.ctx.minConfidence;
+      const willHaveLead = c.hermes.lead_decision === "lead" && c.ctx.input.sourceType === "email" && c.ctx.input.direction === "inbound" && c.hermes.confidence >= (c.ctx.autonomy ?? AUTONOMY_DEFAULTS).thresholds.operational_state;
       if (!willHaveLead && needsRecord.some((p) => p.type !== "RESOLVE_COMMITMENT" && p.type !== "PROPOSE_LEAD_FACT_UPDATE")) return `${needsRecord.map((p) => p.type).join(", ")} would run with no customer record`;
       const held = c.validation.decisions.filter((d) => !d.allowed && d.rule === "needs_record").map((d) => d.action);
       const blockedSafe = held.filter((t) => !AUTHORITY[t as keyof typeof AUTHORITY]?.needs);

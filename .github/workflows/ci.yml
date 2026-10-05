@@ -29,7 +29,6 @@ jobs:
       SEED_ADMIN_EMAIL: admin@getsecure.co.nz
       SEED_ADMIN_PASSWORD: ci-password-123
       NEXT_TELEMETRY_DISABLED: "1"
-      AI_PROVIDER: rules
     steps:
       - uses: actions/checkout@v4
       - name: Check that no secrets are committed

@@ -4,7 +4,6 @@ import { requireOffice } from "@/lib/auth";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import {
   getInspectorQueue,
-  getJevComparison,
   getRecentInspections,
 } from "@/queries/inspector";
 import {
@@ -12,20 +11,15 @@ import {
   AwaitingLine,
   ConflictLine,
   sourceLabel,
-  UnderstandingView,
 } from "@/components/inspector/views";
-import {
-  HermesReviewControls,
-  IdentityReview,
-  ProposedLeadControls,
-  ReinspectButton,
-} from "@/components/inspector/controls";
+import { ReinspectButton } from "@/components/inspector/controls";
+import { ReviewCard } from "@/components/inspector/review-card";
 import { EngineBadge, HermesView } from "@/components/inspector/hermes-view";
 import { REVIEW_KIND_LABELS } from "@/lib/inspector/labels";
 import { formatDateTime } from "@/lib/utils";
 import type { ActionType } from "@/lib/inspector/types";
 
-export const metadata: Metadata = { title: "Inspector" };
+export const metadata: Metadata = { title: "Hermes" };
 
 const count = (n: number, tone = "bg-[#ffcb00] text-gray-900") => (
   <Badge className={n ? tone : "bg-gray-100 text-gray-500"}>{n}</Badge>
@@ -33,23 +27,21 @@ const count = (n: number, tone = "bg-[#ffcb00] text-gray-900") => (
 
 export default async function InspectorPage() {
   const user = await requireOffice();
-  const [q, recent, jev] = await Promise.all([
-    getInspectorQueue(),
-    getRecentInspections(30),
-    getJevComparison(50),
-  ]);
+  const [q, recent] = await Promise.all([getInspectorQueue(), getRecentInspections(30)]);
   const canApprove = !!user.canApprove;
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Inspector</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Hermes</h1>
         <p className="text-sm text-gray-500">
-          Hermes reads every email and Plaud conversation and recommends the
-          next step. The CRM&apos;s rules check it, the Business Brain decides
-          design and pricing, internal work (notes, tasks, prepared quotes and
-          drafts) is done for you, and anything that reaches a customer waits
-          for {canApprove ? "you" : "Chris"}. Nothing is sent from this page.
+          Every email and Plaud conversation Hermes has read, with what it
+          decided, the guardrail checks and what the CRM did. Decisions that
+          wait on {canApprove ? "you" : "Chris"} are on{" "}
+          <Link href="/dashboard" className="text-brand-700 hover:underline">
+            Home
+          </Link>
+          ; this page is the full record. Nothing is sent from here.
         </p>
       </div>
 
@@ -69,116 +61,9 @@ export default async function InspectorPage() {
           </p>
         ) : null}
         <div className="divide-y divide-gray-100">
-          {q.review.map((r) => {
-            const kind = r.inspection.reviewKind ?? "identity";
-            const payload = (r.reviewAction?.payload ?? {}) as {
-              hermesSuggestion?: { key: string; reason: string } | null;
-              plan?: unknown[];
-            };
-            const suggested = payload.hermesSuggestion
-              ? payload.hermesSuggestion.key === "new"
-                ? "a new customer"
-                : (r.candidates.find(
-                    (c) =>
-                      (c.leadId
-                        ? `lead:${c.leadId}`
-                        : `customer:${c.contactId}`) ===
-                      payload.hermesSuggestion!.key,
-                  )?.subject?.label ?? payload.hermesSuggestion.key)
-              : null;
-            return (
-              <div
-                key={r.inspection.id}
-                className="space-y-2 px-4 py-3"
-                data-testid={
-                  kind === "identity" ? "identity-review" : "hermes-review"
-                }
-              >
-                <p className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <Badge className="bg-[#ffcb00] text-gray-900">
-                      {REVIEW_KIND_LABELS[kind] ?? kind}
-                    </Badge>
-                    <span className="font-medium text-gray-900">
-                      {r.source?.title ?? sourceLabel(r.inspection.sourceType)}
-                    </span>
-                    <span className="text-gray-500">
-                      {r.source?.from ?? sourceLabel(r.inspection.sourceType)} ·{" "}
-                      {formatDateTime(r.inspection.sourceAt)}
-                    </span>
-                  </span>
-                  {r.source ? (
-                    <Link
-                      href={r.source.href}
-                      className="text-xs text-brand-700 hover:underline"
-                    >
-                      Open {sourceLabel(r.inspection.sourceType)}
-                    </Link>
-                  ) : null}
-                </p>
-                {kind === "identity" ? (
-                  <>
-                    <p className="text-sm text-gray-900">
-                      {r.inspection.summary}
-                    </p>
-                    <p className="text-xs text-gray-600">{r.identity.reason}</p>
-                    {suggested ? (
-                      <p
-                        className="text-xs text-gray-600"
-                        data-testid="hermes-identity-suggestion"
-                      >
-                        Hermes suggests {suggested}
-                        {payload.hermesSuggestion?.reason
-                          ? ` (${payload.hermesSuggestion.reason})`
-                          : ""}
-                        . That alone never files it: you choose.
-                      </p>
-                    ) : null}
-                    <details className="text-sm">
-                      <summary className="cursor-pointer text-xs text-gray-500">
-                        What it says (not written to anyone yet)
-                      </summary>
-                      <div className="mt-2">
-                        <UnderstandingView u={r.understanding} />
-                      </div>
-                    </details>
-                    <IdentityReview
-                      inspectionId={r.inspection.id}
-                      candidates={r.candidates}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <HermesView
-                      inspection={r.inspection}
-                      actions={r.reviewAction ? [r.reviewAction] : []}
-                      compact={false}
-                    />
-                    {kind === "hermes_proposed_lead" ? (
-                      <ProposedLeadControls
-                        inspectionId={r.inspection.id}
-                        sourceId={r.inspection.sourceId}
-                      />
-                    ) : (
-                      <HermesReviewControls
-                        inspectionId={r.inspection.id}
-                        reviewActionId={r.reviewAction?.id ?? null}
-                        canAccept={
-                          canApprove &&
-                          kind === "hermes_low_confidence" &&
-                          Array.isArray(payload.plan)
-                        }
-                        sourceType={
-                          r.inspection.sourceType as "email" | "recording"
-                        }
-                        sourceId={r.inspection.sourceId}
-                      />
-                    )}
-                  </>
-                )}
-              </div>
-            );
-          })}
+          {q.review.map((r) => (
+            <ReviewCard key={r.inspection.id} item={r} canApprove={canApprove} />
+          ))}
         </div>
       </Card>
 
@@ -316,88 +201,6 @@ export default async function InspectorPage() {
         </div>
       </Card>
 
-      {/* Jev is redundant now that Hermes is the primary Inspector: shown only if it ever ran. */}
-      {jev.rows.length === 0 ? null : (
-        <Card data-testid="inspector-jev">
-          <CardHeader title="Jev (redundant, comparison only)" />
-          <div className="space-y-3 p-4 text-sm">
-            <p className="text-gray-600">
-              Hermes is now the primary Inspector. Jev is redundant and off by
-              default; these are its earlier shadow answers beside the
-              rules&apos; and what you actually did. It never drove an action, a
-              price or a design.
-            </p>
-            <p className="flex flex-wrap gap-2 text-xs">
-              {jev.fields.map((f) => (
-                <span key={f} className="rounded-md bg-gray-100 px-2 py-1">
-                  {f.replace(/_/g, " ")}: agrees {jev.agreement[f].same}/
-                  {jev.agreement[f].of}
-                </span>
-              ))}
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="text-gray-500">
-                  <tr>
-                    <th className="py-1 pr-3 font-medium">Source</th>
-                    <th className="py-1 pr-3 font-medium">Rules</th>
-                    <th className="py-1 pr-3 font-medium">Jev</th>
-                    <th className="py-1 pr-3 font-medium">Chris</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 align-top">
-                  {jev.rows.map((r) => (
-                    <tr key={r.id}>
-                      <td className="py-1.5 pr-3">
-                        <span className="block font-medium text-gray-900">
-                          {r.source?.title ?? "—"}
-                        </span>
-                        <span className="text-gray-500">
-                          {formatDateTime(r.createdAt)}
-                        </span>
-                      </td>
-                      <td className="py-1.5 pr-3">
-                        {String(r.deterministic.intent)} ·{" "}
-                        {String(r.deterministic.next_move)} ·{" "}
-                        {String(r.deterministic.quote_readiness)}
-                      </td>
-                      <td className="py-1.5 pr-3">
-                        {r.output ? (
-                          <>
-                            {String(r.output.intent)} ·{" "}
-                            {String(r.output.next_move)} ·{" "}
-                            {String(r.output.quote_readiness)}
-                            <span className="block text-gray-500">
-                              {Math.round(
-                                Number(r.output.confidence ?? 0) * 100,
-                              )}
-                              % · {String(r.output.reason ?? "")}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-red-600">
-                            {r.error ?? "no answer"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-3 text-gray-700">
-                        {r.chrisDecision
-                          ? Object.entries(r.chrisDecision)
-                              .map(
-                                ([k, v]) =>
-                                  `${k.replace(/^action:/, "")}: ${typeof v === "string" ? v : "chosen"}`,
-                              )
-                              .join(", ")
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

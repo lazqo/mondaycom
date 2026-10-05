@@ -8,11 +8,6 @@ const schema = z.object({
   APP_TIMEZONE: z.string().default("Pacific/Auckland"),
   // Encrypts mailbox passwords at rest. Falls back to a key derived from AUTH_SECRET.
   ENCRYPTION_KEY: z.string().min(16).optional(),
-  // AI layer (see src/lib/ai). "anthropic" needs ANTHROPIC_API_KEY; "rules" is offline heuristics.
-  AI_PROVIDER: z.enum(["anthropic", "rules", "auto"]).default("auto"),
-  AI_MODEL: z.string().default("claude-opus-5"),
-  ANTHROPIC_API_KEY: z.string().optional(),
-  AI_LEAD_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.75),
   // Email ingestion: run the IMAP loop inside the web process (single-service hosting) or use the worker.
   INGEST_IN_PROCESS: z
     .string()

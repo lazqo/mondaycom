@@ -548,30 +548,6 @@ export type ExtractedLead = {
   reason: string;
 };
 
-export const emailClassifications = pgTable(
-  "email_classifications",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    emailId: uuid("email_id")
-      .notNull()
-      .references(() => emails.id, { onDelete: "cascade" }),
-    provider: text("provider").notNull(),
-    model: text("model"),
-    isLead: boolean("is_lead").notNull(),
-    confidence: numeric("confidence", { precision: 4, scale: 3 }).notNull(),
-    result: jsonb("result").$type<ExtractedLead>().notNull(),
-    rawResponse: jsonb("raw_response"),
-    inputTokens: integer("input_tokens"),
-    outputTokens: integer("output_tokens"),
-    durationMs: integer("duration_ms"),
-    reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),
-    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-    reviewOutcome: text("review_outcome"), // accepted | rejected | edited
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("email_classifications_email_idx").on(t.emailId)],
-);
-
 // ---------- Calendar sync (CalDAV, e.g. Titan) ----------
 
 export const calendarConnections = pgTable("calendar_connections", {
@@ -1426,25 +1402,6 @@ export const inspectorActions = pgTable(
   (t) => [index("inspector_actions_inspection_idx").on(t.inspectionId), index("inspector_actions_status_idx").on(t.status, t.createdAt)],
 );
 
-/**
- * Jev in shadow mode: its bounded classification of the same source, stored next to what the
- * deterministic rules said and, later, what Chris actually decided. Never drives an action.
- */
-export const jevObservations = pgTable("jev_observations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  inspectionId: uuid("inspection_id")
-    .notNull()
-    .references(() => inspections.id, { onDelete: "cascade" }),
-  model: text("model"),
-  output: jsonb("output").$type<Record<string, unknown>>(),
-  deterministic: jsonb("deterministic").$type<Record<string, unknown>>().notNull(),
-  chrisDecision: jsonb("chris_decision").$type<Record<string, unknown>>(),
-  decidedAt: timestamp("decided_at", { withTimezone: true }),
-  error: text("error"),
-  durationMs: integer("duration_ms"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 // ---------- Relations ----------
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -1489,16 +1446,10 @@ export const emailsRelations = relations(emails, ({ one, many }) => ({
   contact: one(contacts, { fields: [emails.contactId], references: [contacts.id] }),
   sentBy: one(users, { fields: [emails.sentById], references: [users.id] }),
   attachments: many(emailAttachments),
-  classifications: many(emailClassifications),
 }));
 
 export const emailAttachmentsRelations = relations(emailAttachments, ({ one }) => ({
   email: one(emails, { fields: [emailAttachments.emailId], references: [emails.id] }),
-}));
-
-export const emailClassificationsRelations = relations(emailClassifications, ({ one }) => ({
-  email: one(emails, { fields: [emailClassifications.emailId], references: [emails.id] }),
-  reviewedBy: one(users, { fields: [emailClassifications.reviewedById], references: [users.id] }),
 }));
 
 export const quotesRelations = relations(quotes, ({ one, many }) => ({
@@ -1606,7 +1557,6 @@ export type Mailbox = typeof mailboxes.$inferSelect;
 export type EmailThread = typeof emailThreads.$inferSelect;
 export type Email = typeof emails.$inferSelect;
 export type EmailAttachment = typeof emailAttachments.$inferSelect;
-export type EmailClassificationRow = typeof emailClassifications.$inferSelect;
 export type JobNote = typeof jobNotes.$inferSelect;
 export type JobPhoto = typeof jobPhotos.$inferSelect;
 export type Recording = typeof recordings.$inferSelect;

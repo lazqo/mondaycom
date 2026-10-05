@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 
-process.env.AI_PROVIDER = "rules";
 const RUN = `ws${Date.now().toString(36)}`;
 const ROBOT = `noreply+${RUN}@updates.getsecure.co.nz`;
 process.env.LEAD_SENDER_ADDRESSES = ROBOT;

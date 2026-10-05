@@ -16,14 +16,15 @@
  */
 import { askHermes } from "@/lib/hermes/inspector";
 import { buildContextPack } from "@/lib/hermes/context";
-import { getHermes, hermesMinConfidence } from "@/lib/hermes/runtime";
+import { getHermes } from "@/lib/hermes/runtime";
+import { AUTONOMY_DEFAULTS } from "@/lib/hermes/autonomy";
 import { checkInvariants } from "@/lib/hermes/invariants";
 import { validateHermes, type ValidateContext } from "@/lib/inspector/validate";
 import { parseTranscript } from "@/lib/inspector/text";
 import { parseWebsiteLead } from "@/lib/email/website-lead";
 import type { HermesResult } from "@/lib/hermes/contract";
 import type { IdentityResult, InspectorInput } from "@/lib/inspector/types";
-import type { Known } from "@/lib/inspector/missing";
+import type { Known } from "@/lib/inspector/types";
 
 const AT = new Date();
 const LEAD = "00000000-0000-0000-0000-0000000000a1";
@@ -122,10 +123,9 @@ async function main() {
       identity: s.identity,
       known: s.known ?? {},
       crm: { leadId: s.identity.chosen?.leadId ?? null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null, ...(s.crm ?? {}) },
-      minConfidence: hermesMinConfidence(),
+      autonomy: AUTONOMY_DEFAULTS,
       citable: s.identity.chosen?.leadId ? [`lead:${s.identity.chosen.leadId}`] : [],
       context,
-      rules: null,
     };
     const v = validateHermes(h, ctx);
     const results = checkInvariants({ hermes: h, validation: v, ctx, pack });

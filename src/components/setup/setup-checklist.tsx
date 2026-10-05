@@ -64,7 +64,7 @@ export function SetupChecklist({ steps, complete }: { steps: SetupStep[]; comple
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-gray-900">6. Start using the CRM</p>
               <p className="text-xs text-gray-500">
-                {complete ? "Setup is complete. Today is your home screen." : allDone ? "Everything is ready." : `${doneCount} of ${steps.length} steps done. You can start now and finish the rest later.`}
+                {complete ? "Setup is complete. Home is your home screen." : allDone ? "Everything is ready." : `${doneCount} of ${steps.length} steps done. You can start now and finish the rest later.`}
               </p>
             </div>
             {complete ? (
@@ -93,7 +93,7 @@ export function SetupChecklist({ steps, complete }: { steps: SetupStep[]; comple
                   })
                 }
               >
-                Go to Today
+                Go to Home
               </Button>
             )}
           </li>

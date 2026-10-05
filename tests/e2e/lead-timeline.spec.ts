@@ -32,6 +32,9 @@ const CAL = `${DAV_BASE}/${encodeURIComponent(DAV_USER)}/tl-${RUN}/`;
 const DAV_AUTH = { Authorization: `Basic ${Buffer.from(`${DAV_USER}:${DAV_PASS}`).toString("base64")}` };
 
 const CUSTOMER_NAME = "Hana Ruatapu";
+// This run's own phone number (the local IMAP inbox keeps earlier runs' enquiries; a repeated number
+// would file this one on that earlier lead).
+const PHONE = `021 ${String(Date.now()).slice(-7, -4)} ${String(Date.now()).slice(-4)}`;
 const CUSTOMER = `hana+${RUN}@example.com`;
 const SUBJECT = `CCTV quote for our cafe ${RUN}`;
 const ENQUIRY_ID = `<enquiry-${RUN}@example.com>`;
@@ -200,17 +203,23 @@ test.describe("Lead Profile timeline, Titan Sent folder and Titan calendar", () 
           "",
           "Thanks,",
           CUSTOMER_NAME,
-          "021 555 0177",
+          PHONE,
         ].join("\n"),
       }),
       "enquiry",
     );
     await login(page);
     await syncMail(page);
-    await page.locator("tr", { hasText: SUBJECT }).getByRole("link", { name: new RegExp(CUSTOMER_NAME) }).click();
+    // Hermes reads the enquiry in the background and the lead is made from its reading.
+    const leadLink = page.locator("tr", { hasText: SUBJECT }).getByRole("link", { name: new RegExp(CUSTOMER_NAME) });
+    await expect(async () => {
+      await page.goto(`/inbox?q=${encodeURIComponent(RUN)}`);
+      await expect(leadLink).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 45_000, intervals: [500, 1000, 2000] });
+    await leadLink.click();
     await expect(page).toHaveURL(/\/leads\/[0-9a-f-]+$/);
     leadUrl = page.url();
-    await expect(page.getByTestId("lead-profile")).toContainText("021 555 0177");
+    await expect(page.getByTestId("lead-profile")).toContainText(PHONE);
 
     // The enquiry opens the timeline, with the original email's headers.
     const enquiry = items(page, "enquiry");

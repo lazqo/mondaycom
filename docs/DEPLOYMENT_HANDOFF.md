@@ -4,8 +4,8 @@ Everything needed to put v0.4 into production on a **Hostinger VPS** and run it.
 no alternatives. Written for someone who has not seen the code.
 
 You will need two things that only you can provide: a Hostinger VPS and the Titan mailbox app
-password. There is no AI service to sign up for — the CRM runs with its built-in offline classifier
-(section 9).
+password. Hermes (Get Secure's own agent, section 17) reads every email and conversation; there
+is no other AI service to sign up for.
 
 Every command below is run over SSH on the VPS, as root, from `/opt/getsecure`.
 
@@ -120,8 +120,6 @@ be committed. `deploy/env.example` is the template you copied.
 | `ENCRYPTION_KEY` | run `openssl rand -base64 32` | Generate on the server. Encrypts the Titan mailbox and calendar passwords stored in the database. |
 | `HEALTH_TOKEN` | run `openssl rand -hex 16` | Generate on the server. Lets an uptime monitor read detailed health. |
 | `APP_TIMEZONE` | `Pacific/Auckland` | Fixed. Drives "Today", follow-up dates and business hours. |
-| `AI_PROVIDER` | `rules` | Fixed. Built-in offline classifier. No external AI service, no per-email cost. |
-| `AI_LEAD_CONFIDENCE_THRESHOLD` | `0.75` | Fixed. At or above this a lead is created automatically; below it goes to Needs review. |
 | `CALENDAR_SYNC_SECONDS` | `300` | Optional. How often Titan calendar changes are checked for. CRM changes go out straight away. |
 
 `bash deploy/init-env.sh <domain>` in section 3 generates all four and sets the domain for you, so
@@ -300,23 +298,29 @@ The calendar password is encrypted with `ENCRYPTION_KEY`, exactly like the mailb
 
 ---
 
-## 9. How enquiries are turned into leads (no AI service)
+## 9. How enquiries are turned into leads (Hermes reads every email)
 
-There is no Anthropic account, no API key and no per-email cost. `AI_PROVIDER=rules` uses the
-classifier built into the app, which reads each new email and looks for:
+There is no separate email classifier any more, no Anthropic account and no API key. The CRM does
+only the mechanical part of filing a new email:
 
-- your services by keyword — CCTV, Ajax, alarm, access control, intercom, gate automation, and
-  service or fault calls
-- a New Zealand phone number, and a street address, by their shape
-- enquiry intent — quote, price, install, book, site visit, how much, looking for
-- urgency words — urgent, ASAP, today, emergency, break-in
+- mail on a thread already linked to a lead, customer or job is filed there ("Existing");
+- mail from a sender whose email address is a customer's, or an open lead's, is filed on that lead
+  ("Existing");
+- newsletters, bulk mail, bounces and auto-replies are filed as "Not a lead" and never read
+  (section 17 lists the exact headers);
+- website form enquiries are read field by field and become a lead straight away (below);
+- everything else is marked **Hermes is reading** and handed to Hermes.
 
-It scores each email. At or above `AI_LEAD_CONFIDENCE_THRESHOLD` a lead is created on the board with
-whatever it could extract; below that the email waits in **Needs review** for you to accept, edit or
-reject. Newsletters, invoices, bounces and auto-replies are filtered out before any of this.
+Hermes decides whether it is a lead, and the lead is created from Hermes's reading of the email:
+the name, phone, site address and service it found (each checked against the words of the email),
+its summary of what the customer wants, and the next step it recommends. If Hermes is not sure
+enough to call it a lead, the email waits on **Home → Hermes needs you to decide** ("Hermes thinks
+this is a lead": Make it a lead / Not a lead). If Hermes says it is not a lead (a supplier, a
+provider, a statement), it is filed as "Not a lead" with whatever internal task it needs, and you
+can still make it a lead from the Inbox. Section 17 has the details and the audit trail.
 
-**Settings → Email AI** shows the active classifier and recent decisions. It will say the offline
-rules classifier is in use, which is correct.
+If Hermes is not connected or cannot be reached, nothing is invented from the words: the email
+waits in **Needs review** as "Hermes could not read it", and is read again when Hermes is back.
 
 ### Website enquiries
 
@@ -337,9 +341,9 @@ docker compose -f docker-compose.prod.yml exec -T web node_modules/.bin/tsx scri
 
 ### The limitation you need to know about
 
-**Forwarded enquiries lose their details.** If an enquiry is forwarded into the connected mailbox
-rather than sent to it directly, the forward header cuts the message off before the classifier reads
-it. Tested with a real forward:
+**Forwarded enquiries lose their sender.** If an enquiry is forwarded into the connected mailbox
+rather than sent to it directly, the sender the CRM sees is your own address, and the customer's
+details are only in the forwarded text. Tested with a real forward (before Hermes read email):
 
 ```
 Dave's original:  6 CCTV cameras, 12 Station Road Penrose, Ajax alarm quote, 021 555 0123
@@ -351,17 +355,17 @@ Lead the CRM creates:
   site address  (empty)
 ```
 
-The lead is still created, because the subject line carries enough to score above the threshold, so
-it does not stop in Needs review for you to catch. Replying to that lead from the CRM would email
-your own info address rather than the customer.
+Hermes now reads the forwarded text and uses the customer's name, phone and address it finds there
+(each checked against the words), so a forwarded lead is usually filled in correctly. The sender's
+address is still the forwarder's: replying to that lead from the CRM would email your own info
+address rather than the customer, so check the email field before replying.
 
 **Nothing is lost.** The complete forwarded message, exactly as it arrived, is visible in the CRM
 Inbox — open the thread and you can read all of Dave's text. Only the automatic field extraction
 misses it.
 
-**So, day to day:** for any enquiry that reached the CRM by forwarding, open the email in the Inbox
-and correct the lead's name, email, phone and site address by hand before working it. Treat the
-auto-filled fields on a forwarded lead as untrustworthy.
+**So, day to day:** for any enquiry that reached the CRM by forwarding, check the lead's email
+address (and anything Hermes left blank) before working it.
 
 **The clean fix** is to connect `info@getsecure.co.nz` directly as the CRM mailbox, as section 8
 says, instead of forwarding from it into another address. The customer's real address and full
@@ -383,7 +387,8 @@ new email** and then look at **Settings → System status**.
 
 **Classification.** Open that email in the Inbox. It should either have created a lead on the Leads
 board with the service, phone and address filled in, or be waiting in **Needs review**. Either is a
-pass — Needs review means the classifier was not confident, which is the behaviour you want.
+pass — Needs review means Hermes was not sure enough (or is not connected yet), which is the
+behaviour you want.
 
 **SMTP reply.** Open the thread in the CRM and write a reply. Send it. Three things must be true: the
 reply arrives in your personal inbox, it appears threaded under the original message rather than as a
@@ -883,11 +888,9 @@ email / Plaud conversation
 - **Chris:** approval of anything customer-facing or commercial, and the reviewer of anything Hermes
   is unsure about.
 
-The old deterministic rules no longer decide anything:
-- the email rules classifier is a first signal, kept as evidence;
-- identity signals come from the CRM;
-- the rules are the fallback when Hermes is unavailable;
-- their reading is shown for comparison only ("Old rules (comparison only)").
+No rules read the words any more. The CRM supplies only mechanical evidence (identity signals
+from its own records, the citable refs, the known facts) and, when Hermes is unavailable, waits
+rather than guessing.
 
 Real cases improve Hermes, not the rules. Hermes's instructions and context carry:
 - the CRM records it needs, each with a ref it can cite (`job:…`, `visit:…`, `quote:…`, `task:…`,
@@ -934,8 +937,10 @@ investigates, organises and does internal work. The guardrails are its employmen
   belongs to this work; it does not re-judge it).
 - **Destructive:** nothing deletes, merges or approves anything financial. A lead someone has worked
   on is never marked lost by Hermes.
-- **Confidence:** below `HERMES_MIN_CONFIDENCE` (default 60%) Hermes's internal work still goes
-  ahead; what prepares customer output or changes state waits for Chris ("Hermes is unsure").
+- **Confidence and the autonomy dial:** **Settings → Hermes** sets, per kind of work, how far
+  Hermes may go (do it / do it and ask / ask first / never) and how sure it has to be. Below a
+  class's threshold that work waits for Chris ("Hermes is unsure") while the rest goes ahead.
+  Quotes and replies can never be set below "do and ask"; sending is never on the dial.
 - **Secrets:** no supplier credentials, cookies, tokens or secrets reach Hermes; no database access.
 
 Every guardrail decision, allowed or refused, is stored with the run (`validation.decisions`).
@@ -1015,8 +1020,12 @@ appointment, quote number) or Chris links them. Facts from an unlinked sender ar
   and Chris can mark it lost.
 - **Lead, but Hermes is under the threshold:** it goes to **Needs your review → Hermes thinks this
   is a lead**, with **Make it a lead** / **Not a lead**.
-- **Not a lead:** an untouched lead the rules created from it is marked lost ("Not a lead
-  (Hermes)"). Reopening it is recorded as a correction.
+- **Not a lead:** the email is filed as "Not a lead". If a lead had already been created from the
+  email (say Chris accepted it, then asked Hermes to read it again) and nobody has worked on it, it
+  is marked lost ("Not a lead (Hermes)"); a worked lead is left for Chris. Reopening it is recorded
+  as a correction.
+- **No decision given:** a new enquiry or quote request from a customer counts as a lead; a
+  supplier, provider or internal message does not.
 
 **Which emails Hermes reads.** Everything except mail with a strong mechanical reason:
 - an `Auto-Submitted` header;
@@ -1026,8 +1035,8 @@ appointment, quote number) or Chris links them. Facts from an unlinked sender ar
 - a mailer-daemon or postmaster sender;
 - auto-reply, out-of-office and bounce subjects.
 
-Those are never sent to Hermes. If Hermes cannot be reached, the rules' verdict stands, and it is
-retried.
+Those are never sent to Hermes. If Hermes cannot be reached, the email waits in Needs review as
+"Hermes could not read it", and it is retried.
 
 **Commitments.** Hermes marks an outstanding commitment kept (or no longer needed) when the record
 shows it, citing the record. Example: "Book the installation visit" is kept because `job:…` (J-1008)
@@ -1041,8 +1050,13 @@ and the Inspector shows a **Reopen** button. Reopening is recorded as a correcti
 - A task is never created twice with the same title on the same lead.
 - A pricing task is not repeated when one is open.
 
-**What you see:** in **Inspector → Recently read**, each item shows Hermes's headline: recommended
-action, confidence and reason. Under it you see:
+**What you see:** **Home** opens on the Decisions queue (everything waiting on you, whatever
+produced it: Hermes's questions, proposed site visits and bookings, quotes and replies ready to
+approve, facts that disagree with the record, proposed packages and Business Brain updates), the
+day's jobs, commitments and follow-ups, and **What Hermes did** (one line per action, newest
+first). The full reading of every email and conversation is on the **Hermes** page
+(`/inspector`, linked from the feed): each item shows Hermes's headline, recommended action,
+confidence and reason, and under it:
 - the facts with their evidence;
 - commitments;
 - the guardrails, Brain rules and advisories that applied;
@@ -1064,11 +1078,11 @@ and the timeline show the same.
 
 **Fallback.** If Hermes is not connected, unreachable, slower than the timeout, or returns something
 unusable (after one retry with the problem stated), the item is never lost and never "no action":
-- the CRM's own extraction is used only where safe (identity, blank fields, commitments);
+- nothing is invented from the words: no lead, no facts, no commitments;
 - the item goes to **Needs your review → Hermes could not read it**;
 - Hermes is tried again after 5, 15 and 60 minutes. A later Hermes reading replaces the fallback
   unless you have already dealt with it.
-Until Hermes is connected, every new enquiry therefore waits in the Inspector for you.
+Until Hermes is connected, every new enquiry therefore waits on Home for you.
 
 **Audit and learning-ready data.**
 - **`inspector_runs`:** one row per run with:
@@ -1188,7 +1202,8 @@ supplier catalogues, stock, trade prices from approved suppliers, alternatives, 
    Optional settings:
    - `HERMES_MODEL`: the model or profile name Hermes exposes; default `hermes-agent`.
    - `HERMES_TIMEOUT_MS`: default `120000`.
-   - `HERMES_MIN_CONFIDENCE`: default `0.6`.
+   - `HERMES_MIN_CONFIDENCE`: optional floor for every threshold on the autonomy dial (Settings →
+     Hermes is the normal way to set these).
    Then run `docker compose -f docker-compose.prod.yml up -d`.
 4. Give the inspector profile the CRM's tools (`~/.hermes/profiles/inspector/config.yaml`), then
    `/reload-mcp` in Hermes:
@@ -1316,16 +1331,21 @@ approved kit is ever selected by the Brain. Markup, labour rules and prices are 
 **Deploying:**
 - Migration `0019_hermes_inspector` adds the run, feedback, audit and queue tables, and new columns
   on inspections. Migration `0020_research_candidates` adds the research findings and candidate
-  Business Brain updates. Migration `0021_package_candidates` adds candidate packages.
-  `./deploy/update.sh` runs them.
+  Business Brain updates. Migration `0021_package_candidates` adds candidate packages. Migration
+  `0022_hermes_only_reader` adds the "Hermes is reading" email state and drops the old
+  classifier's tables (`email_classifications`, `jev_observations`). `./deploy/update.sh` runs them.
+- After updating, remove `AI_PROVIDER`, `AI_LEAD_CONFIDENCE_THRESHOLD`, `ANTHROPIC_API_KEY`,
+  `AI_MODEL`, `JEV_SHADOW` and `JEV_MODEL` from `/opt/getsecure/.env`: they do nothing now.
+- **Settings → Hermes** shows the connection, the last 7 days, what is queued, and the autonomy
+  dial. The old Settings → Email AI page is gone.
 - The Inspector contract is now `hermes-inspector-4` (structured evidence refs, internal actions,
   research requests, review question). Hermes needs no change: the prompt carries the schema.
 - Earlier inspections are kept as they were, marked "Rules (before Hermes)".
 - Nothing is re-read automatically.
 
-**Jev** (the earlier shadow classifier) is redundant and off by default: Hermes is the primary
-interpretation layer. The Inspector page shows a Jev section only if Jev ever produced answers, for
-comparison. Jev can be removed later.
+**One brain.** The earlier rules classifier, its Anthropic option and Jev (the shadow classifier)
+have been removed: Hermes is the only reader, so there is no second interpretation to disagree
+with it. The Inspector's own extraction, analysis and deterministic planner are gone with them.
 
 ## 18. Leads: Next action and Lost reason
 
@@ -1382,7 +1402,7 @@ value in `.env` and restart. Rotating `ENCRYPTION_KEY` means reconnecting the ma
 | Database shell | `docker compose -f docker-compose.prod.yml exec db psql -U getsecure -d getsecure` |
 | First login | `https://hermes.aucklandsecuritysystems.co.nz/` → `/setup` |
 | Connect mailbox | Settings → Email accounts |
-| Classifier status | Settings → Email AI |
+| Hermes: connection, queue, autonomy dial | Settings → Hermes |
 | Reminder thresholds, business hours | Settings → Reminders |
 | Staff and roles | Settings → Staff |
 | System status | Settings → System status |

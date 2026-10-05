@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/constants";
 import { navItemsFor, type NavItem as Item } from "@/lib/nav";
 
-const BADGE_TITLES: Record<string, string> = { "/inbox": "Emails needing review", "/inspector": "Waiting for review in the Inspector" };
+const BADGE_TITLES: Record<string, string> = { "/dashboard": "Decisions waiting for you" };
 
 /** `badges`: a count per nav href (emails needing review, Inspector items waiting). */
 export function SidebarNav({ role, badges = {} }: { role: UserRole; badges?: Record<string, number> }) {

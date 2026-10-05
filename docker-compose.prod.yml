@@ -59,11 +59,8 @@ services:
       PLAUD_ENABLED: ${PLAUD_ENABLED:-false}
       PLAUD_CLI: /opt/plaud-cli/node_modules/.bin/plaud
       # Mail from these addresses is always a website enquiry: parsed exactly, never filtered as
-      # automated junk, never sent to a classifier. Comma-separated.
+      # automated junk. Comma-separated.
       LEAD_SENDER_ADDRESSES: ${LEAD_SENDER_ADDRESSES:-noreply@updates.getsecure.co.nz}
-      # Built-in offline classifier: no external AI service, no API key, no per-email cost.
-      AI_PROVIDER: ${AI_PROVIDER:-rules}
-      AI_LEAD_CONFIDENCE_THRESHOLD: ${AI_LEAD_CONFIDENCE_THRESHOLD:-0.75}
       HEALTH_TOKEN: ${HEALTH_TOKEN:-}
       APP_VERSION: ${APP_VERSION:-}
       # Hermes, the Inspector (docs/DEPLOYMENT_HANDOFF.md section 17). Unset = not connected: every
@@ -80,10 +77,6 @@ services:
       HERMES_RESEARCH_MODEL: ${HERMES_RESEARCH_MODEL:-}
       HERMES_RESEARCH_TIMEOUT_MS: ${HERMES_RESEARCH_TIMEOUT_MS:-}
       HERMES_RESEARCH_MCP_TOKEN: ${HERMES_RESEARCH_MCP_TOKEN:-}
-      # Jev shadow classifier (off unless JEV_SHADOW=on and an Anthropic key is set).
-      JEV_SHADOW: ${JEV_SHADOW:-off}
-      JEV_MODEL: ${JEV_MODEL:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     # Lets the app reach a Hermes Agent running on the VPS itself at http://host.docker.internal:8642.
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -56,9 +56,9 @@ test.describe("Calendar, dispatch, My Day and Today", () => {
   let jobUrl = "";
   const leadName = `Dispatch Lead ${RUN}`;
 
-  test("Today dashboard shows attention sections and can complete a task", async ({ page }) => {
+  test("Home shows the day's sections and can complete a task", async ({ page }) => {
     await login(page);
-    for (const s of ["overdue-reminders", "reminders-for-today", "emails-needing-review", "today-s-jobs-site-visits", "jobs-not-yet-scheduled", "new-leads", "leads-needing-follow-up", "quotes-waiting-on-action"]) {
+    for (const s of ["overdue-reminders", "reminders-for-today", "our-commitments", "today-s-jobs-site-visits", "jobs-not-yet-scheduled", "new-leads", "leads-needing-follow-up", "quotes-waiting-on-action"]) {
       await expect(page.getByTestId(`section-${s}`)).toBeVisible();
     }
     await page.getByRole("button", { name: "Add reminder" }).click();

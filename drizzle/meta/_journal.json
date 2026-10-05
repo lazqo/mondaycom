@@ -155,6 +155,13 @@
       "when": 1791169966794,
       "tag": "0021_package_candidates",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791175746926,
+      "tag": "0022_hermes_only_reader",
+      "breakpoints": true
     }
   ]
 }

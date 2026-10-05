@@ -99,7 +99,6 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
           <ReviewPanel
             thread={{ id: thread.id, leadId: thread.lead?.id ?? null, contactId: thread.contact?.id ?? null, jobId: thread.job?.id ?? null }}
             email={reviewable ? { id: reviewable.id, classification: reviewable.classification, classificationError: reviewable.classificationError, fromName: reviewable.fromName, fromAddress: reviewable.fromAddress } : null}
-            classification={reviewable?.classifications[0] ?? null}
             users={users}
             nextThreadId={nextId}
           />

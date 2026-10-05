@@ -1,15 +1,13 @@
-import { Users, Briefcase, FileText, Calendar, CalendarSync, Kanban, Settings, Inbox, Mail, Sun, Smartphone, BellRing, Sparkles, Activity, Mic, ShieldCheck, Brain, FileBadge, ScanSearch } from "lucide-react";
+import { Users, Briefcase, FileText, Calendar, CalendarSync, Kanban, Settings, Inbox, Mail, Sun, Smartphone, BellRing, Sparkles, Activity, Mic, Brain, FileBadge } from "lucide-react";
 import type { UserRole } from "@/lib/constants";
 
 export type NavItem = { label: string; href: string; icon: React.ComponentType<{ className?: string }>; roles: UserRole[] };
 
 const ITEMS: NavItem[] = [
-  { label: "Today", href: "/dashboard", icon: Sun, roles: ["admin", "member"] },
+  { label: "Home", href: "/dashboard", icon: Sun, roles: ["admin", "member"] },
   { label: "My day", href: "/my-day", icon: Smartphone, roles: ["admin", "member", "field"] },
   { label: "Inbox", href: "/inbox", icon: Inbox, roles: ["admin", "member"] },
   { label: "Leads", href: "/leads", icon: Kanban, roles: ["admin", "member"] },
-  { label: "Inspector", href: "/inspector", icon: ScanSearch, roles: ["admin", "member"] },
-  { label: "Approvals", href: "/approvals", icon: ShieldCheck, roles: ["admin", "member"] },
   { label: "Customers", href: "/contacts", icon: Users, roles: ["admin", "member", "field"] },
   { label: "Recordings", href: "/recordings", icon: Mic, roles: ["admin", "member"] },
   { label: "Quotes", href: "/quotes", icon: FileText, roles: ["admin", "member"] },
@@ -18,7 +16,7 @@ const ITEMS: NavItem[] = [
 ];
 const SETTINGS: NavItem[] = [
   { label: "Reminders", href: "/settings/automations", icon: BellRing, roles: ["admin"] },
-  { label: "Email AI", href: "/settings/ai", icon: Sparkles, roles: ["admin"] },
+  { label: "Hermes", href: "/settings/hermes", icon: Sparkles, roles: ["admin"] },
   { label: "Email accounts", href: "/settings/mailboxes", icon: Mail, roles: ["admin"] },
   { label: "Calendar sync", href: "/settings/calendar", icon: CalendarSync, roles: ["admin"] },
   { label: "Business Brain", href: "/settings/brain", icon: Brain, roles: ["admin"] },
