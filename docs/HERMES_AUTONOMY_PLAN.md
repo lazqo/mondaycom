@@ -402,7 +402,8 @@ shippable and tested, in this order.
 6. **The Hermes page back in the menu** (it was folded into Home's "Every reading →" link; it
    belongs in the nav).
 *Delivered.* Two rules learnt: a lead needs something to be made from (a name or company plus a
-phone, email or site), and a name matching someone already in the CRM is proposed, never
+phone, email or site), and someone who may already be in the CRM (on a call, the same name; by
+email, the same name and something else agreeing, such as the site) is proposed, never
 auto-created; a recording that carries Chris's own instructions or a self-stated appointment is
 its own home and never falls into "Who is this?".
 

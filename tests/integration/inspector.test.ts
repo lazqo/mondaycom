@@ -1068,6 +1068,30 @@ describe("Hermes decides lead / not lead (audited and reversible); the CRM files
     expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, lead.id), eq(S.activityLog.action, "lead_created_by_hermes")) })).toBeTruthy();
   });
 
+  it("a sender with the same name as a lead the CRM has: a name alone is a coincidence (the lead is created); the same site as well, and it is proposed with the candidate", async () => {
+    const [known] = await db.insert(S.leads).values({ name: `Tama Rewi ${RUN}`, email: `tama+${RUN}@example.com`, site: `41 Depot Road ${RUN}, Penrose`, status: "new", source: "email", service: "CCTV" }).returning();
+    leadIds.push(known.id);
+    const site = (n: number) => `${n} Depot Road ${RUN}, Penrose`;
+    script = (pack) => ({ ...enquiry(0.9), facts: [{ key: "contact_name", value: `Tama Rewi ${RUN}`, evidence: "", evidence_ref: "email:from", confidence: 0.9 }, { key: "site_address", value: pack.source.text.includes(site(41)) ? site(41) : site(7), evidence: pack.source.text.includes(site(41)) ? site(41) : site(7), confidence: 0.9 }] });
+    const e1 = await email({ from: `tama.rewi+${RUN}@othermail.example`, name: `Tama Rewi ${RUN}`, subject: "Cameras", text: `We'd like 6 cameras for the shop at ${site(7)}, can someone call me?` });
+    await processEmail(e1.id);
+    await settleInspectorQueue();
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e1.id) }))!;
+    expect(lead).toBeTruthy();
+    leadIds.push(lead.id);
+    expect((await latestFor(e1.id))!).toMatchObject({ status: "analysed", leadId: lead.id });
+
+    const e2 = await email({ from: `tama.rewi2+${RUN}@othermail.example`, name: `Tama Rewi ${RUN}`, subject: "Cameras", text: `We'd like 6 cameras for the shop at ${site(41)}, can someone call me?` });
+    await processEmail(e2.id);
+    await settleInspectorQueue();
+    const ins = (await latestFor(e2.id))!;
+    expect(ins).toMatchObject({ status: "needs_review", reviewKind: "hermes_proposed_lead", leadId: null });
+    expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e2.id) })).toBeUndefined();
+    const review = (await actionsOf(ins.id)).find((a) => a.type === "NEEDS_REVIEW")!;
+    const cands = (review.payload as { candidates: { leadId: string; signals: { kind: string }[] }[] }).candidates;
+    expect(cands.find((c) => c.leadId === known.id)!.signals.map((s) => s.kind).sort()).toEqual(["address", "name"]);
+  });
+
   it("Hermes thinks it is a lead but is not sure: proposed to Chris (the email shows Needs review); only a person accepts, once", async () => {
     script = () => enquiry(0.5);
     const e = await email({ from: `prop+${RUN}@example.com`, name: "Prop Owner", subject: "Re: your flyer", text: "Saw your flyer. Might want cameras for the shop at some point." });

@@ -1081,8 +1081,10 @@ lead from Hermes's reading (name, phone, service, site), the same way an email d
 runs. When Hermes reads something as existing work but the CRM has no record of the person or the
 site anywhere, it is new work: a lead is created from the reading and the work continues there
 (no "Who is this?"). Both need something to make a lead from: a name or company, and a phone,
-email or site. A name that matches someone already in the CRM is never auto-created: Hermes's
-proposal shows the candidate and Chris chooses.
+email or site. Someone who may already be in the CRM is never auto-created: Hermes's proposal
+shows the candidate and Chris chooses. On a call the same name is enough to ask; an email comes
+from an address the CRM does not know, so the same name alone is treated as a coincidence (common
+names) unless something else agrees, such as the site or the company.
 
 **Stated times, streets, and Chris's own appointments.** A time the customer or Chris states
 ("today at 3 pm", "Thursday 10 am", "8 October 2 pm") is the first slot on a proposal, marked

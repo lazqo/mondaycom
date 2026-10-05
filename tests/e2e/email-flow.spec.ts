@@ -18,6 +18,9 @@ const RUN = `e2e${Date.now().toString(36)}`;
 // A phone number of this run's own: the local IMAP inbox keeps earlier runs' copies of the same
 // fixture, and a repeated phone number would (rightly) file this run's email on that earlier lead.
 const PHONE = `027 ${String(Date.now()).slice(-7, -4)} ${String(Date.now()).slice(-4)}`;
+// A site of this run's own, for the same reason: the Ajax enquirer is meant to be new to the CRM,
+// and an earlier copy's lead at the same address would (rightly) make this one a proposal.
+const SITE = `${100 + (Date.now() % 900)} Kauri Grove`;
 
 function dovecotUp(): boolean {
   try {
@@ -34,7 +37,7 @@ function deliver(fixture: string, tag: string, subjectSuffix = ""): { from: stri
   const from = raw.match(/^From: .*?<?([\w.+-]+@[\w.-]+)>?\s*$/m)![1];
   const unique = from.replace("@", `+${RUN}${tag}@`);
   raw = raw.split(from).join(unique);
-  raw = raw.replace(/^Message-ID: .*$/m, `Message-ID: <${RUN}-${tag}@e2e.test>`).split("027 555 0311").join(PHONE);
+  raw = raw.replace(/^Message-ID: .*$/m, `Message-ID: <${RUN}-${tag}@e2e.test>`).split("027 555 0311").join(PHONE).split("27 Kauri Grove").join(SITE);
   const subject = raw.match(/^Subject: (.*)$/m)![1] + subjectSuffix;
   raw = raw.replace(/^Subject: .*$/m, `Subject: ${subject}`);
   const path = `test-results/${RUN}-${tag}.eml`;
@@ -128,7 +131,7 @@ test.describe("Titan-style email ingestion", () => {
     await expect(leadRow).toBeVisible();
     await expect(leadRow.getByRole("button", { name: "Phone" })).toHaveText(PHONE);
     await expect(leadRow.getByRole("button", { name: "Service" })).toHaveText("Alarm");
-    await expect(leadRow.getByRole("button", { name: "Site" })).toHaveText(/27 Kauri Grove/);
+    await expect(leadRow.getByRole("button", { name: "Site" })).toHaveText(new RegExp(SITE));
     await expect(leadRow.getByRole("combobox", { name: "Source" })).toHaveValue("email");
     await expect(page.locator("tr", { hasText: "Security Supplies" })).toHaveCount(0);
     await expect(page.locator("tr", { hasText: vague.from })).toHaveCount(0);
@@ -136,7 +139,7 @@ test.describe("Titan-style email ingestion", () => {
     // Lead detail shows the original email and AI summary.
     await leadRow.getByRole("link", { name: "Dean Walker" }).click();
     await expect(page.getByRole("heading", { name: /Dean Walker/ })).toBeVisible();
-    await expect(page.getByTestId("lead-original-email")).toContainText("27 Kauri Grove");
+    await expect(page.getByTestId("lead-original-email")).toContainText(SITE);
     await expect(page.getByTestId("lead-original-email")).toContainText(ajax.from);
     await expect(page.getByText(/Ajax alarm enquiry/).first()).toBeVisible();
   });
