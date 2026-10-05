@@ -4,8 +4,8 @@ A monday.com-style CRM built from scratch for Get Secure, with lead ingestion fr
 Titan email, AI lead classification, Plaud transcript capture, Apple Calendar sync,
 a native calendar, and a dispatch system.
 
-Status: **v0.1 in progress.** See "Build log" at the end for what exists today and how it deviates
-from the original plan.
+Status: **superseded.** This is the original build plan, kept as history. The plan going forward is
+`docs/HERMES_AUTONOMY_PLAN.md`.
 
 ---
 
