@@ -40,7 +40,7 @@ let mailboxId: string;
 beforeAll(async () => {
   resetReferenceMarker();
   await applyReferenceCatalogue();
-  const u = (await db.query.users.findFirst({ where: eq(S.users.canApprove, true) }))!;
+  const [u] = await db.insert(S.users).values({ email: `chris-${RUN}@test.local`, name: "Chris", passwordHash: "x", role: "admin", canApprove: true }).returning();
   chris = { kind: "human", userId: u.id, name: u.name, canApprove: true };
   const prods = await db.select({ id: S.products.id, model: S.products.model, category: S.products.category, specs: S.products.specs, residential: S.products.residentialAllowed }).from(S.products);
   const cams = prods.filter((p) => p.category === "camera" && p.residential);
@@ -69,6 +69,7 @@ afterAll(async () => {
     await db.delete(S.leads).where(inArray(S.leads.id, made.leads));
   }
   setResearchRuntime(undefined);
+  if (chris) await db.delete(S.users).where(eq(S.users.id, chris.userId));
 });
 
 async function emailWith(attachments: { filename: string; contentType: string; content: Buffer }[]) {
