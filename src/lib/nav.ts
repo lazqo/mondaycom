@@ -13,6 +13,7 @@ const ITEMS: NavItem[] = [
   { label: "Quotes", href: "/quotes", icon: FileText, roles: ["admin", "member"] },
   { label: "Jobs", href: "/jobs", icon: Briefcase, roles: ["admin", "member", "field"] },
   { label: "Calendar", href: "/calendar", icon: Calendar, roles: ["admin", "member", "field"] },
+  { label: "Hermes", href: "/inspector", icon: Sparkles, roles: ["admin", "member"] },
 ];
 const SETTINGS: NavItem[] = [
   { label: "Reminders", href: "/settings/automations", icon: BellRing, roles: ["admin"] },

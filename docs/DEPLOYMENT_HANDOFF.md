@@ -1076,6 +1076,32 @@ when you send it. "Just add a task" keeps the old behaviour; "Another time" open
 An event is only ever created by a person's click: the booking function refuses an agent, whatever
 asked for it.
 
+**Leads from recordings; unknown work is new work.** A new enquirer on a recorded call becomes a
+lead from Hermes's reading (name, phone, service, site), the same way an email does, and the Brain
+runs. When Hermes reads something as existing work but the CRM has no record of the person or the
+site anywhere, it is new work: a lead is created from the reading and the work continues there
+(no "Who is this?"). Both need something to make a lead from: a name or company, and a phone,
+email or site. A name that matches someone already in the CRM is never auto-created: Hermes's
+proposal shows the candidate and Chris chooses.
+
+**Stated times, streets, and Chris's own appointments.** A time the customer or Chris states
+("today at 3 pm", "Thursday 10 am", "8 October 2 pm") is the first slot on a proposal, marked
+*as said*, with anything it clashes with in the calendar named; free slots follow. A street with no
+number ("Great South Road") places a message when exactly one open record is on that street. A
+recording in which Chris states an appointment himself ("we have an install today at 3 pm at
+Great South Road") becomes a booking proposal that can be pencilled with no customer attached.
+Durations come from the work: site visit and service call minutes in Settings → Reminders, an
+install from the Business Brain's labour estimate (or the install hours there).
+
+**Plaud as the command channel.** A recording is Chris's own voice, so instructions in it are
+commands the CRM carries out: add a note, create / complete / remove a task, set a follow-up, set a
+lead or job status, change a lead's details, move or cancel an appointment. The commanded words
+must be in the transcript (quoted as evidence); reversible changes run at once and the feed says
+how to undo them; moving or cancelling an appointment (the customer was told a time) and
+cancelling a job wait for Chris's click. Commands in an email are ignored and said so: an email is
+never an operator. Hermes targets records by the refs in its pack (the calendar ahead and open
+tasks are included for recordings) or by searching with its tools.
+
 **Commitments.** Hermes marks an outstanding commitment kept (or no longer needed) when the record
 shows it, citing the record. Example: "Book the installation visit" is kept because `job:…` (J-1008)
 was completed. The commitment is closed, the timeline says "Hermes: commitment kept … shown by …",

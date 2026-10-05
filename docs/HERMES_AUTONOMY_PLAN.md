@@ -401,6 +401,10 @@ shippable and tested, in this order.
    pricing path as Chris's own entry. A command Hermes cannot place becomes a question card.
 6. **The Hermes page back in the menu** (it was folded into Home's "Every reading →" link; it
    belongs in the nav).
+*Delivered.* Two rules learnt: a lead needs something to be made from (a name or company plus a
+phone, email or site), and a name matching someone already in the CRM is proposed, never
+auto-created; a recording that carries Chris's own instructions or a self-stated appointment is
+its own home and never falls into "Who is this?".
 
 ### Run B: one next step per record (reminders that mean something)
 Today reminders come from a rules engine ("no contact in N days", "quote sent, not followed up")

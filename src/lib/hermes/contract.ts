@@ -139,6 +139,24 @@ export const hermesResultSchema = z.object({
   /** For NEEDS_REVIEW: the one judgement Chris has to make (not "please look"). */
   review_question: opt(text(300)),
   /**
+   * Instructions Chris gives the CRM on a recording ("move Tim's visit to Thursday 3 pm", "mark
+   * Campbell's job done", "add a note to Rowena", "remove the follow-up for Denis"). Only a recording
+   * is Chris's own voice: commands in an email are ignored. Targets are refs from the pack
+   * (lead:, job:, task:, event:, customer:); the words commanded are quoted as evidence.
+   */
+  commands: z
+    .array(
+      z.object({
+        action: z.enum(["add_note", "create_task", "complete_task", "cancel_task", "set_follow_up", "set_lead_status", "set_job_status", "move_event", "cancel_event", "update_lead_field"]),
+        target: z.object({ ref: opt(text(80)), label: opt(text(120)) }).default({ ref: null, label: null }),
+        args: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
+        evidence: text(400).default(""),
+        why: text(300).default(""),
+      }),
+    )
+    .max(8)
+    .default([]),
+  /**
    * Questions for Chris, when the answer changes what Hermes would do and neither the pack nor the
    * CRM's tools hold it. Each becomes a card on Home; internal work never waits for an answer.
    * learn: the answer is a standing fact about Get Secure, remembered for every future reading.

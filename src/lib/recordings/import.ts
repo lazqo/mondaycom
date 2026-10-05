@@ -56,7 +56,7 @@ export async function importRecentRecordings(opts: { days?: number; log?: (m: st
     // Only a phone number files a recording straight away; a spoken name alone is never enough. The
     // Inspector then reads it with every signal (calendar, email, quote number…) and either files
     // it or leaves it for Chris with the possible matches.
-    const found = await matchRecording({ title: item.title, transcript });
+    const found = await matchRecording({ title: item.title, transcript, at: item.date ? new Date(`${item.date}T00:00:00Z`) : null });
     const match = found && found.matchedBy.startsWith("phone") ? found : null;
     const [row] = await db
       .insert(recordings)
@@ -138,7 +138,7 @@ export async function upgradeToCleanedTranscripts(summary: ImportSummary, log: (
       continue;
     }
     const patch: Partial<typeof recordings.$inferInsert> = { transcript: cleaned, transcriptPolished: true, polishCheckedAt: new Date(), updatedAt: new Date() };
-    const found = r.status === "review" ? await matchRecording({ title: r.title, transcript: cleaned }) : null;
+    const found = r.status === "review" ? await matchRecording({ title: r.title, transcript: cleaned, at: r.recordedAt }) : null;
     const match = found && found.matchedBy.startsWith("phone") ? found : null;
     if (match) Object.assign(patch, { status: "attached", contactId: match.contactId, leadId: match.leadId, matchedBy: match.matchedBy });
     await db.update(recordings).set(patch).where(eq(recordings.id, r.id));

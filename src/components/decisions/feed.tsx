@@ -15,6 +15,7 @@ function line(f: FeedItem): string {
   if (f.type === "RUN_BUSINESS_BRAIN") return r.siteVisitRequired ? "Business Brain ran: a site visit is needed first." : r.complete ? "Business Brain ran: fully priced." : "Business Brain ran: not fully priced yet.";
   if (f.type === "PREPARE_QUOTE") return r.quoteNumber ? `Quote Q-${r.quoteNumber} prepared; waits for your approval.` : f.reason;
   if (f.type === "DRAFT_EMAIL") return r.note ? String(r.note) : "Reply drafted; waits for your approval.";
+  if (f.type === "OPERATOR_COMMAND") return typeof r.summary === "string" ? `${r.summary}${typeof r.undo === "string" ? ` (undo: ${r.undo})` : ""}` : f.reason;
   if (f.type === "ASK_CHRIS") return typeof r.answer === "string" ? `Asked: ${String(f.reason)} — you answered: ${r.answer}` : f.reason;
   if (f.type === "RESOLVE_COMMITMENT") return `Commitment kept: “${String(r.action ?? "")}”.`;
   if (f.type === "REQUEST_RESEARCH") return r.summary ? `Research: ${String(r.summary).slice(0, 160)}` : f.reason;

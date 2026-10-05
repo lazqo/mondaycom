@@ -78,6 +78,9 @@ const settingsInput = z.object({
   notify_assignee_by_email: z.coerce.boolean(),
   business_hours_start: z.coerce.number().int().min(0).max(22),
   business_hours_end: z.coerce.number().int().min(2).max(24),
+  site_visit_minutes: z.coerce.number().int().min(15).max(480).default(60),
+  service_call_minutes: z.coerce.number().int().min(15).max(480).default(90),
+  install_hours: z.coerce.number().min(0.5).max(40).default(4),
 }).refine((v) => v.business_hours_end > v.business_hours_start, { message: "Work day must end after it starts", path: ["business_hours_end"] });
 
 export async function updateAutomationSettings(formData: FormData): Promise<ActionResult<undefined>> {

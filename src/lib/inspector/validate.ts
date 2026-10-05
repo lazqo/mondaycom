@@ -24,11 +24,12 @@
  *
  * Pure: everything it needs is passed in.
  */
+import { commandNeedsClick, describeCommand } from "./commands";
 import { NON_CUSTOMER_CONTEXTS, type HermesAction, type HermesResult } from "@/lib/hermes/contract";
 import { AUTHORITY, lacksRecord } from "@/lib/hermes/authority";
 import { AUTONOMY_DEFAULTS, dialFor, type AutonomySettings } from "@/lib/hermes/autonomy";
 import { BUSINESS_CONTEXT_LABELS } from "./labels";
-import { resolveDue } from "./dates";
+import { resolveDue, clockTime } from "./dates";
 import { normalisePhone, toNumber } from "./text";
 import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, Known, MissingInfo, PlannedAction, Understanding } from "./types";
 
@@ -391,7 +392,8 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   if (h.business_context !== "unknown") advisories.push({ rule: "business_context", message: `Hermes: ${BUSINESS_CONTEXT_LABELS[h.business_context]}${h.counterparty.name ? ` (${h.counterparty.name})` : ""}${h.accounting ? `; ${h.accounting.document}${h.accounting.reference ? ` ${h.accounting.reference}` : ""}` : ""}.` });
 
   // Hermes is sure this is not a lead or not customer business, and nothing needs doing: nothing to file.
-  const extraWork = h.internal_actions.length > 0 || h.research.length > 0;
+  // Work beside the recommendation: internal actions, research, questions, or Chris's own commands.
+  const extraWork = h.internal_actions.length > 0 || h.research.length > 0 || h.questions.length > 0 || (input.sourceType === "recording" && h.commands.length > 0);
   if ((h.lead_decision === "not_lead" || nonCustomer) && recommended === "NO_ACTION" && !extraWork && h.confidence >= leadThreshold && identity.status !== "matched") {
     advisories.push({ rule: "not_a_lead", message: "Hermes: nothing to do. Nothing filed." });
     return result([], null, null, false);
@@ -444,6 +446,22 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   let planned = planFor(recommended, h, ctx, { known, missing, service, commitments, business, hard });
   for (const x of h.internal_actions) planned.push(...internalAction(x, h));
   for (const r of h.research) planned.push(act("REQUEST_RESEARCH", "auto", "hermes_research", r.why || `Research: ${r.question}`, { question: r.question, kind: r.kind, product: r.product }));
+  // Instructions Chris gave on a recording. Only a recording is his own voice: commands in an email
+  // (anyone can write "cancel my visit") are ignored and said so. The commanded words must be in the
+  // transcript; what changes a customer's appointment, or cannot be undone, waits for his click.
+  if (h.commands.length && input.sourceType !== "recording") advisories.push({ rule: "commands_ignored", message: `${h.commands.length} instruction${h.commands.length === 1 ? "" : "s"} ignored: only a recording of Chris is an operator channel, never an email.` });
+  if (input.sourceType === "recording") {
+    const hay = sourceHaystack(input);
+    for (const [n, c] of h.commands.entries()) {
+      if (!c.evidence || !evidenceFound(c.evidence, hay)) {
+        advisories.push({ rule: "command_not_in_words", message: `Instruction not carried out: the words “${c.evidence || "(none quoted)"}” are not in the transcript.` });
+        decisions.push({ action: "OPERATOR_COMMAND", allowed: false, rule: "command_not_in_words" });
+        continue;
+      }
+      // Each command is its own action (the plan is de-duplicated on type and rule).
+      planned.push(act("OPERATOR_COMMAND", commandNeedsClick(c) ? "approval" : "auto", `operator_command:${n + 1}:${c.action}`, c.why || describeCommand(c), { command: c, summary: describeCommand(c) }));
+    }
+  }
   // Questions for Chris: a card each, answered on Home. Nothing internal waits for an answer, and a
   // question Chris has already answered for this item is never asked again.
   const answered = ctx.answers ?? [];
@@ -514,17 +532,21 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   }
 
   // ---- GUARDRAIL: identity. Only actions that need a record wait for it; the rest goes ahead ----
-  const willHaveLead = h.lead_decision === "lead" && input.sourceType === "email" && input.direction === "inbound" && h.confidence >= leadThreshold;
+  const willHaveLead = h.lead_decision === "lead" && h.confidence >= leadThreshold;
   const need = { lead: records.lead || willHaveLead, work: records.work || willHaveLead };
-  const waiting = planned.filter((p) => lacksRecord(p.type, need));
-  const go = planned.filter((p) => !lacksRecord(p.type, need));
+  const needsRecord = (p: PlannedAction) => lacksRecord(p.type, need) && !p.payload.standalone;
+  const waiting = planned.filter(needsRecord);
+  const go = planned.filter((p) => !needsRecord(p));
   for (const p of waiting) decisions.push({ action: p.type, allowed: false, rule: "needs_record" });
   const candidates = identity.candidates.slice(0, 5).map((x) => ({ leadId: x.leadId, contactId: x.contactId, label: x.label, score: x.score, signals: x.signals }));
   let review: PlannedAction[] = [];
   let reviewKind: Validation["reviewKind"] = null;
   // Existing customer work (in Hermes's reading) with no evidenced home: the work goes ahead, but it
   // cannot be filed until Chris says whose it is. Nothing waits on his answer.
-  const unfiled = personUnknown && !workContext && !willHaveLead && customerWork && (h.lead_decision === "existing" || h.business_context === "existing_work" || h.identity.suggestion === "candidate");
+  // An appointment Chris stated himself, or a recording of his own instructions (each command names
+  // its target), is its own home: nothing to file, nobody to ask about.
+  const selfStated = planned.some((p) => !!p.payload.standalone) || (input.sourceType === "recording" && planned.some((p) => p.type === "OPERATOR_COMMAND"));
+  const unfiled = personUnknown && !workContext && !willHaveLead && customerWork && !selfStated && (h.lead_decision === "existing" || h.business_context === "existing_work" || h.identity.suggestion === "candidate");
   if (waiting.length || unfiled) {
     const what = waiting.map((p) => p.type.replace(/_/g, " ").toLowerCase()).join(", ");
     hard.push({
@@ -564,7 +586,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
 function dedupe(plan: PlannedAction[]): PlannedAction[] {
   const seen = new Set<string>();
   return plan.filter((p) => {
-    const key = `${p.type}:${String(p.payload.title ?? p.payload.question ?? "").toLowerCase()}`;
+    const key = `${p.type}:${String(p.payload.title ?? p.payload.question ?? p.payload.summary ?? "").toLowerCase()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -619,6 +641,9 @@ function planFor(
   const { known, service } = s;
   const timing = (known.timing as string | undefined) ?? null;
   const address = (known.site_address as string | undefined) ?? null;
+  // An appointment Chris states himself on a recording ("install today at 3 pm at X") can be pencilled
+  // with no customer attached and filed later: the time is the evidence, not a person.
+  const standalone = ctx.input.sourceType === "recording" && !!timing && !!clockTime(timing);
   const questionsFrom = (list: MissingInfo[]) => list.map((m) => h.missing.find((x) => x.field === m.field)?.question ?? m.label);
   const ask = (questions: string[], rule: string, why: string): PlannedAction[] => {
     const phone = ctx.crm.customerPhone ?? (known.phone as string | undefined) ?? null;
@@ -656,9 +681,9 @@ function planFor(
       return ask(qs, "hermes_recommendation", "Hermes:");
     }
     case "PROPOSE_SITE_VISIT":
-      return [act("PROPOSE_SITE_VISIT", "approval", "hermes_recommendation", h.reason, { address, timing })];
+      return [act("PROPOSE_SITE_VISIT", "approval", "hermes_recommendation", h.reason, { address, timing, standalone })];
     case "PROPOSE_BOOKING":
-      return [act("PROPOSE_BOOKING", "approval", "hermes_recommendation", h.reason, { address, timing })];
+      return [act("PROPOSE_BOOKING", "approval", "hermes_recommendation", h.reason, { address, timing, standalone })];
     case "DRAFT_REPLY": {
       const body = h.reply_draft?.body ?? null;
       const problem = body ? replyProblem(body) : "there was no reply text";

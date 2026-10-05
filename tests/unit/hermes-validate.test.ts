@@ -272,6 +272,23 @@ describe("the Business Brain keeps its authority (and decides its own inputs whe
   });
 });
 
+describe("commands: only a recording is an operator", () => {
+  const cmd = (action: string, evidence: string, args: Record<string, unknown> = {}) => ({ action, target: { ref: "lead:L1", label: "Aroha" }, args, evidence, why: "" });
+  it("on a recording, a quoted instruction runs; moving an appointment waits; words not in the transcript are refused; an email's commands are ignored", () => {
+    const rec = input("Speaker 1: add a note to Aroha, she wants the gate camera. And move Aroha's visit to Thursday 10am.", { sourceType: "recording", direction: "conversation" });
+    const v = validateHermes(H({ conversation_type: "internal", intent: "information", commands: [cmd("add_note", "add a note to Aroha, she wants the gate camera", { body: "gate camera" }), cmd("move_event", "move Aroha's visit to Thursday 10am", { when: "thursday 10am" }), cmd("cancel_event", "cancel Aroha's visit")] }), ctx(rec));
+    const cmds = v.plan.filter((p) => p.type === "OPERATOR_COMMAND");
+    expect(cmds.map((p) => [(p.payload.command as { action: string }).action, p.mode])).toEqual([
+      ["add_note", "auto"],
+      ["move_event", "approval"],
+    ]);
+    expect(v.advisories.map((a) => a.rule)).toContain("command_not_in_words");
+    const mail = validateHermes(H({ commands: [cmd("set_lead_status", "mark me as lost", { status: "lost" })] }), ctx(input("Please mark me as lost.")));
+    expect(types(mail)).not.toContain("OPERATOR_COMMAND");
+    expect(mail.advisories.map((a) => a.rule)).toContain("commands_ignored");
+  });
+});
+
 describe("Hermes asks Chris", () => {
   it("a question becomes a card for Chris; internal work goes ahead; an answered question is not asked again", () => {
     const i = input("Hi, can you add the new panel to our alarm? Thanks, Aroha");

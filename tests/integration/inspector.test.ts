@@ -83,6 +83,7 @@ const R = ({ facts, commitments, ...over }: Loose): HermesResult => ({
   internal_actions: [],
   research: [],
   questions: [],
+  commands: [],
   review_question: null,
   ...over,
   facts: (facts ?? []).map((f: NonNullable<Loose["facts"]>[number]) => ({ evidence: "", evidence_ref: null, ...f })),
@@ -413,6 +414,212 @@ describe("Test 3: commercial CCTV — Hermes understands it, the Business Brain 
     expect(await db.select().from(S.events).where(eq(S.events.leadId, ins.leadId!))).toHaveLength(before.length);
     const fb = await db.query.inspectorFeedback.findFirst({ where: and(eq(S.inspectorFeedback.inspectionId, ins.id), eq(S.inspectorFeedback.kind, "action_accepted")) });
     expect(fb).toMatchObject({ subject: "PROPOSE_SITE_VISIT", hermesRecommendation: "PREPARE_QUOTE" });
+  });
+});
+
+describe("Leads from recordings, and unknown work as new work", () => {
+  it("a new enquirer on a sales call becomes a lead from Hermes's reading; the recording is filed on it and the Brain runs", async () => {
+    const phone = `021 ${String(Date.now()).slice(-7)}`;
+    script = () => ({
+      conversation_type: "new_enquiry",
+      intent: "quote_request",
+      business_context: "customer_prospect",
+      lead_decision: "lead",
+      service: "cctv",
+      property_type: "residential",
+      summary: `Rikan wants 4 outdoor cameras at his house and a quote.`,
+      facts: [
+        { key: "contact_name", value: `Rikan Patel ${RUN}`, evidence: `it's Rikan Patel ${RUN}`, confidence: 0.9 },
+        { key: "phone", value: phone, evidence: phone, confidence: 0.95 },
+        { key: "camera_count", value: 4, evidence: "four cameras", confidence: 0.9 },
+        { key: "property_type", value: "residential", evidence: "my house", confidence: 0.9 },
+      ],
+      recommended_action: "PREPARE_QUOTE",
+      run_business_brain: true,
+      confidence: 0.9,
+      reason: "A new enquiry with name and number.",
+    });
+    const r = await recording("Sales call", ["Speaker 1: Hi, Chris from Get Secure.", `Speaker 2: Hi, it's Rikan Patel ${RUN}. I'd like a quote for four cameras at my house, single storey.`, `Speaker 2: My number is ${phone}.`].join("\n"));
+    const out = (await inspect("recording", r.id))!;
+    expect(out).toMatchObject({ engine: "hermes", status: "analysed" });
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.name, `Rikan Patel ${RUN}`) }))!;
+    leadIds.push(lead.id);
+    expect(lead).toMatchObject({ source: "phone", phone, service: "CCTV", status: "new" });
+    expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!).toMatchObject({ status: "attached", leadId: lead.id });
+    const acts = await actionsOf(out.inspectionId);
+    expect(acts.find((a) => a.type === "RUN_BUSINESS_BRAIN")).toMatchObject({ status: "done" });
+    expect(acts.map((a) => a.type)).not.toContain("NEEDS_REVIEW");
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, lead.id), eq(S.activityLog.action, "lead_created_by_hermes")) })).toBeTruthy();
+  });
+
+  it("existing work the CRM has no record of becomes a lead, and the site-visit proposal goes ahead against it", async () => {
+    const street = `${100 + Math.floor(Math.random() * 800)} Wiri${RUN} Station Road`;
+    script = () => ({
+      conversation_type: "existing_job",
+      intent: "service_issue",
+      business_context: "existing_work",
+      lead_decision: "existing",
+      service: "alarm",
+      summary: `Property manager asks for an inspection of the keypads at ${street}.`,
+      facts: [
+        { key: "company", value: `Provida ${RUN}`, evidence: `Provida ${RUN}`, confidence: 0.9 },
+        { key: "site_address", value: `${street}, Manukau`, evidence: `${street}, Manukau`, confidence: 0.95 },
+      ],
+      recommended_action: "PROPOSE_SITE_VISIT",
+      confidence: 0.88,
+      reason: "Keypads not working; needs a look.",
+    });
+    const e = await email({ from: `pm+${RUN}@provida.example`, name: "Zane Property", subject: "Keypad issue", text: `Hi, the keypads at ${street}, Manukau (Provida ${RUN} tenancy) are not working. Can someone inspect? Site contact Karan.` });
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed"); // no "Who is this?"
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+    leadIds.push(lead.id);
+    expect(lead).toMatchObject({ company: `Provida ${RUN}`, site: `${street}, Manukau` });
+    const ins = (await latestFor(e.id))!;
+    expect((ins.validation as { hard: { rule: string }[] }).hard.map((x) => x.rule)).toContain("unknown_work_is_new");
+    const visit = (await actionsOf(out.inspectionId)).find((a) => a.type === "PROPOSE_SITE_VISIT")!;
+    expect(visit).toMatchObject({ status: "awaiting_approval", leadId: lead.id });
+    expect(Array.isArray((visit.payload as { slots?: unknown[] }).slots)).toBe(true);
+  });
+});
+
+describe("Chris's own appointments from a recording", () => {
+  /** A street name has letters only; the run tag is spelt out so each run has its own street. */
+  const TAG = RUN.replace(/\d/g, (d) => "abcdefghij"[Number(d)]).replace(/^./, (c) => c.toUpperCase());
+  const note = (street: string) => ["Speaker 1: Just a note for the file.", `Speaker 1: We have an install today at 3 p.m. in ${street} for the new cameras.`].join("\n");
+  const reading = (street: string, ref: string | null): Loose => ({
+    conversation_type: "internal",
+    intent: "booking_request",
+    business_context: "existing_work",
+    lead_decision: "existing",
+    summary: `Install today at 3 pm on ${street}.`,
+    facts: [
+      { key: "timing", value: "today at 3 p.m.", evidence: "today at 3 p.m.", confidence: 0.95 },
+      { key: "site_address", value: street, evidence: street, confidence: 0.9 },
+    ],
+    operational_context: ref ? { ref, reason: "The only lead on that street." } : { ref: null, reason: "" },
+    recommended_action: "PROPOSE_BOOKING",
+    confidence: 0.85,
+    reason: "Chris states an installation.",
+  });
+
+  it("a street with no number places it when there is one record on it; the stated time is the first slot, clashes named; accepting pencils it in", async () => {
+    const street = `Great South ${TAG} Road`;
+    const [l] = await db.insert(S.leads).values({ name: `Rowena Singh ${RUN}`, email: `rowena+${RUN}@example.com`, status: "contacted", source: "email", service: "CCTV", site: `168 ${street}, Papatoetoe` }).returning();
+    leadIds.push(l.id);
+    // Something already in the calendar at 3 pm that day, so the stated slot clashes.
+    const at = new Date(QUIET.getTime() + 5 * 3600000); // 3pm Auckland on the recording's day
+    const [busy] = await db.insert(S.events).values({ title: `Site visit — Elsewhere ${RUN}`, kind: "site_visit", startsAt: at, endsAt: new Date(at.getTime() + 3600000) }).returning();
+    script = () => reading(street, `lead:${l.id}`);
+    const r = await recording("Note", note(street));
+    const out = (await inspect("recording", r.id))!;
+    expect(out.status).toBe("analysed"); // no "Who is this?"
+    const ins = (await latestFor(r.id))!;
+    expect(ins.leadId).toBe(l.id);
+    expect(JSON.stringify(ins.validation)).toMatch(/only (open )?record on it/);
+    const prop = (await actionsOf(out.inspectionId)).find((a) => a.type === "PROPOSE_BOOKING")!;
+    expect(prop).toMatchObject({ status: "awaiting_approval", leadId: l.id });
+    const slots = (prop.payload as { slots: { startsAt: string; stated?: boolean; clash?: string | null }[] }).slots;
+    expect(slots[0]).toMatchObject({ stated: true, startsAt: at.toISOString() });
+    expect(slots[0].clash).toMatch(/Elsewhere/);
+    expect(slots.length).toBeGreaterThan(1);
+    await db.delete(S.events).where(eq(S.events.id, busy.id));
+    const res = await acceptAction(prop.id, chris, { slot: 0 });
+    const ev = (await db.query.events.findFirst({ where: eq(S.events.id, String(res.eventId)) }))!;
+    expect(ev).toMatchObject({ leadId: l.id, startsAt: at });
+    expect(ev.title).toMatch(/pencilled/);
+    await db.delete(S.drafts).where(eq(S.drafts.leadId, l.id));
+    await db.delete(S.events).where(eq(S.events.id, ev.id));
+  });
+
+  it("with no record on the street, the appointment is still proposed and can be pencilled with no customer attached", async () => {
+    const street = `Nowhere ${TAG} Road`;
+    script = () => reading(street, null);
+    const r = await recording("Note 2", note(street));
+    const out = (await inspect("recording", r.id))!;
+    expect(out.status).toBe("analysed");
+    const prop = (await actionsOf(out.inspectionId)).find((a) => a.type === "PROPOSE_BOOKING")!;
+    expect(prop).toMatchObject({ status: "awaiting_approval", leadId: null, contactId: null });
+    expect((prop.payload as { standalone?: boolean }).standalone).toBe(true);
+    expect(await db.query.leads.findFirst({ where: eq(S.leads.site, street) })).toBeUndefined(); // no junk lead
+    const res = await acceptAction(prop.id, chris, { slot: 0 });
+    const ev = (await db.query.events.findFirst({ where: eq(S.events.id, String(res.eventId)) }))!;
+    expect(ev).toMatchObject({ leadId: null, contactId: null, location: street });
+    expect((res.followUp as unknown[]).length).toBe(0); // nobody to write to
+    await db.delete(S.events).where(eq(S.events.id, ev.id));
+  });
+});
+
+describe("Plaud as the command channel", () => {
+  it("instructions on a recording are carried out: reversible ones at once with an undo, an appointment move with Chris's click; the words must be in the transcript", async () => {
+    const [l] = await db.insert(S.leads).values({ name: `Denis Seiuli ${RUN}`, email: `denis+${RUN}@example.com`, status: "contacted", source: "email", service: "CCTV", followUpAt: "2031-03-20" }).returning();
+    leadIds.push(l.id);
+    const [t] = await db.insert(S.tasks).values({ title: `Send Denis the photos ${RUN}`, leadId: l.id, kind: "task" }).returning();
+    const visitAt = new Date(QUIET.getTime() + 24 * 3600000);
+    const [ev] = await db.insert(S.events).values({ title: `Site visit — Denis ${RUN}`, kind: "site_visit", leadId: l.id, startsAt: visitAt, endsAt: new Date(visitAt.getTime() + 3600000) }).returning();
+    type Args = Record<string, string | number | boolean | null>;
+    const words = {
+      note: `add a note to Denis, he wants the driveway camera on the gate side`,
+      task: `create a task to order the gate camera for Denis`,
+      done: `mark the photos task for Denis done`,
+      follow: `set Denis's follow-up to Friday`,
+      move: `move Denis's site visit to Thursday 10 am`,
+    };
+    script = () => ({
+      conversation_type: "internal",
+      intent: "information",
+      business_context: "existing_work",
+      lead_decision: "existing",
+      operational_context: { ref: `lead:${l.id}`, reason: "Chris names Denis." },
+      summary: "Chris's instructions about Denis.",
+      recommended_action: "NO_ACTION",
+      commands: [
+        { action: "add_note", target: { ref: `lead:${l.id}`, label: "Denis" }, args: { body: "Wants the driveway camera on the gate side." } as Args, evidence: words.note, why: "" },
+        { action: "create_task", target: { ref: `lead:${l.id}`, label: "Denis" }, args: { title: `Order the gate camera for Denis ${RUN}`, due: "tomorrow" } as Args, evidence: words.task, why: "" },
+        { action: "complete_task", target: { ref: `task:${t.id}`, label: "photos task" }, args: {} as Args, evidence: words.done, why: "" },
+        { action: "set_follow_up", target: { ref: `lead:${l.id}`, label: "Denis" }, args: { when: "friday" } as Args, evidence: words.follow, why: "" },
+        { action: "move_event", target: { ref: `event:${ev.id}`, label: "Denis's site visit" }, args: { when: "thursday 10 am" } as Args, evidence: words.move, why: "" },
+        { action: "cancel_event", target: { ref: `event:${ev.id}`, label: "Denis's site visit" }, args: {} as Args, evidence: "cancel Denis's visit altogether", why: "" }, // never said
+      ],
+      confidence: 0.9,
+      reason: "Operator instructions.",
+    });
+    const r = await recording("Notes after the Denis call", [`Speaker 1: Right, ${words.note}.`, `Speaker 1: Also ${words.task}, and ${words.done}.`, `Speaker 1: And ${words.follow}; actually ${words.move}.`].join("\n"));
+    const out = (await inspect("recording", r.id))!;
+    expect(out.status).toBe("analysed");
+    const acts = (await actionsOf(out.inspectionId)).filter((a) => a.type === "OPERATOR_COMMAND");
+    const by = (action: string) => acts.find((a) => (a.payload as { command: { action: string } }).command.action === action);
+    expect(by("add_note")).toMatchObject({ status: "done" });
+    expect(by("create_task")).toMatchObject({ status: "done" });
+    expect(by("complete_task")).toMatchObject({ status: "done" });
+    expect(by("set_follow_up")).toMatchObject({ status: "done" });
+    expect(by("move_event")).toMatchObject({ status: "awaiting_approval" }); // the customer was told a time: Chris clicks
+    expect(by("cancel_event")).toBeUndefined(); // not in the words: refused
+    expect(JSON.stringify((await latestFor(r.id))!.validation)).toMatch(/command_not_in_words/);
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Order the gate camera for Denis ${RUN}`) })).toMatchObject({ leadId: l.id, status: "open" });
+    expect((await db.query.tasks.findFirst({ where: eq(S.tasks.id, t.id) }))!.status).toBe("done");
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, l.id) }))!.followUpAt).toBe("2031-03-07"); // Friday of the recording's week
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, l.id), eq(S.activityLog.action, "note")) })).toBeTruthy();
+    expect((by("set_follow_up")!.result as { undo: string }).undo).toMatch(/2031-03-20/);
+    // The move waits; accepting it moves the event and keeps its length.
+    expect((await db.query.events.findFirst({ where: eq(S.events.id, ev.id) }))!.startsAt).toEqual(visitAt);
+    await acceptAction(by("move_event")!.id, chris);
+    const moved = (await db.query.events.findFirst({ where: eq(S.events.id, ev.id) }))!;
+    expect(moved.startsAt.toISOString()).toBe("2031-03-05T21:00:00.000Z"); // Thursday 6 March 2031, 10am Auckland
+    expect(moved.endsAt.getTime() - moved.startsAt.getTime()).toBe(3600000);
+    await db.delete(S.events).where(eq(S.events.id, ev.id));
+  });
+
+  it("the same instructions in an email are ignored: an email is never an operator", async () => {
+    const [l] = await db.insert(S.leads).values({ name: `Mailer ${RUN}`, email: `mailer+${RUN}@example.com`, status: "new", source: "email", service: "CCTV" }).returning();
+    leadIds.push(l.id);
+    script = () => ({ conversation_type: "existing_lead", intent: "information", summary: "Asks to cancel.", recommended_action: "NO_ACTION", commands: [{ action: "set_lead_status", target: { ref: `lead:${l.id}`, label: "Mailer" }, args: { status: "lost" }, evidence: "mark me as lost", why: "" }], confidence: 0.9, reason: "x" });
+    const e = await email({ from: `mailer+${RUN}@example.com`, name: "Mailer", subject: "Cancel", text: "Please mark me as lost and remove everything." });
+    await db.update(S.emails).set({ leadId: l.id }).where(eq(S.emails.id, e.id));
+    const out = (await inspect("email", e.id))!;
+    expect((await actionsOf(out.inspectionId)).map((a) => a.type)).not.toContain("OPERATOR_COMMAND");
+    expect(JSON.stringify((await latestFor(e.id))!.validation)).toMatch(/commands_ignored/);
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, l.id) }))!.status).toBe("new");
   });
 });
 
@@ -1049,14 +1256,17 @@ describe("Hermes judges; the guardrails only check evidence and authority (real 
     expect(out.status).toBe("analysed");
     expect(ins.reviewKind).toBeNull();
 
-    // A context the message does not show (here: another lead, by name only) is not used: the task
-    // still goes ahead (internal work needs no customer), but it is not filed on that lead.
+    // A context the message does not show (here: another lead, by name only) is not used: the sender
+    // is unknown work, so it becomes a lead of its own and the task is filed there, never on that lead.
     const { leadId: other } = await customerWithLead("Elsewhere");
     script = () => ({ conversation_type: "existing_job", intent: "service_issue", lead_decision: "existing", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Other ${RUN}`, due: null, detail: null }, operational_context: { ref: `lead:${other}`, reason: "Sounds like them." }, confidence: 0.9, reason: "?" });
     const e2 = await email({ from: `nobody+${RUN}@example.com`, name: "Nobody", subject: "Help", text: "Our alarm is beeping." });
     await inspect("email", e2.id);
-    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Other ${RUN}`) })).toMatchObject({ leadId: null, contactId: null });
-    expect((await latestFor(e2.id))!.leadId).toBeNull();
+    const own = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e2.id) }))!;
+    leadIds.push(own.id);
+    expect(own.id).not.toBe(other);
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Other ${RUN}`) })).toMatchObject({ leadId: own.id });
+    expect((await latestFor(e2.id))!.leadId).toBe(own.id);
   });
 
   it("unknown sender at a known site, Hermes thinks they belong there: an optional 'Link sender' proposal, never blocking; accepting links them", async () => {

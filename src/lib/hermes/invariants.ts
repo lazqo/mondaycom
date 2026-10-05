@@ -53,6 +53,18 @@ export const INVARIANTS: Invariant[] = [
     },
   },
   {
+    key: "commands_only_from_recordings",
+    title: "Instructions are carried out only from a recording (Chris's own voice), quoted from the transcript; nothing that changes an appointment runs on its own",
+    applies: (c) => c.hermes.commands.length > 0 || c.validation.plan.some((p) => p.type === "OPERATOR_COMMAND"),
+    check: (c) => {
+      const cmds = c.validation.plan.filter((p) => p.type === "OPERATOR_COMMAND");
+      if (c.ctx.input.sourceType !== "recording" && cmds.length) return "a command was planned from an email";
+      const bad = cmds.find((p) => p.mode === "auto" && ["move_event", "cancel_event"].includes((p.payload.command as { action?: string } | undefined)?.action ?? ""));
+      if (bad) return "an appointment change was planned without Chris's click";
+      return null;
+    },
+  },
+  {
     key: "evidence_delivered",
     title: "Hermes received the evidence it needed (form fields, numbered transcript turns)",
     applies: (c) => !!c.pack && (!!c.ctx.input.form || c.ctx.input.utterances.length > 0),

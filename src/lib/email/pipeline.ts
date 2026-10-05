@@ -314,7 +314,7 @@ export async function processPendingEmails(limit = 50): Promise<ProcessOutcome[]
   return out;
 }
 
-function nextBusinessDay(from: Date): string {
+export function nextBusinessDay(from: Date): string {
   const [y, m, d] = dateInAppTz(from).split("-").map(Number);
   const day = new Date(Date.UTC(y, m - 1, d + 1));
   while (day.getUTCDay() === 0 || day.getUTCDay() === 6) day.setUTCDate(day.getUTCDate() + 1);

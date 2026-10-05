@@ -72,6 +72,33 @@ export function resolveDue(phrase: string, when: Date): Date | null {
   return null;
 }
 
+/** A clock time in the words ("3 pm", "3:30pm", "15:00", "midday"), or null. */
+export function clockTime(phrase: string): { hour: number; minute: number } | null {
+  const p = phrase.toLowerCase();
+  if (/\b(noon|midday)\b/.test(p)) return { hour: 12, minute: 0 };
+  const m = /\b(\d{1,2})(?::(\d{2}))?\s*(?:o'clock\s*)?([ap])\.?\s?m\b\.?/.exec(p) ?? /\b(\d{1,2}):(\d{2})\b/.exec(p);
+  if (!m) return null;
+  let hour = Number(m[1]);
+  const minute = Number(m[2] ?? 0);
+  if (hour > 23 || minute > 59) return null;
+  const ap = m[3];
+  if (ap === "p" && hour < 12) hour += 12;
+  if (ap === "a" && hour === 12) hour = 0;
+  if (!ap && hour <= 6) hour += 12; // "at 3" in a work day means the afternoon
+  return { hour, minute };
+}
+
+/**
+ * A stated moment: a day from the words ("today", "Thursday", "8 October"; today when none) and a
+ * clock time. Null without a clock time: that is a window, not an appointment.
+ */
+export function resolveAt(phrase: string, when: Date): Date | null {
+  const t = clockTime(phrase);
+  if (!t) return null;
+  const day = resolveDue(phrase, when) ?? when;
+  return zonedToUtc({ ...datePartsIn(day, TZ), hour: t.hour, minute: t.minute }, TZ);
+}
+
 /** The first time phrase in a sentence, if any. */
 export function findTimePhrase(sentence: string): string | null {
   return TIME_PATTERN.exec(sentence)?.[0] ?? null;

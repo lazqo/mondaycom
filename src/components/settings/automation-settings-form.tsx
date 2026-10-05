@@ -44,6 +44,18 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
         </Field>
       </div>
       <p className="-mt-1 text-xs text-gray-500">24-hour clock. The calendar grid shows these hours plus an hour each side.</p>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Site visit (minutes)" htmlFor="as-d1">
+          <Input id="as-d1" name="site_visit_minutes" type="number" min={15} max={480} defaultValue={settings.site_visit_minutes} />
+        </Field>
+        <Field label="Service call (minutes)" htmlFor="as-d2">
+          <Input id="as-d2" name="service_call_minutes" type="number" min={15} max={480} defaultValue={settings.service_call_minutes} />
+        </Field>
+        <Field label="Install (hours, if no estimate)" htmlFor="as-d3">
+          <Input id="as-d3" name="install_hours" type="number" min={0.5} max={40} step={0.5} defaultValue={settings.install_hours} />
+        </Field>
+      </div>
+      <p className="-mt-1 text-xs text-gray-500">How long Hermes pencils things in for. An install uses the Business Brain&apos;s labour estimate when it has one.</p>
       <Field label="New lead not contacted after (hours)" htmlFor="as-1">
         <Input id="as-1" name="new_lead_contact_hours" type="number" min={1} defaultValue={settings.new_lead_contact_hours} />
       </Field>

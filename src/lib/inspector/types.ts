@@ -166,6 +166,8 @@ export const ACTION_TYPES = [
   "PROPOSE_LINK_SENDER",
   /** Hermes asks Chris something it cannot find out; Chris answers on Home and the source is read again. */
   "ASK_CHRIS",
+  /** An instruction Chris gave on a recording, carried out by the CRM (reversible ones at once, the rest with his click). */
+  "OPERATOR_COMMAND",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 

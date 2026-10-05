@@ -41,6 +41,30 @@ export function addressKey(address: string): string | null {
   return street.length >= 3 ? `${m[1].replace(/^\d+\//, "")} ${street}` : null;
 }
 
+const STREET_NAME = new RegExp(`\\b([A-Z][a-z']+(?: [A-Z][a-z']+){0,2}) (?:${STREET})\\b`, "g");
+/** Street names written without a number ("Great South Road"), lower-cased. */
+export function streetsIn(text: string): string[] {
+  return [...new Set([...text.matchAll(STREET_NAME)].map((m) => m[0].toLowerCase()).filter((s) => !/^(the|our|your|this|that|at|in|on) /.test(s)))];
+}
+
+/** The open records on a street: a street alone places a message only when there is exactly one. */
+export async function recordsOnStreet(street: string): Promise<{ leadId: string | null; contactId: string | null; jobId: string | null; label: string }[]> {
+  const like = `%${street.toLowerCase()}%`;
+  const [l, c, j] = await Promise.all([
+    db.query.leads.findMany({ where: and(sql`lower(coalesce(${leads.site}, '')) like ${like}`, isNull(leads.archivedAt), ne(leads.status, "lost")), columns: { id: true, name: true, contactId: true }, limit: 5 }),
+    db.query.contacts.findMany({ where: sql`lower(coalesce(${contacts.address}, '')) like ${like}`, columns: { id: true, name: true }, limit: 5 }),
+    db.query.jobs.findMany({ where: sql`lower(coalesce(${jobs.siteAddress}, '')) like ${like}`, columns: { id: true, leadId: true, contactId: true, title: true }, limit: 5 }),
+  ]);
+  const out = [
+    ...l.map((x) => ({ leadId: x.id, contactId: x.contactId, jobId: null, label: x.name })),
+    ...c.map((x) => ({ leadId: null, contactId: x.id, jobId: null, label: x.name })),
+    ...j.map((x) => ({ leadId: x.leadId, contactId: x.contactId, jobId: x.id, label: x.title })),
+  ];
+  // The same person through two records (a lead and its customer, a job and its lead) counts once.
+  const keys = new Set(out.map((o) => o.leadId ?? o.contactId ?? o.jobId));
+  return keys.size === 1 ? [out[0]] : out;
+}
+
 export function emailsIn(text: string): string[] {
   return [...new Set([...text.matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)].map((m) => m[0].toLowerCase()))].filter((x) => !/noreply|no-reply|wordpress|website|mailer-daemon/i.test(x));
 }
@@ -152,6 +176,15 @@ export async function collectSignals(input: InspectorInput, extra: { emails?: st
       if (j.leadId) await pushLead(j.leadId, sig("address", `address ${a}`), j.id);
       else await pushContact(j.contactId, sig("address", `address ${a}`), j.id);
     }
+  }
+  // A street with no number: supporting evidence when exactly one open record is on that street.
+  for (const street of streetsIn(all)) {
+    if (addresses.some((a) => a.toLowerCase().includes(street))) continue; // the numbered address covered it
+    const on = await recordsOnStreet(street);
+    if (on.length !== 1) continue;
+    const r = on[0];
+    if (r.leadId) await pushLead(r.leadId, sig("address", `street ${street} (the only record on it)`), r.jobId);
+    else if (r.contactId) await pushContact(r.contactId, sig("address", `street ${street} (the only record on it)`), r.jobId);
   }
   // Company and person names: supporting evidence only (a name never files anything).
   const names = new Set<string>([...(extra.names ?? []), input.from.name ?? "", input.form?.name ?? "", ...(input.sourceType === "recording" ? namesIn(all) : [])].filter((n) => n && n.split(/\s+/).length >= 2));

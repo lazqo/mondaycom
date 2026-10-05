@@ -57,6 +57,7 @@ export const AUTHORITY: Record<ActionType, Authority> = {
   PROPOSE_LINK_SENDER: { class: "proposal", autonomous: false, needs: "work", reversible: true },
   NEEDS_REVIEW: { class: "review", autonomous: false, needs: null, reversible: true },
   ASK_CHRIS: { class: "review", autonomous: false, needs: null, reversible: true },
+  OPERATOR_COMMAND: { class: "operational_state", autonomous: true, needs: null, reversible: true },
   NO_ACTION: { class: "none", autonomous: true, needs: null, reversible: true },
 };
 

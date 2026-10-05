@@ -23,6 +23,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   REQUEST_RESEARCH: "Research",
   PROPOSE_LINK_SENDER: "Link sender (optional)",
   ASK_CHRIS: "Question for you",
+  OPERATOR_COMMAND: "Your instruction",
 };
 
 /** What accepting does, in Chris's words. Never "send" or "confirm". */

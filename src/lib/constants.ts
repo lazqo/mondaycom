@@ -101,6 +101,9 @@ export const AUTOMATION_DEFAULTS = {
   notify_assignee_by_email: false,
   business_hours_start: 7, // calendar grid starts here (24h)
   business_hours_end: 18, // and ends here
+  site_visit_minutes: 60, // how long a site visit is pencilled for
+  service_call_minutes: 90, // a service call
+  install_hours: 4, // an installation when the Business Brain has no labour estimate for it
 } as const;
 export type AutomationSettings = { [K in keyof typeof AUTOMATION_DEFAULTS]: (typeof AUTOMATION_DEFAULTS)[K] extends boolean ? boolean : number };
 

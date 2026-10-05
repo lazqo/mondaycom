@@ -65,6 +65,17 @@ type Scope = { leadId?: string | null; contactId?: string | null };
 const scopeOr = (t: { leadId: typeof tasks.leadId; contactId: typeof tasks.contactId }, s: Scope) =>
   or(s.leadId ? eq(t.leadId, s.leadId) : sql`false`, s.contactId ? eq(t.contactId, s.contactId) : sql`false`)!;
 
+/** The calendar ahead (refs Hermes can target with a command), and every open task. For recordings. */
+export async function readOperatorView(days = 14) {
+  const now = new Date();
+  const evs = await db.query.events.findMany({ where: and(sql`${events.endsAt} >= ${new Date(now.getTime() - 86400000)}`, sql`${events.startsAt} <= ${new Date(now.getTime() + days * 86400000)}`), orderBy: [events.startsAt], limit: 60, with: { lead: { columns: { name: true } }, contact: { columns: { name: true } }, job: { columns: { number: true, title: true } } } });
+  const open = await db.query.tasks.findMany({ where: eq(tasks.status, "open"), orderBy: [desc(tasks.createdAt)], limit: 60, with: { lead: { columns: { name: true } } } });
+  return {
+    calendar: evs.map((e) => ({ ref: `event:${e.id}`, title: e.title, kind: e.kind, startsAt: iso(e.startsAt), endsAt: iso(e.endsAt), who: e.lead?.name ?? e.contact?.name ?? null, job: e.job ? `J-${e.job.number} ${e.job.title}` : null, readOnly: e.readOnly })),
+    openTasks: open.map((t) => ({ ref: `task:${t.id}`, title: t.title, due: t.dueAt, lead: t.lead?.name ?? null, leadRef: t.leadId ? `lead:${t.leadId}` : null })),
+  };
+}
+
 export async function readOpenTasks(s: Scope) {
   if (!s.leadId && !s.contactId) return [];
   const rows = await db.query.tasks.findMany({ where: and(eq(tasks.status, "open"), scopeOr(tasks, s)), orderBy: [desc(tasks.createdAt)], limit: 20 });

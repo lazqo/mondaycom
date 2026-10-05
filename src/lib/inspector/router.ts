@@ -21,7 +21,8 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { commitments, emails, inspectorActions, leads, quotes, recordings, supplierProducts, suppliers } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
-import { suggestSlots } from "@/lib/calendar/availability";
+import { durationFor, suggestSlots } from "@/lib/calendar/availability";
+import { runCommand, type Command } from "./commands";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
 import { type Actor, GuardrailError } from "@/lib/guard/actor";
@@ -198,6 +199,12 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       await logActivity({ entity: "lead", entityId: ctx.leadId!, actorId: null, action: "quote_prepared_by_inspector", detail: { quoteId: r.quoteId, quoteNumber: r.quoteNumber, draftId: r.draftId ?? null, inspectionId: ctx.inspectionId } });
       return { status: "done", result: { quoteId: r.quoteId ?? null, quoteNumber: r.quoteNumber ?? null, draftId: r.draftId ?? null } };
     }
+    case "OPERATOR_COMMAND": {
+      const c = a.payload.command as Command | undefined;
+      if (!c) return { status: "blocked", result: { reason: "No instruction attached." } };
+      const r = await runCommand(c, { leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId }, { actorId: ctx.actor?.kind === "human" ? ctx.actor.userId : null, at: ctx.input.at });
+      return { status: r.status, result: r.result };
+    }
     case "DRAFT_EMAIL": {
       const lead = ctx.leadId ? await db.query.leads.findFirst({ where: eq(leads.id, ctx.leadId) }) : null;
       // An unverified sender in an existing job's context is answered at their own address.
@@ -291,7 +298,8 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
     let payload = a.payload;
     if ((a.type === "PROPOSE_SITE_VISIT" || a.type === "PROPOSE_BOOKING") && status === "awaiting_approval") {
       try {
-        payload = { ...payload, ...(await suggestSlots({ leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId, timing: typeof payload.timing === "string" ? payload.timing : null, durationMin: a.type === "PROPOSE_SITE_VISIT" ? 60 : 180 })) };
+        const durationMin = await durationFor(a.type === "PROPOSE_SITE_VISIT" ? "site_visit" : "booking", ctx.leadId);
+        payload = { ...payload, ...(await suggestSlots({ leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId, timing: typeof payload.timing === "string" ? payload.timing : null, durationMin, saidAt: ctx.input.at })) };
       } catch (err) {
         payload = { ...payload, slotsError: err instanceof Error ? err.message : String(err) };
       }

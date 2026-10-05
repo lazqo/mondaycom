@@ -73,7 +73,11 @@ export function decideIdentity(candidates: IdentityCandidate[], opts: { allowNew
     return { status: "matched", chosen: top, candidates, confidence: top.score, reason: `Matched on ${top.signals.map((s) => s.detail).join(", ")}.${others.length ? ` Note: ${others.map((c) => `${c.label} (${c.signals.map((s) => s.detail).join(", ")})`).join("; ")} also matched.` : ""}` };
   }
   const strong = top.signals.some((s) => STRONG.includes(s.kind));
-  const clear = !second || top.score - second.score >= MATCH_MARGIN;
+  // A phone number or email address said or written outranks a runner-up that is only "during an
+  // appointment" or a name: the words name the person; the calendar only suggests them.
+  const DIRECT: IdentitySignal["kind"][] = ["phone", "email", "thread", "linked"];
+  const outranks = top.signals.some((s) => DIRECT.includes(s.kind)) && !!second && !second.signals.some((s) => DIRECT.includes(s.kind) || s.kind === "quote_ref");
+  const clear = !second || top.score - second.score >= MATCH_MARGIN || outranks;
   if (top.score >= MATCH_THRESHOLD && strong && clear) {
     return { status: "matched", chosen: top, candidates, confidence: top.score, reason: `Matched on ${top.signals.map((s) => s.detail).join(", ")}.` };
   }

@@ -3,7 +3,8 @@
  * booked, honouring the customer's timing words. Pure: no database.
  */
 import { describe, it, expect } from "vitest";
-import { freeSlots, slotLabel, timingWindow } from "@/lib/calendar/availability";
+import { clashWith, freeSlots, slotLabel, timingWindow } from "@/lib/calendar/availability";
+import { clockTime, resolveAt } from "@/lib/inspector/dates";
 
 const AT = new Date("2026-10-07T01:00:00Z"); // 2pm Wednesday 7 Oct 2026, Auckland (NZDT, UTC+13)
 const hours = { start: 8, end: 17 };
@@ -41,6 +42,26 @@ describe("free slots", () => {
     expect(local(s[0].startsAt)).toBe("Thu 08");
     expect(timingWindow("whenever suits", AT)).toEqual({ from: null, to: null, part: null });
     expect(timingWindow(null, AT)).toEqual({ from: null, to: null, part: null });
+  });
+
+  it("a stated time is read as a clock time on the day the words give", () => {
+    expect(clockTime("today at 3 p.m.")).toEqual({ hour: 15, minute: 0 });
+    expect(clockTime("3:30pm")).toEqual({ hour: 15, minute: 30 });
+    expect(clockTime("15:00")).toEqual({ hour: 15, minute: 0 });
+    expect(clockTime("10 am")).toEqual({ hour: 10, minute: 0 });
+    expect(clockTime("midday")).toEqual({ hour: 12, minute: 0 });
+    expect(clockTime("next week")).toBeNull();
+    expect(resolveAt("today at 3 p.m.", AT)!.toISOString()).toBe("2026-10-07T02:00:00.000Z"); // 3pm Wed 7 Oct NZDT
+    expect(resolveAt("thursday 10am", AT)!.toISOString()).toBe("2026-10-07T21:00:00.000Z"); // 10am Thu 8 Oct
+    expect(resolveAt("8 October 3pm", AT)!.toISOString()).toBe("2026-10-08T02:00:00.000Z");
+    expect(resolveAt("next week", AT)).toBeNull(); // a window, not an appointment
+  });
+
+  it("names what a slot would clash with, buffer included", () => {
+    const busy = [{ startsAt: nz("2026-10-07T02:00:00Z"), endsAt: nz("2026-10-07T03:00:00Z"), title: "Site visit — Tim" }];
+    expect(clashWith({ startsAt: nz("2026-10-07T02:30:00Z"), endsAt: nz("2026-10-07T03:30:00Z") }, busy)).toMatch(/Site visit — Tim/);
+    expect(clashWith({ startsAt: nz("2026-10-07T03:15:00Z"), endsAt: nz("2026-10-07T04:15:00Z") }, busy)).toMatch(/Site visit — Tim/); // inside the travel buffer
+    expect(clashWith({ startsAt: nz("2026-10-07T04:00:00Z"), endsAt: nz("2026-10-07T05:00:00Z") }, busy)).toBeNull();
   });
 
   it("labels a slot the way Chris would say it", () => {

@@ -48,7 +48,7 @@ export function ActionDecision({ actionId, canApprove, acceptLabel = "Accept" }:
  * pencilling it in creates the event and drafts the confirmation for Chris to send; the customer
  * learns the time only when he sends it.
  */
-export function BookingDecision({ actionId, canApprove, slots, kind }: { actionId: string; canApprove: boolean; slots: { startsAt: string; endsAt: string; label: string }[]; kind: "PROPOSE_SITE_VISIT" | "PROPOSE_BOOKING" }) {
+export function BookingDecision({ actionId, canApprove, slots, kind }: { actionId: string; canApprove: boolean; slots: { startsAt: string; endsAt: string; label: string; stated?: boolean; clash?: string | null }[]; kind: "PROPOSE_SITE_VISIT" | "PROPOSE_BOOKING" }) {
   const { pending, err, act } = useAct();
   const [slot, setSlot] = React.useState<number | null>(slots.length ? 0 : null);
   return (
@@ -59,6 +59,8 @@ export function BookingDecision({ actionId, canApprove, slots, kind }: { actionI
             <label key={s.startsAt} className={`cursor-pointer rounded-md border px-2 py-1 text-xs ${slot === i ? "border-brand-600 bg-brand-50 text-brand-800" : "border-gray-300 text-gray-700"}`}>
               <input type="radio" name={`slot-${actionId}`} className="mr-1" checked={slot === i} onChange={() => setSlot(i)} data-testid={`slot-${actionId}-${i}`} />
               {s.label}
+              {s.stated ? <span className="ml-1 rounded bg-brand-100 px-1 text-[10px] text-brand-800">as said</span> : null}
+              {s.clash ? <span className="ml-1 rounded bg-[#fdab3d] px-1 text-[10px] text-white" title={s.clash}>clashes: {s.clash}</span> : null}
             </label>
           ))}
         </div>
