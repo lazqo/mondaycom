@@ -10,7 +10,7 @@ import { z } from "zod";
 import { COMMITMENT_KEYS, FACT_KEYS, INTENTS } from "@/lib/inspector/types";
 
 /** Bump when the prompt or the contract changes: every run records it. */
-export const HERMES_INSPECTOR_VERSION = "hermes-inspector-4";
+export const HERMES_INSPECTOR_VERSION = "hermes-inspector-5";
 
 /** The controlled next actions Hermes may recommend. Nothing outside this list is ever executed. */
 export const HERMES_ACTIONS = [
@@ -138,6 +138,25 @@ export const hermesResultSchema = z.object({
     .default([]),
   /** For NEEDS_REVIEW: the one judgement Chris has to make (not "please look"). */
   review_question: opt(text(300)),
+  /**
+   * Questions for Chris, when the answer changes what Hermes would do and neither the pack nor the
+   * CRM's tools hold it. Each becomes a card on Home; internal work never waits for an answer.
+   * learn: the answer is a standing fact about Get Secure, remembered for every future reading.
+   */
+  questions: z
+    .array(
+      z.object({
+        key: text(60),
+        question: text(300),
+        kind: z.enum(["text", "number", "yes_no", "choice"]).catch("text").default("text"),
+        options: z.array(text(80)).max(6).default([]),
+        why: text(300).default(""),
+        unblocks: z.array(text(40)).max(6).default([]),
+        learn: z.boolean().default(false),
+      }),
+    )
+    .max(3)
+    .default([]),
   /** For DRAFT_REPLY: the reply Chris will review. It must not quote prices, dates or discounts. */
   reply_draft: opt(z.object({ subject: opt(text(200)), body: text(4000) })),
   /** Who Hermes thinks the sender is. Advisory only: a person's identity is decided by the CRM's guarded rules. */

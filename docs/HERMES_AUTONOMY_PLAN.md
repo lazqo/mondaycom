@@ -295,6 +295,59 @@ Two things learnt on the way, now rules: a job number names the work, never the 
 places a message without filing the person; and when Hermes leaves `lead_decision` blank, a new
 enquiry or quote request from a customer counts as a lead while a supplier or provider does not.
 
+**Phase 1b: Hermes asks and books (pulled forward from 3.4, 3.8 and 3.9).** The run that
+turns one-shot behaviour into a back-and-forth. Three pieces, each small enough to ship with tests:
+
+*Hermes asks, Chris answers, Hermes continues.*
+- Contract: `questions[]` beside `review_question`: `{key, question, kind: text | number |
+  yes_no | choice, options, why, unblocks: [action types], learn: boolean}`. A question is for
+  something the CRM's tools cannot answer and that changes what Hermes would do; never a
+  substitute for looking.
+- A new action type `ASK_CHRIS` (class *review*, never autonomous, needs no record). The
+  validator turns each question into one awaiting card. A question never holds up internal work:
+  tasks, notes, facts and commitments go ahead; only what `unblocks` names waits.
+- Home → **Hermes asks** cards: the question, why, and an input for its kind; **Answer** or
+  **Skip**. The answer is stored as feedback (`question_answered`) and, when `learn` is set (a
+  standing fact about the business: "we no longer install Paradox"), as an approved learning that
+  goes into every future context pack. Then the source is read again with `answersFromChris` in
+  its context pack, so Hermes carries on from the answer. The same question (same key, same
+  lead/customer) is never asked twice while an answer stands.
+- The CRM's own fallback questions (`payload.question` on a review card) are shown; today they
+  are not.
+
+*Missing pricing: ask for the cost, approve it, prepare the quote.*
+- When PREPARE_QUOTE is blocked because the design has unpriced items, Hermes's card is a pricing
+  question listing each unpriced product (model, supplier). Chris types the trade cost ex GST.
+- Each cost goes through the existing `recordSupplierPrice` path **as Chris** (a human approver:
+  entered and approved in one step, with history). Hermes never enters a price; an agent actor is
+  refused in code. Skipping an item leaves it unpriced and creates the "Price the quote" task as
+  today.
+- On answer the Brain re-runs and the quote is prepared, landing in **Quotes ready for your
+  approval**. Nothing is sent.
+
+*Bookings: a real slot, pencilled when Chris accepts.*
+- An availability engine (`src/lib/calendar/availability.ts`): business hours from Settings,
+  Monday to Friday, existing events and scheduled jobs for the technician, a 30-minute travel
+  buffer; honours what the customer said ("next week", "Thursday", "mornings", a date).
+- A site-visit or booking proposal carries three suggested slots. The card shows them; **Accept**
+  with a slot creates the calendar event (kind site visit or job, assigned to the technician,
+  title marked *pencilled*), moves the lead to Site visit, syncs it to the Titan calendar, and
+  drafts the confirmation reply for Chris to send. "Another time" opens the calendar.
+- Guardrails: an event is only ever created by a person's click (the booking function refuses an
+  agent actor); the customer learns the time only when Chris sends the draft; a visit already in
+  hand is never proposed twice (existing rule).
+
+*Tests.* Unit: availability (hours, busy periods, buffers, timing words), the validator (a question
+never blocks, dedupe against an answer). Integration: answer → re-read with the answer in the
+pack → Hermes continues; pricing answer → approved price → quote prepared; booking accept →
+event, sync queued, draft reply; an agent can neither answer, price nor book. E2E: a question
+answered on Home; a booking accepted and visible on the calendar.
+*Outcome:* when Hermes is stuck it asks and keeps going once Chris answers; a missing cost is a
+question, not a dead end; a visit becomes a time in the calendar, not a reminder to arrange one.
+*Delivered* (contract `hermes-inspector-5`; no migration; `docs/DEPLOYMENT_HANDOFF.md` section 17).
+A booking proposal without a job creates a plain appointment, not a job event: jobs are still
+scheduled from the job itself.
+
 **Phase 2: quote anything, including indicative.** Quote composer; CCTV designer refactor;
 indicative quotes; proposal kinds and cards for any category; alarm catalogue categories and
 Ajax products; Clear Digital connector; research profile may refresh prices and propose products;

@@ -43,6 +43,53 @@ export function ActionDecision({ actionId, canApprove, acceptLabel = "Accept" }:
   );
 }
 
+/**
+ * A site visit or booking Hermes proposed, with free slots from the calendar. Choosing one and
+ * pencilling it in creates the event and drafts the confirmation for Chris to send; the customer
+ * learns the time only when he sends it.
+ */
+export function BookingDecision({ actionId, canApprove, slots, kind }: { actionId: string; canApprove: boolean; slots: { startsAt: string; endsAt: string; label: string }[]; kind: "PROPOSE_SITE_VISIT" | "PROPOSE_BOOKING" }) {
+  const { pending, err, act } = useAct();
+  const [slot, setSlot] = React.useState<number | null>(slots.length ? 0 : null);
+  return (
+    <div className="space-y-1.5" data-testid="booking-decision">
+      {slots.length ? (
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Suggested times">
+          {slots.map((s, i) => (
+            <label key={s.startsAt} className={`cursor-pointer rounded-md border px-2 py-1 text-xs ${slot === i ? "border-brand-600 bg-brand-50 text-brand-800" : "border-gray-300 text-gray-700"}`}>
+              <input type="radio" name={`slot-${actionId}`} className="mr-1" checked={slot === i} onChange={() => setSlot(i)} data-testid={`slot-${actionId}-${i}`} />
+              {s.label}
+            </label>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500">No free slot in the next fortnight: pick a time on the calendar.</p>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {canApprove ? (
+          <>
+            <Button size="sm" disabled={pending || slot == null} data-testid={`accept-action-${actionId}`} onClick={() => act(() => acceptInspectorAction(actionId, slot != null ? { slot } : undefined))}>
+              {kind === "PROPOSE_SITE_VISIT" ? "Pencil in the visit" : "Pencil in the booking"}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={pending} data-testid={`accept-task-${actionId}`} onClick={() => act(() => acceptInspectorAction(actionId))}>
+              Just add a task
+            </Button>
+          </>
+        ) : (
+          <span className="text-xs text-gray-500">Waiting for Chris</span>
+        )}
+        <a href="/calendar" className="text-xs text-brand-700 hover:underline">
+          Another time →
+        </a>
+        <Button size="sm" variant="secondary" disabled={pending} data-testid={`dismiss-action-${actionId}`} onClick={() => act(() => dismissInspectorAction(actionId, ""))}>
+          Dismiss
+        </Button>
+        <ErrorText err={err} />
+      </div>
+    </div>
+  );
+}
+
 /** A new value that conflicts with the CRM: use it, or keep what is there. */
 export function FactDecision({ factId, proposed = false }: { factId: string; proposed?: boolean }) {
   const { pending, err, act } = useAct();

@@ -22,12 +22,13 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   RESOLVE_COMMITMENT: "Commitment kept",
   REQUEST_RESEARCH: "Research",
   PROPOSE_LINK_SENDER: "Link sender (optional)",
+  ASK_CHRIS: "Question for you",
 };
 
 /** What accepting does, in Chris's words. Never "send" or "confirm". */
 export const ACCEPT_LABELS: Partial<Record<ActionType, string>> = {
-  PROPOSE_SITE_VISIT: "Add task to arrange",
-  PROPOSE_BOOKING: "Add task to arrange",
+  PROPOSE_SITE_VISIT: "Pencil it in",
+  PROPOSE_BOOKING: "Pencil it in",
   PREPARE_REVISED_QUOTE: "Prepare revised quote",
   PROPOSE_LINK_SENDER: "Link sender",
 };

@@ -15,6 +15,7 @@ type Pack = {
   source: { type: string; text: string; title: string; form: { fields: Record<string, string> } | null; transcript: { turns: { speaker: string | null; text: string }[] } | null };
   identity: { status: string; candidates: { key: string; label: string }[] };
   crm: { lead: { id: string } | null } | null;
+  answersFromChris?: { key: string; answer: string }[];
 };
 
 const base = {
@@ -135,6 +136,18 @@ function answer(pack: Pack): Record<string, unknown> | "down" {
   // Too little to go on: Hermes thinks it may be a lead but is not sure, so Chris decides.
   if (/do you guys do houses/i.test(text)) {
     return { ...base, conversation_type: "new_enquiry", intent: "question", business_context: "customer_prospect", lead_decision: "lead", summary: "Asks whether Get Secure covers West Auckland houses and a rough price; no detail.", recommended_action: "NEEDS_REVIEW", review_question: "Is this worth a reply asking what they need?", confidence: 0.45, reason: "Might be an enquiry, but nothing says what for." };
+  }
+  // Which panel to fit: Hermes cannot know, so it asks once; with the answer it carries on.
+  if (/which (alarm )?panel/i.test(text)) {
+    const panel = (pack.answersFromChris ?? []).find((a) => a.key === "panel_brand")?.answer;
+    return panel
+      ? { ...base, conversation_type: "existing_lead", intent: "service_issue", summary: `Fit a ${panel} panel.`, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Order the ${panel} panel`, due: "today", detail: null }, reason: "Chris said which panel." }
+      : { ...base, conversation_type: "existing_lead", intent: "service_issue", summary: "Wants a new alarm panel; which one is Chris's call.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring about the new panel", due: "today", detail: null }, questions: [{ key: "panel_brand", question: "Which alarm panel do we fit now?", kind: "choice", options: ["Ajax", "Paradox"], why: "The order depends on it.", unblocks: [], learn: true }], reason: "Need to know the panel." };
+  }
+  // A visit request with timing words: proposed with free slots; booked only when Chris accepts.
+  if (/come (out )?and (have a )?look/i.test(text)) {
+    const timing = text.match(/next week|this week|tomorrow|(?:on )?(?:monday|tuesday|wednesday|thursday|friday)(?: morning| afternoon)?/i)?.[0] ?? null;
+    return { ...base, conversation_type: "existing_lead", intent: "site_visit_request", summary: "Asks for someone to come and look.", facts: timing ? [{ key: "timing", value: timing, evidence: timing, confidence: 0.9 }] : [], recommended_action: "PROPOSE_SITE_VISIT", reason: "Customer asked for a visit." };
   }
   const corrected = text.match(/the address is actually ([^.]+)\./i);
   if (corrected) {

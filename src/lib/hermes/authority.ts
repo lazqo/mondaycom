@@ -56,6 +56,7 @@ export const AUTHORITY: Record<ActionType, Authority> = {
   PREPARE_REVISED_QUOTE: { class: "proposal", autonomous: false, needs: "lead", reversible: true },
   PROPOSE_LINK_SENDER: { class: "proposal", autonomous: false, needs: "work", reversible: true },
   NEEDS_REVIEW: { class: "review", autonomous: false, needs: null, reversible: true },
+  ASK_CHRIS: { class: "review", autonomous: false, needs: null, reversible: true },
   NO_ACTION: { class: "none", autonomous: true, needs: null, reversible: true },
 };
 

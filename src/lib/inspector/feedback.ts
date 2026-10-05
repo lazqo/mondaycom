@@ -25,7 +25,8 @@ export type FeedbackKind =
   | "draft_edited"
   | "draft_sent"
   | "lead_won"
-  | "lead_lost";
+  | "lead_lost"
+  | "question_answered";
 
 export async function recordFeedback(f: { inspectionId?: string | null; leadId?: string | null; contactId?: string | null; kind: FeedbackKind; subject?: string | null; value?: Record<string, unknown>; userId?: string | null }): Promise<void> {
   try {

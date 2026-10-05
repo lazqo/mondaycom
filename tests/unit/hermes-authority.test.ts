@@ -44,6 +44,14 @@ const run = (h: HermesResult, c: ValidateContext, pack?: unknown) => {
 };
 const broken = (r: { results: { ok: boolean; key: string }[] }) => r.results.filter((x) => !x.ok).map((x) => x.key);
 
+describe("asking and booking are never autonomous", () => {
+  it("ASK_CHRIS, PROPOSE_SITE_VISIT and PROPOSE_BOOKING need a person", () => {
+    for (const t of ["ASK_CHRIS", "PROPOSE_SITE_VISIT", "PROPOSE_BOOKING"] as const) expect(AUTHORITY[t].autonomous).toBe(false);
+    expect(AUTHORITY.ASK_CHRIS.class).toBe("review");
+    expect(AUTO_ALLOWED).not.toContain("ASK_CHRIS");
+  });
+});
+
 describe("the authority matrix", () => {
   it("covers every action, and only autonomous ones run without Chris", () => {
     for (const t of ACTION_TYPES) expect(AUTHORITY[t], t).toBeTruthy();

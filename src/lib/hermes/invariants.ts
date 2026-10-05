@@ -32,6 +32,27 @@ const BRAIN_FIELD: Partial<Record<FactKey, string>> = { camera_count: "cameraCou
 
 export const INVARIANTS: Invariant[] = [
   {
+    key: "question_never_blocks",
+    title: "A question for Chris waits as a card; it never holds up internal work or becomes a review",
+    applies: (c) => c.validation.plan.some((p) => p.type === "ASK_CHRIS"),
+    check: (c) => {
+      const asks = c.validation.plan.filter((p) => p.type === "ASK_CHRIS");
+      if (asks.some((p) => p.mode !== "approval")) return "a question was planned as automatic work";
+      if (c.validation.plan.some((p) => p.type === "NEEDS_REVIEW" && p.rule === "hermes_question")) return "a question became a review";
+      if (!c.validation.plan.some((p) => p.type === "ADD_INTERNAL_NOTE")) return "the note did not go ahead while a question waited";
+      return null;
+    },
+  },
+  {
+    key: "booking_and_pricing_need_a_person",
+    title: "A visit, booking or price is only ever proposed or asked for; a person books it or enters it",
+    applies: () => true,
+    check: (c) => {
+      const auto = c.validation.plan.filter((p) => p.mode === "auto" && ["PROPOSE_SITE_VISIT", "PROPOSE_BOOKING", "ASK_CHRIS"].includes(p.type));
+      return auto.length ? `${auto.map((p) => p.type).join(", ")} planned without Chris` : null;
+    },
+  },
+  {
     key: "evidence_delivered",
     title: "Hermes received the evidence it needed (form fields, numbered transcript turns)",
     applies: (c) => !!c.pack && (!!c.ctx.input.form || c.ctx.input.utterances.length > 0),

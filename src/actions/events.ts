@@ -1,15 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { events, jobs, leads } from "@/db/schema";
+import { events, jobs } from "@/db/schema";
 import { notifyJobScheduled } from "@/lib/automations/runner";
 import { EVENT_KINDS } from "@/lib/constants";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { queueCalendarSync } from "@/lib/calendar/sync";
+import { bookEvent } from "@/lib/calendar/book";
+import { humanFromUser } from "@/lib/guard/actor";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 
 const optionalText = z
@@ -52,22 +54,16 @@ export async function createEvent(input: unknown): Promise<ActionResult<{ id: st
   const endsAt = new Date(d.endsAt);
   if (endsAt <= startsAt) return fail("End time must be after start time");
   const kind = d.kind ?? (d.leadId ? "site_visit" : "other");
-  const [row] = await db
-    .insert(events)
-    .values({ ...d, kind, startsAt, endsAt, createdById: user.id })
-    .returning({ id: events.id });
+  let row: { id: string };
+  try {
+    row = await bookEvent({ kind, title: d.title, description: d.description ?? null, location: d.location ?? null, startsAt, endsAt, allDay: d.allDay, leadId: d.leadId ?? null, contactId: d.contactId ?? null, assignedToId: d.assignedToId ?? null, via: "calendar" }, humanFromUser(user));
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
   if (d.leadId && kind === "site_visit") {
-    // Booking a site visit moves a New/Contacted lead along.
-    await db
-      .update(leads)
-      .set({ status: sql`case when ${leads.status} in ('new','contacted') then 'site_visit'::lead_status else ${leads.status} end`, updatedAt: new Date() })
-      .where(eq(leads.id, d.leadId));
-    await logActivity({ entity: "lead", entityId: d.leadId, actorId: user.id, action: "site_visit_scheduled", detail: { eventId: row.id, startsAt: d.startsAt } });
     revalidatePath(`/leads/${d.leadId}`);
     revalidatePath("/leads");
   }
-  await logActivity({ entity: "event", entityId: row.id, actorId: user.id, action: "created" });
-  queueCalendarSync();
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
   return ok({ id: row.id });

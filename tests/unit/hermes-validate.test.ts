@@ -272,6 +272,21 @@ describe("the Business Brain keeps its authority (and decides its own inputs whe
   });
 });
 
+describe("Hermes asks Chris", () => {
+  it("a question becomes a card for Chris; internal work goes ahead; an answered question is not asked again", () => {
+    const i = input("Hi, can you add the new panel to our alarm? Thanks, Aroha");
+    const q = { key: "panel_brand", question: "Which alarm panel do we fit now, Ajax or Paradox?", kind: "choice", options: ["Ajax", "Paradox"], why: "The task depends on it.", unblocks: ["CREATE_INTERNAL_TASK"], learn: true };
+    const v = validateHermes(H({ intent: "service_issue", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Check the panel", due: "today", detail: null }, questions: [q] }), ctx(i));
+    const ask = v.plan.find((p) => p.type === "ASK_CHRIS")!;
+    expect(ask).toMatchObject({ mode: "approval", rule: "hermes_question", payload: { key: "panel_brand", kind: "choice", options: ["Ajax", "Paradox"], learn: true } });
+    expect(types(v)).toContain("CREATE_INTERNAL_TASK"); // never held up by the question
+    expect(v.reviewKind).toBeNull();
+    const again = validateHermes(H({ intent: "service_issue", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Check the panel", due: "today", detail: null }, questions: [q] }), ctx(i, { answers: [{ key: "panel_brand", question: q.question, answer: "Ajax" }] }));
+    expect(types(again)).not.toContain("ASK_CHRIS");
+    expect(again.advisories.map((a) => a.rule)).toContain("question_answered");
+  });
+});
+
 describe("commitments", () => {
   it("the CRM works out the due time from the words; Hermes cannot invent a commitment", () => {
     const i = input("Chris: I'll send the quote tonight. Customer: I'll send the photos tomorrow.");

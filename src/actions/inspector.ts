@@ -28,10 +28,19 @@ export async function confirmIdentityAction(inspectionId: string, choice: { lead
   return run(async (actor) => ({ status: (await inspector.confirmIdentity(inspectionId, choice, actor))?.status ?? null }));
 }
 
+/** Chris answers a question from Hermes; the email or conversation is read again with the answer. */
+export async function answerQuestionAction(actionId: string, answer: string): Promise<ActionResult<{ status: string | null }>> {
+  if (!id.safeParse(actionId).success) return fail("Invalid question");
+  if (typeof answer !== "string" || !answer.trim() || answer.length > 2000) return fail("Type an answer first (up to 2000 characters).");
+  return run(async (actor) => ({ status: (await inspector.answerQuestion(actionId, answer, actor))?.status ?? null }));
+}
+
 /** Accept a recommendation that waits for Chris. Accepting never contacts the customer. */
-export async function acceptInspectorAction(actionId: string): Promise<ActionResult<undefined>> {
+export async function acceptInspectorAction(actionId: string, choice?: { slot?: number }): Promise<ActionResult<undefined>> {
   if (!id.safeParse(actionId).success) return fail("Invalid action");
-  return run(async (actor) => void (await inspector.acceptAction(actionId, actor)));
+  const slot = choice?.slot;
+  if (slot != null && (!Number.isInteger(slot) || slot < 0 || slot > 10)) return fail("Choose one of the suggested times");
+  return run(async (actor) => void (await inspector.acceptAction(actionId, actor, slot != null ? { slot } : {})));
 }
 
 export async function dismissInspectorAction(actionId: string, note: string): Promise<ActionResult<undefined>> {

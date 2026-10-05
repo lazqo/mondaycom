@@ -155,6 +155,10 @@ function inspectorItem(action: string, d: Record<string, unknown>, leadId: strin
       return { kind: "quote", title: `Quote${d.quoteNumber ? ` Q-${String(d.quoteNumber)}` : ""} prepared for approval`, meta: d.draftId ? "reply drafted too · nothing sent" : "nothing sent", href: d.quoteId ? `/quotes/${String(d.quoteId)}` : null };
     case "commitment_resolved":
       return { kind: "inspector", title: `Hermes: commitment ${d.status === "cancelled" ? "no longer needed" : "kept"}: ${String(d.action ?? "")}`, meta: d.evidence ? `shown by ${String(d.evidence)}` : null, body: d.reason ? String(d.reason) : null };
+    case "booking_scheduled":
+      return { kind: "site_visit", title: `Booking pencilled${d.startsAt ? ` for ${formatDateTime(String(d.startsAt))}` : ""}`, meta: d.via === "hermes_proposal" ? "proposed by Hermes, accepted by you" : null, body: d.title ? String(d.title) : null };
+    case "question_answered":
+      return { kind: "inspector", title: `Answered Hermes: ${String(d.question ?? "")}`, body: String(d.answer ?? ""), meta: d.learned ? "remembered for every future reading" : null };
     case "lead_created_by_hermes":
       return { kind: "inspector", title: "Hermes created this lead from the email", meta: typeof d.confidence === "number" ? `${Math.round(d.confidence * 100)}% sure` : null, body: d.reason ? String(d.reason) : null };
     case "lead_reversed_by_hermes":

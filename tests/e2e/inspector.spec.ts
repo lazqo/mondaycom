@@ -261,6 +261,34 @@ test.describe("Lead + Conversation Inspector", () => {
     await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: 94%");
   });
 
+  test("8. Hermes asks on Home; the answer is used; a visit is pencilled from a proposed slot", async ({ page }) => {
+    deliver({ subject: `Which panel ${RUN}`, id: `<insp-ask-${RUN}@example.com>`, body: "Hi Chris, which alarm panel would you put in for us? Ngaire" }, "ask");
+    await login(page);
+    await syncMail(page);
+    const card = page.getByTestId("hermes-question").filter({ hasText: `Which panel ${RUN}` });
+    await eventually(page, "/dashboard", async () => expect(card).toBeVisible({ timeout: 1000 }));
+    await expect(card).toContainText("remembered for every future reading");
+    await card.getByRole("button", { name: "Ajax" }).click();
+    await expect(card).toHaveCount(0, { timeout: 15_000 });
+    // Read again with the answer: the task carries it.
+    const row = page.getByTestId("inspector-recent").locator("details").filter({ hasText: `Which panel ${RUN}` });
+    await eventually(page, "/inspector", async () => expect(row.first()).toContainText("Fit a Ajax panel", { timeout: 1000 }));
+
+    deliver({ subject: `Come and look ${RUN}`, id: `<insp-visit-${RUN}@example.com>`, body: "Could someone come out and have a look next week? Ngaire" }, "visit");
+    await syncMail(page);
+    const booking = page.getByTestId("awaiting-action").filter({ hasText: `Come and look ${RUN}` }).getByTestId("booking-decision");
+    await eventually(page, "/dashboard", async () => expect(booking).toBeVisible({ timeout: 1000 }));
+    await expect(booking.getByRole("radio")).toHaveCount(3);
+    await booking.getByRole("button", { name: "Pencil in the visit" }).click();
+    await expect(booking).toHaveCount(0, { timeout: 15_000 });
+    // In the calendar (pencilled), on the lead's timeline, and the confirmation waits as a reply to approve.
+    await page.goto(leadUrl);
+    await expect(page.getByTestId("timeline")).toContainText("Site visit booked");
+    await expect(page.locator("h1")).toContainText(/site visit/i);
+    await page.goto("/dashboard");
+    await expect(page.getByTestId("decisions-reply")).toContainText(/site visit on/i);
+  });
+
   test("6. Hermes unavailable: the email waits for review, never 'no action'", async ({ page }) => {
     deliver({ subject: `Cameras please ${RUN}`, id: `<down-${RUN}@example.com>`, body: "Hi, could I get some cameras for the house? HERMES-DOWN" }, "down");
     await login(page);

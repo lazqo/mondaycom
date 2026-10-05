@@ -164,6 +164,8 @@ export const ACTION_TYPES = [
   "REQUEST_RESEARCH",
   /** Optional: link the sender to the work this went ahead in. Never blocks the work. */
   "PROPOSE_LINK_SENDER",
+  /** Hermes asks Chris something it cannot find out; Chris answers on Home and the source is read again. */
+  "ASK_CHRIS",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 

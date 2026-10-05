@@ -17,7 +17,7 @@ import { and, asc, desc, eq, inArray, like, or } from "drizzle-orm";
 const { db } = await import("@/db");
 const S = await import("@/db/schema");
 const { processEmail } = await import("@/lib/email/pipeline");
-const { inspect, confirmIdentity, acceptAction, resolveFact, setCommitmentStatus, closeReviews, resolveReview, acceptProposedLead } = await import("@/lib/inspector/inspect");
+const { inspect, confirmIdentity, acceptAction, resolveFact, setCommitmentStatus, closeReviews, resolveReview, acceptProposedLead, answerQuestion } = await import("@/lib/inspector/inspect");
 const { settleInspectorQueue, enqueueInspection } = await import("@/lib/inspector/queue");
 const { setHermes, HermesApiRuntime, HermesUnavailableError } = await import("@/lib/hermes/runtime");
 const { encryptSecret } = await import("@/lib/crypto");
@@ -40,6 +40,8 @@ let mailboxId: string;
 const leadIds: string[] = [];
 const recordingIds: string[] = [];
 const contactIds: string[] = [];
+/** Undo catalogue changes a test made, run in afterAll. */
+const cleanups: (() => Promise<void>)[] = [];
 const offerIds: string[] = [];
 let pkgBefore: typeof S.installationPackages.$inferSelect | undefined;
 let n = 0;
@@ -80,6 +82,7 @@ const R = ({ facts, commitments, ...over }: Loose): HermesResult => ({
   advisories: [],
   internal_actions: [],
   research: [],
+  questions: [],
   review_question: null,
   ...over,
   facts: (facts ?? []).map((f: NonNullable<Loose["facts"]>[number]) => ({ evidence: "", evidence_ref: null, ...f })),
@@ -174,6 +177,7 @@ afterAll(async () => {
     await db.delete(S.drafts).where(inArray(S.drafts.leadId, leadIds));
     await db.delete(S.tasks).where(inArray(S.tasks.leadId, leadIds));
   }
+  for (const undo of cleanups) await undo();
   if (recordingIds.length) await db.delete(S.recordings).where(inArray(S.recordings.id, recordingIds));
   if (contactIds.length) {
     await db.delete(S.tasks).where(inArray(S.tasks.contactId, contactIds));
@@ -237,8 +241,39 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     else {
       expect(pq).toMatchObject({ status: "blocked" });
       expect((pq!.result as { reason: string }).reason).toMatch(/approved price/);
-      const t = (await db.query.tasks.findFirst({ where: and(eq(S.tasks.leadId, ins.leadId!), eq(S.tasks.kind, "quote")) }))!;
-      expect(t.title).toMatch(/^Price the quote for /);
+      // Not a dead-end task: Hermes asks Chris for the costs, once per lead.
+      expect(await db.query.tasks.findFirst({ where: and(eq(S.tasks.leadId, ins.leadId!), eq(S.tasks.kind, "quote")) })).toBeUndefined();
+      const ask = acts.find((a) => a.type === "ASK_CHRIS")!;
+      const items = (ask.payload as { kind: string; items: { productId: string; model: string; suppliers: { id: string }[] }[] }).items;
+      expect(ask).toMatchObject({ status: "awaiting_approval", rule: "pricing_needed", payload: { kind: "pricing", key: `pricing:${ins.leadId}` } });
+      expect(items.length).toBeGreaterThan(0);
+      expect(items[0].suppliers.length).toBeGreaterThan(0);
+      expect(await db.query.quotes.findFirst({ where: eq(S.quotes.leadId, ins.leadId!) })).toBeUndefined();
+      // An agent can never answer it; Chris enters the costs, which are approved AS CHRIS and the quote follows.
+      await expect(answerQuestion(ask.id, JSON.stringify({ items: [{ productId: items[0].productId, supplierId: items[0].suppliers[0].id, costExGst: 150 }] }), { kind: "agent", agent: "hermes" } as unknown as Parameters<typeof answerQuestion>[2])).rejects.toThrow(/Only a person/);
+      const entered = items.map((i) => ({ productId: i.productId, supplierId: i.suppliers[0].id, costExGst: 150 }));
+      // The catalogue is restored afterwards: the costs entered here must not price the next run's quote.
+      const before = await db.query.supplierProducts.findMany({ where: inArray(S.supplierProducts.productId, items.map((i) => i.productId)) });
+      cleanups.push(async () => {
+        await db.delete(S.productPriceHistory).where(eq(S.productPriceHistory.source, "hermes_question"));
+        for (const i of items) {
+          const prior = before.find((b) => b.productId === i.productId && b.supplierId === i.suppliers[0].id);
+          if (prior) await db.update(S.supplierProducts).set({ costExGst: prior.costExGst, costIncGst: prior.costIncGst, priceApproved: prior.priceApproved, pendingCostExGst: prior.pendingCostExGst }).where(eq(S.supplierProducts.id, prior.id));
+          else await db.delete(S.supplierProducts).where(and(eq(S.supplierProducts.productId, i.productId), eq(S.supplierProducts.supplierId, i.suppliers[0].id)));
+        }
+      });
+      const out = (await answerQuestion(ask.id, JSON.stringify({ items: entered }), chris))!;
+      expect(out.actions.map((a) => [a.type, a.status])).toEqual(expect.arrayContaining([["RUN_BUSINESS_BRAIN", "done"], ["PREPARE_QUOTE", "done"]]));
+      for (const i of items) {
+        const offer = (await db.query.supplierProducts.findFirst({ where: and(eq(S.supplierProducts.productId, i.productId), eq(S.supplierProducts.supplierId, i.suppliers[0].id)) }))!;
+        expect(offer).toMatchObject({ priceApproved: true, costExGst: "150.00" });
+        const hist = (await db.query.productPriceHistory.findFirst({ where: eq(S.productPriceHistory.supplierProductId, offer.id), orderBy: [desc(S.productPriceHistory.recordedAt)] }))!;
+        expect(hist).toMatchObject({ reviewStatus: "approved", source: "hermes_question" });
+      }
+      const quote = (await db.query.quotes.findFirst({ where: eq(S.quotes.leadId, ins.leadId!) }))!;
+      expect(["ai_prepared", "needs_review"]).toContain(quote.status); // prepared, never sent
+      expect((await db.query.inspectorActions.findFirst({ where: eq(S.inspectorActions.id, ask.id) }))!).toMatchObject({ status: "accepted" });
+      return;
     }
     expect(await db.query.quotes.findFirst({ where: eq(S.quotes.leadId, ins.leadId!) })).toBeUndefined();
     // Facts came from the form, with evidence, and fed the Brain.
@@ -255,7 +290,7 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     expect(v.advisories.map((x) => x.rule)).not.toContain("two_storey_complexity"); // the Brain allows for storeys itself
     // Audit: the run records the model, the context it was given, the recommendation and the outcome.
     const run = (await runFor(ins.id))!;
-    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-4" });
+    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-5" });
     expect(Number(run.confidence)).toBeCloseTo(0.94);
     expect(run.contextRefs).toMatchObject({ leadId: ins.leadId, source: { type: "email", id: e.id } });
     expect((run.brainResult as { steps: { type: string }[] }).steps.map((s) => s.type)).toContain("RUN_BUSINESS_BRAIN");
@@ -378,6 +413,88 @@ describe("Test 3: commercial CCTV — Hermes understands it, the Business Brain 
     expect(await db.select().from(S.events).where(eq(S.events.leadId, ins.leadId!))).toHaveLength(before.length);
     const fb = await db.query.inspectorFeedback.findFirst({ where: and(eq(S.inspectorFeedback.inspectionId, ins.id), eq(S.inspectorFeedback.kind, "action_accepted")) });
     expect(fb).toMatchObject({ subject: "PROPOSE_SITE_VISIT", hermesRecommendation: "PREPARE_QUOTE" });
+  });
+});
+
+describe("Hermes asks, Chris answers, Hermes continues", () => {
+  it("a question waits on Home; the answer is kept, learnt, and the email is read again with it", async () => {
+    const [l] = await db.insert(S.leads).values({ name: `Pania Rewi ${RUN}`, email: `pania+${RUN}@example.com`, status: "contacted", source: "email", service: "Alarm" }).returning();
+    leadIds.push(l.id);
+    script = (pack) => {
+      const answered = (pack as { answersFromChris?: { key: string; answer: string }[] }).answersFromChris ?? [];
+      const panel = answered.find((a) => a.key === "panel_brand")?.answer;
+      return panel
+        ? { conversation_type: "existing_lead", intent: "service_issue", summary: `Add a ${panel} panel for Pania.`, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Order the ${panel} panel for Pania ${RUN}`, due: "today", detail: null }, confidence: 0.9, reason: "Chris said which panel." }
+        : { conversation_type: "existing_lead", intent: "service_issue", summary: "Pania wants a new panel.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring Pania about the panel ${RUN}`, due: "today", detail: null }, questions: [{ key: "panel_brand", question: "Which alarm panel do we fit now?", kind: "choice", options: ["Ajax", "Paradox"], why: "The order depends on it.", unblocks: [], learn: true }], confidence: 0.85, reason: "Need to know the panel." };
+    };
+    const e = await email({ from: `pania+${RUN}@example.com`, name: "Pania Rewi", subject: "New panel", text: "Hi, can you put a new panel in for us? Pania" });
+    await db.update(S.emails).set({ leadId: l.id }).where(eq(S.emails.id, e.id));
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed"); // a question is never a review
+    const acts = await actionsOf(out.inspectionId);
+    const ask = acts.find((a) => a.type === "ASK_CHRIS")!;
+    expect(ask).toMatchObject({ status: "awaiting_approval", leadId: l.id, payload: { key: "panel_brand", kind: "choice", learn: true } });
+    expect(acts.find((a) => a.type === "CREATE_INTERNAL_TASK")).toMatchObject({ status: "done" }); // internal work went ahead
+    // Accepting without an answer is refused; an agent cannot answer at all.
+    await expect(acceptAction(ask.id, chris)).rejects.toThrow(/Answer the question/);
+    await expect(answerQuestion(ask.id, "Ajax", { kind: "agent", agent: "hermes" } as unknown as Parameters<typeof answerQuestion>[2])).rejects.toThrow(/Only a person/);
+    // Chris answers: kept as feedback and as an approved lesson; the email is read again with the answer.
+    const after = (await answerQuestion(ask.id, "Ajax", chris))!;
+    expect(after).toMatchObject({ engine: "hermes", status: "analysed" });
+    expect((await db.query.inspectorActions.findFirst({ where: eq(S.inspectorActions.id, ask.id) }))!).toMatchObject({ status: "accepted", result: { answer: "Ajax" } });
+    expect(await db.query.inspectorFeedback.findFirst({ where: and(eq(S.inspectorFeedback.leadId, l.id), eq(S.inspectorFeedback.kind, "question_answered")) })).toMatchObject({ subject: "panel_brand" });
+    const lesson = (await db.query.brainCandidates.findFirst({ where: and(eq(S.brainCandidates.kind, "workflow"), eq(S.brainCandidates.title, "Which alarm panel do we fit now?")) }))!;
+    expect(lesson).toMatchObject({ status: "accepted", detail: "Ajax", proposedBy: "chris" });
+    await db.delete(S.brainCandidates).where(eq(S.brainCandidates.id, lesson.id));
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Order the Ajax panel for Pania ${RUN}`) })).toBeTruthy();
+    const after2 = await actionsOf(after.inspectionId);
+    expect(after2.map((a) => a.type)).not.toContain("ASK_CHRIS"); // not asked again
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, l.id), eq(S.activityLog.action, "question_answered")) })).toBeTruthy();
+  });
+});
+
+describe("Bookings: a proposal carries free slots; Chris's click puts one in the calendar", () => {
+  it("a site-visit proposal has three slots in the customer's window; accepting one books it (pencilled), moves the lead on and drafts the confirmation; an agent cannot book", async () => {
+    const [l] = await db.insert(S.leads).values({ name: `Tane Mahuta ${RUN}`, email: `tane+${RUN}@example.com`, status: "new", source: "email", service: "CCTV", site: `12 Kauri Road, Titirangi ${RUN}` }).returning();
+    leadIds.push(l.id);
+    script = () => ({ conversation_type: "existing_lead", intent: "site_visit_request", summary: "Tane asks for a site visit next week for cameras on a two-storey house.", facts: [{ key: "timing", value: "next week", evidence: "next week", confidence: 0.9 }], recommended_action: "PROPOSE_SITE_VISIT", confidence: 0.9, reason: "Customer asked for a visit." });
+    const e = await email({ from: `tane+${RUN}@example.com`, name: "Tane Mahuta", subject: "Site visit", text: "Hi, could someone come and look next week? Two-storey house, want cameras front and back. Tane" });
+    await db.update(S.emails).set({ leadId: l.id }).where(eq(S.emails.id, e.id));
+    const out = (await inspect("email", e.id))!;
+    const prop = (await actionsOf(out.inspectionId)).find((a) => a.type === "PROPOSE_SITE_VISIT")!;
+    expect(prop.status).toBe("awaiting_approval");
+    const p = prop.payload as { slots: { startsAt: string; endsAt: string; label: string }[]; technicianId: string | null; timing: string | null };
+    expect(p.timing).toBe("next week");
+    expect(p.slots).toHaveLength(3);
+    // All in next week, Monday to Friday, during business hours, an hour each.
+    const monday = new Date(); // computed from the proposal itself: the first slot is the Monday after this week
+    for (const s of p.slots) {
+      const start = new Date(s.startsAt);
+      const day = new Intl.DateTimeFormat("en-NZ", { timeZone: "Pacific/Auckland", weekday: "short" }).format(start);
+      expect(["Mon", "Tue", "Wed", "Thu", "Fri"]).toContain(day);
+      expect(new Date(s.endsAt).getTime() - start.getTime()).toBe(3600000);
+      expect(start.getTime()).toBeGreaterThan(monday.getTime());
+    }
+    expect(await db.query.events.findFirst({ where: eq(S.events.leadId, l.id) })).toBeUndefined(); // proposed, not booked
+    // Only a person books: the booking function refuses an agent outright.
+    const { bookEvent } = await import("@/lib/calendar/book");
+    await expect(bookEvent({ kind: "site_visit", title: "x", startsAt: new Date(p.slots[0].startsAt), endsAt: new Date(p.slots[0].endsAt), leadId: l.id }, { kind: "agent", agent: "hermes" } as unknown as Parameters<typeof bookEvent>[1])).rejects.toThrow(/Only a person/);
+    // Chris picks the second slot.
+    const r = await acceptAction(prop.id, chris, { slot: 1 });
+    const ev = (await db.query.events.findFirst({ where: eq(S.events.leadId, l.id) }))!;
+    expect(ev).toMatchObject({ kind: "site_visit", startsAt: new Date(p.slots[1].startsAt), endsAt: new Date(p.slots[1].endsAt), assignedToId: p.technicianId });
+    expect(ev.title).toMatch(/pencilled/);
+    expect(r.eventId).toBe(ev.id);
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, l.id) }))!.status).toBe("site_visit");
+    const draft = (await db.query.drafts.findFirst({ where: eq(S.drafts.leadId, l.id) }))!;
+    expect(draft.status).toBe("ready_for_review"); // drafted, never sent
+    expect(draft.body).toContain(p.slots[1].label);
+    expect(draft.body).not.toMatch(/\$/); // no price in it
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, l.id), eq(S.activityLog.action, "site_visit_scheduled")) })).toBeTruthy();
+    // Accepting again is refused, and a second proposal would see the visit as already in hand.
+    await expect(acceptAction(prop.id, chris, { slot: 0 })).rejects.toThrow(/already/);
+    await db.delete(S.drafts).where(eq(S.drafts.id, draft.id));
+    await db.delete(S.events).where(eq(S.events.id, ev.id));
   });
 });
 

@@ -23,7 +23,7 @@ export type HermesOutcome = {
   contextRefs: Record<string, unknown>;
 };
 
-export async function askHermes(input: InspectorInput, opts: { identity: IdentityResult; leadId: string | null; contactId: string | null; staffNames: string[] }): Promise<HermesOutcome> {
+export async function askHermes(input: InspectorInput, opts: { identity: IdentityResult; leadId: string | null; contactId: string | null; staffNames: string[]; answers?: { key: string; question: string; answer: string; at: string }[] }): Promise<HermesOutcome> {
   const started = Date.now();
   const { pack, refs } = await buildContextPack(input, opts);
   const base = { version: HERMES_INSPECTOR_VERSION, contextRefs: refs as Record<string, unknown> };

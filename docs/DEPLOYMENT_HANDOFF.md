@@ -1048,6 +1048,34 @@ the number but Hermes can (citing the words), the same phone rule applies: the n
 the transcript and belong to a record. A name alone never files a recording; with no number, the
 recording waits in "Who is this?" with the possible matches, and the work still goes ahead.
 
+**Hermes asks, you answer, Hermes continues.** When the answer to something changes what Hermes
+would do and neither the record nor its tools hold it (a standing business rule, a commercial
+choice, which of two readings is right), Hermes asks: a card under **Home → Hermes asks** with the
+question, why, and an input for its kind (text, number, yes/no, a choice). Answer it and the email
+or conversation is read again with your answer in Hermes's context, so it carries on from there.
+A question never holds up internal work: the note, tasks, facts and commitments go ahead first.
+When Hermes marks a question as something to learn ("do we still fit Paradox panels?"), your
+answer is kept as an approved lesson and goes into every future reading; the same question is never
+asked twice while an answer stands. **Skip** leaves it unanswered. Only a person can answer; an
+agent is refused in code.
+
+**Missing pricing is a question, not a dead end.** When the Business Brain designs a system but a
+product in it has no approved trade cost, the quote is not prepared and Hermes asks you for the
+costs: the card lists each product with its supplier and a cost box (ex GST). What you enter goes
+through the catalogue's own price path *as you* (entered and approved in one step, with history;
+Hermes never enters a price), then the Brain re-runs and the quote lands in **Quotes ready for your
+approval**. Skipping the question leaves the "Price the quote" task as before.
+
+**Bookings: a real slot, pencilled when you accept.** A site-visit or booking proposal now carries
+three free slots: inside your business hours (Settings → Automations), Monday to Friday, clear of
+what is already in the calendar with a half-hour travel buffer, and inside the window the customer
+gave ("next week", "Thursday morning"). Choose one and **Pencil in the visit**: the event goes in
+the calendar (marked *pencilled*, assigned to the technician, synced to Titan), the lead moves to
+Site visit, and the confirmation reply is drafted for you to send. The customer learns the time only
+when you send it. "Just add a task" keeps the old behaviour; "Another time" opens the calendar.
+An event is only ever created by a person's click: the booking function refuses an agent, whatever
+asked for it.
+
 **Commitments.** Hermes marks an outstanding commitment kept (or no longer needed) when the record
 shows it, citing the record. Example: "Book the installation visit" is kept because `job:…` (J-1008)
 was completed. The commitment is closed, the timeline says "Hermes: commitment kept … shown by …",

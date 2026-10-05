@@ -10,9 +10,9 @@
  * guardrails. When Hermes cannot be reached the item waits in the queue and is retried; after the
  * retries it goes to Chris as "Hermes could not read it", with nothing invented.
  */
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { commitments, contacts, emails, emailThreads, facts, inspections, inspectorActions, inspectorRuns, jobs, leads, quotes, recordings, tasks, users } from "@/db/schema";
+import { brainCandidates, commitments, contacts, emailThreads, emails, events, facts, inspections, inspectorActions, inspectorFeedback, inspectorRuns, jobs, leads, quotes, recordings, tasks, users } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
 import { createLeadFromEmail, markEmailNotLead } from "@/lib/email/pipeline";
 import { type Actor, assertApprover, GuardrailError } from "@/lib/guard/actor";
@@ -28,6 +28,10 @@ import { askHermes, type HermesStatus } from "@/lib/hermes/inspector";
 import { hermesAutonomy } from "@/lib/hermes/autonomy";
 import { crmKnown, crmState, emailInput, recordingInput, staffNames } from "./sources";
 import { digitSequence, normalisePhone } from "./text";
+import { recordSupplierPrice } from "@/lib/brain/store";
+import { bookEvent } from "@/lib/calendar/book";
+import { TZ } from "./dates";
+import { createTask } from "./work";
 import { INSPECTOR_VERSION, type IdentityResult, type InspectorInput, type PlannedAction, type SourceType, type Understanding } from "./types";
 
 export type InspectOutcome = {
@@ -76,9 +80,10 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
   let contactId = contactIdChosen ?? state.contactId;
   let known = identity.status === "matched" ? await crmKnown(leadId, contactId) : {};
   const autonomy = await hermesAutonomy();
+  const answers = await answersFor(sourceType, sourceId);
 
   // ---- Hermes: the operational judgement ----
-  const hermes = await askHermes(input, { identity, leadId, contactId, staffNames: staff });
+  const hermes = await askHermes(input, { identity, leadId, contactId, staffNames: staff, answers });
   let engine: "hermes" | "fallback";
   let understanding: Understanding;
   let planned: PlannedAction[];
@@ -118,6 +123,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
         known,
         crm: { leadId, contactId, hasOpenBrainQuote: state.hasOpenBrainQuote, hasSentQuote: state.hasSentQuote, recordingLinked: state.recordingLinked, customerEmail: state.customerEmail, customerPhone: state.customerPhone },
         autonomy,
+        answers,
         citable: [...citable, ...(context?.accepted ? [context.ref] : [])],
         context,
       });
@@ -284,6 +290,103 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     })
     .where(eq(inspectorRuns.id, run.id));
   return { inspectionId: row.id, status, engine, hermesStatus: hermes.status, hermesError: hermes.error, actions };
+}
+
+/** Chris's answers to Hermes's questions about this email or conversation, oldest first. */
+export async function answersFor(sourceType: SourceType, sourceId: string): Promise<{ key: string; question: string; answer: string; at: string }[]> {
+  const rows = await db
+    .select({ value: inspectorFeedback.value, at: inspectorFeedback.createdAt })
+    .from(inspectorFeedback)
+    .innerJoin(inspections, eq(inspections.id, inspectorFeedback.inspectionId))
+    .where(and(eq(inspections.sourceType, sourceType), eq(inspections.sourceId, sourceId), eq(inspectorFeedback.kind, "question_answered")))
+    .orderBy(asc(inspectorFeedback.createdAt));
+  return rows.map((r) => {
+    const v = (r.value ?? {}) as { key?: string; question?: string; answer?: string };
+    return { key: v.key ?? "", question: v.question ?? "", answer: v.answer ?? "", at: r.at.toISOString() };
+  });
+}
+
+/**
+ * Chris answers a question Hermes asked. The answer is kept as feedback (and, when Hermes marked it
+ * as something to learn, as an approved lesson for every future reading), then the email or
+ * conversation is read again with the answer in its context pack so Hermes carries on from it.
+ * Only a person can answer; an agent never answers its own questions.
+ */
+export async function answerQuestion(actionId: string, answer: string, actor: Actor): Promise<InspectOutcome> {
+  if (actor.kind !== "human") throw new Error("Only a person can answer Hermes's questions.");
+  const text = answer.trim();
+  if (!text) throw new Error("Type an answer first.");
+  const a = await db.query.inspectorActions.findFirst({ where: eq(inspectorActions.id, actionId) });
+  if (!a || a.type !== "ASK_CHRIS") throw new Error("That is not a question from Hermes.");
+  if (a.status !== "awaiting_approval") throw new Error("This question has already been dealt with.");
+  const ins = await db.query.inspections.findFirst({ where: eq(inspections.id, a.inspectionId) });
+  if (!ins) throw new Error("The reading this question came from is gone.");
+  const p = a.payload as { key?: string; question?: string; kind?: string; learn?: boolean; items?: PricingItem[] };
+  if (p.kind === "pricing") return answerPricing(a, ins, p.items ?? [], text, actor);
+  await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result: { answer: text } }).where(eq(inspectorActions.id, actionId));
+  await recordFeedback({ inspectionId: ins.id, leadId: a.leadId, contactId: a.contactId, kind: "question_answered", subject: p.key ?? null, value: { key: p.key ?? "", question: p.question ?? "", answer: text, kind: p.kind ?? "text", learn: !!p.learn }, userId: actor.userId });
+  if (p.learn && p.question) {
+    await db.insert(brainCandidates).values({
+      kind: "workflow",
+      title: p.question,
+      detail: text,
+      payload: { key: p.key ?? null, from: "question" },
+      sources: [{ kind: "question", inspectionId: ins.id, actionId }],
+      status: "accepted",
+      proposedBy: "chris",
+      decidedById: actor.userId,
+      decidedAt: new Date(),
+      decisionNote: "Answered on Home",
+    });
+  }
+  const detail = { actionId, question: p.question ?? null, answer: text, learned: !!p.learn };
+  if (a.leadId) await logActivity({ entity: "lead", entityId: a.leadId, actorId: actor.userId, action: "question_answered", detail });
+  else if (a.contactId) await logActivity({ entity: "contact", entityId: a.contactId, actorId: actor.userId, action: "question_answered", detail });
+  return inspect(ins.sourceType as SourceType, ins.sourceId, { force: true });
+}
+
+type PricingItem = { productId: string; model: string; key: string; suppliers: { id: string; name: string }[]; supplierId: string | null };
+
+/**
+ * Chris answers a pricing question: each cost goes through the catalogue's own price path AS CHRIS
+ * (entered and approved in one step, with history); then the Brain re-runs and the quote is prepared
+ * for his approval. Hermes never enters a price. Items left blank stay unpriced.
+ */
+async function answerPricing(a: typeof inspectorActions.$inferSelect, ins: typeof inspections.$inferSelect, items: PricingItem[], answer: string, actor: Actor): Promise<InspectOutcome> {
+  assertApprover(actor);
+  let parsed: { items?: { productId?: string; supplierId?: string; costExGst?: number | string }[] };
+  try {
+    parsed = JSON.parse(answer) as typeof parsed;
+  } catch {
+    throw new Error("Enter the costs in the pricing card.");
+  }
+  const entered = (parsed.items ?? [])
+    .map((x) => ({ productId: String(x.productId ?? ""), supplierId: String(x.supplierId ?? ""), costExGst: Number(x.costExGst) }))
+    .filter((x) => x.productId && x.supplierId && Number.isFinite(x.costExGst) && x.costExGst > 0 && x.costExGst < 1_000_000);
+  if (!entered.length) throw new Error("Enter at least one cost (ex GST).");
+  const priced: { productId: string; model: string; supplierId: string; costExGst: number; offerId: string }[] = [];
+  for (const x of entered) {
+    const item = items.find((i) => i.productId === x.productId);
+    if (!item || !item.suppliers.some((s) => s.id === x.supplierId)) throw new Error("That product or supplier is not on the card.");
+    const r = await recordSupplierPrice({ productId: x.productId, supplierId: x.supplierId, costExGst: x.costExGst, source: "hermes_question", priceSource: "manual" }, actor);
+    priced.push({ productId: x.productId, model: item.model, supplierId: x.supplierId, costExGst: x.costExGst, offerId: r.offerId });
+  }
+  const summary = priced.map((x) => `${x.model}: $${x.costExGst.toFixed(2)} ex GST`).join("; ");
+  await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result: { answer: summary, prices: priced } }).where(eq(inspectorActions.id, a.id));
+  await recordFeedback({ inspectionId: ins.id, leadId: a.leadId, contactId: a.contactId, kind: "question_answered", subject: "pricing", value: { key: `pricing:${a.leadId}`, question: "pricing", answer: summary, kind: "pricing", prices: priced }, userId: actor.userId });
+  if (a.leadId) await logActivity({ entity: "lead", entityId: a.leadId, actorId: actor.userId, action: "question_answered", detail: { actionId: a.id, question: "Trade costs for the design", answer: summary, learned: false } });
+  // The costs are in: the Brain re-runs and the quote is prepared for Chris's approval (never sent).
+  const input = await loadInput(ins.sourceType as SourceType, ins.sourceId);
+  const actions = input
+    ? await routeActions(
+        [
+          { type: "RUN_BUSINESS_BRAIN", mode: "auto", rule: "pricing_answered", reason: "Costs entered by Chris; re-run with them.", payload: {} },
+          { type: "PREPARE_QUOTE", mode: "auto", rule: "pricing_answered", reason: "Quote prepared from the approved costs; waits for Chris's approval.", payload: {} },
+        ],
+        { inspectionId: ins.id, input, leadId: a.leadId, contactId: a.contactId, jobId: a.jobId, actor },
+      )
+    : [];
+  return { inspectionId: ins.id, status: ins.status, engine: ins.engine as "hermes", hermesStatus: null, hermesError: null, actions };
 }
 
 /** What is known when Hermes could not read the source: nothing, honestly. */
@@ -564,7 +667,9 @@ export async function confirmIdentity(inspectionId: string, choice: { leadId?: s
  * a booking or site visit becomes Chris's own task to arrange; a revised quote is prepared and
  * waits in Approvals like any other.
  */
-export async function acceptAction(actionId: string, actor: Actor): Promise<Record<string, unknown>> {
+export type AcceptChoice = { slot?: number };
+
+export async function acceptAction(actionId: string, actor: Actor, choice: AcceptChoice = {}): Promise<Record<string, unknown>> {
   assertApprover(actor);
   const a = await db.query.inspectorActions.findFirst({ where: eq(inspectorActions.id, actionId) });
   if (!a) throw new Error("Action not found");
@@ -576,12 +681,61 @@ export async function acceptAction(actionId: string, actor: Actor): Promise<Reco
   const asTask = (title: string, detail: string): PlannedAction => ({ type: "CREATE_INTERNAL_TASK", mode: "auto", rule: `accepted:${a.type}`, reason: detail, payload: { title, kind: "task", due: "today" } });
   let follow: PlannedAction[] = [];
   switch (a.type) {
+    case "ASK_CHRIS":
+      throw new Error("Answer the question on Home; it cannot be accepted without an answer.");
     case "PROPOSE_SITE_VISIT":
-      follow = [asTask("Arrange a site visit", `${a.reason}${p.address ? ` Address: ${p.address}.` : ""}${p.timing ? ` They mentioned ${p.timing}.` : ""} Agree a time with the customer, then schedule it.`)];
+    case "PROPOSE_BOOKING": {
+      const slots = (Array.isArray(p.slots) ? p.slots : []) as { startsAt: string; endsAt: string; label: string }[];
+      const pick = choice.slot != null ? slots[choice.slot] : null;
+      if (!pick) {
+        // No slot chosen: a task to arrange it, as before.
+        follow = a.type === "PROPOSE_SITE_VISIT" ? [asTask("Arrange a site visit", `${a.reason}${p.address ? ` Address: ${p.address}.` : ""}${p.timing ? ` They mentioned ${p.timing}.` : ""} Agree a time with the customer, then schedule it.`)] : [asTask("Arrange the booking", `${a.reason}${p.timing ? ` They mentioned ${p.timing}.` : ""} Agree a time with the customer, then schedule it.`)];
+        break;
+      }
+      // Chris chose a slot: it goes in the calendar (pencilled), and the confirmation is drafted for
+      // him to send. The customer learns the time only when he sends it.
+      const visit = a.type === "PROPOSE_SITE_VISIT";
+      const lead = a.leadId ? await db.query.leads.findFirst({ where: eq(leads.id, a.leadId), columns: { name: true, site: true, email: true } }) : null;
+      const contact = !lead && a.contactId ? await db.query.contacts.findFirst({ where: eq(contacts.id, a.contactId), columns: { name: true, address: true } }) : null;
+      const who = lead?.name ?? contact?.name ?? "customer";
+      const where = (typeof p.address === "string" && p.address) || lead?.site || contact?.address || null;
+      if (visit) {
+        const booked = await db.query.events.findFirst({ where: and(eq(events.kind, "site_visit"), gte(events.endsAt, new Date()), a.leadId ? eq(events.leadId, a.leadId) : eq(events.contactId, a.contactId!)), columns: { startsAt: true } });
+        if (booked) throw new Error(`A site visit is already booked for ${booked.startsAt.toLocaleString("en-NZ", { timeZone: TZ, dateStyle: "medium", timeStyle: "short" })}.`);
+      }
+      const ev = await bookEvent(
+        {
+          kind: visit ? "site_visit" : "other",
+          title: `${visit ? "Site visit" : "Booking"} — ${who} (pencilled)`,
+          description: `${a.reason}\nProposed by Hermes; accepted by ${actor.name}. Confirm with the customer.`,
+          location: where,
+          startsAt: new Date(pick.startsAt),
+          endsAt: new Date(pick.endsAt),
+          leadId: a.leadId,
+          contactId: a.contactId,
+          jobId: a.jobId,
+          assignedToId: typeof p.technicianId === "string" ? p.technicianId : null,
+          via: "hermes_proposal",
+        },
+        actor,
+      );
+      result.eventId = ev.id;
+      result.slot = pick;
+      const first = who.split(" ")[0];
+      follow = [
+        {
+          type: "DRAFT_EMAIL",
+          mode: "auto",
+          rule: `accepted:${a.type}`,
+          reason: `Confirmation of the ${visit ? "site visit" : "booking"} for Chris to send.`,
+          payload: {
+            subject: visit ? `Site visit${where ? ` at ${where}` : ""}` : `Your booking${where ? ` at ${where}` : ""}`,
+            body: `Hi ${first},\n\nThanks for getting in touch. We can come out ${visit ? "for a site visit" : "to do the work"} on ${pick.label} if that suits — just reply to confirm and we'll lock it in.\n\nIf another time works better, let me know and we'll find one.\n\nThanks,\n${actor.name}\nGet Secure`,
+          },
+        },
+      ];
       break;
-    case "PROPOSE_BOOKING":
-      follow = [asTask("Arrange the booking", `${a.reason}${p.timing ? ` They mentioned ${p.timing}.` : ""} Agree a time with the customer, then schedule it.`)];
-      break;
+    }
     case "PREPARE_REVISED_QUOTE":
       follow = [
         { type: "RUN_BUSINESS_BRAIN", mode: "auto", rule: "accepted:PREPARE_REVISED_QUOTE", reason: "Re-run with the updated facts.", payload: {} },
@@ -608,9 +762,11 @@ export async function acceptAction(actionId: string, actor: Actor): Promise<Reco
   }
   const routeCtx = { inspectionId: ins.id, input, leadId: a.leadId, contactId: a.contactId, jobId: a.jobId, actor };
   // An open task to arrange it already exists (made since this was proposed): no second one.
-  const inHand = a.type === "PROPOSE_SITE_VISIT" || a.type === "PROPOSE_BOOKING" ? await alreadyInHand({ type: a.type }, routeCtx, { ignoreWaiting: true }) : null;
+  // An open task to arrange it already exists (made since this was proposed): no second one. A
+  // chosen slot is Chris's decision, so it goes ahead regardless.
+  const inHand = (a.type === "PROPOSE_SITE_VISIT" || a.type === "PROPOSE_BOOKING") && !result.eventId ? await alreadyInHand({ type: a.type }, routeCtx, { ignoreWaiting: true }) : null;
   const done = inHand ? [] : await routeActions(follow, routeCtx);
-  result = inHand ? { followUp: [], ...inHand } : { followUp: done };
+  result = inHand ? { ...result, followUp: [], ...inHand } : { ...result, followUp: done };
   await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result }).where(eq(inspectorActions.id, actionId));
   await recordFeedback({ inspectionId: ins.id, kind: "action_accepted", subject: a.type, value: { rule: a.rule, followUp: done.map((d) => ({ type: d.type, status: d.status })) }, userId: actor.userId });
   if (a.leadId) await logActivity({ entity: "lead", entityId: a.leadId, actorId: actor.userId, action: "inspector_action_accepted", detail: { type: a.type, reason: a.reason } });
@@ -623,6 +779,11 @@ export async function dismissAction(actionId: string, actor: Actor, note: string
   if (!a) throw new Error("Action not found");
   await db.update(inspectorActions).set({ status: "dismissed", decidedById: actor.userId, decidedAt: new Date(), result: { ...(a.result ?? {}), note } }).where(eq(inspectorActions.id, actionId));
   await recordFeedback({ inspectionId: a.inspectionId, kind: "action_dismissed", subject: a.type, value: { rule: a.rule, note }, userId: actor.userId });
+  // A skipped pricing question leaves the quote unpriced: the pricing task stands in for the card.
+  if (a.type === "ASK_CHRIS" && (a.payload as { kind?: string }).kind === "pricing" && a.leadId) {
+    const lead = await db.query.leads.findFirst({ where: eq(leads.id, a.leadId), columns: { name: true, contactId: true } });
+    await createTask({ leadId: a.leadId, contactId: lead?.contactId ?? null }, { title: `Price the quote for ${lead?.name ?? "the customer"}`, kind: "quote", due: "today", detail: "Hermes asked for the trade costs and the question was skipped. Approve the prices (or enter the quote by hand), then prepare it from the assessment.", ruleKey: "inspector:PREPARE_QUOTE:pricing_skipped" });
+  }
   // Dismissing the review card itself settles the review.
   if (a.type === "NEEDS_REVIEW") await db.update(inspections).set({ status: "analysed", reviewedById: actor.userId, reviewedAt: new Date(), updatedAt: new Date() }).where(and(eq(inspections.id, a.inspectionId), eq(inspections.status, "needs_review")));
 }

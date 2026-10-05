@@ -88,7 +88,9 @@ export async function createTask(ctx: Subject & { jobId?: string | null }, spec:
       leadId: ctx.leadId,
       contactId: ctx.contactId,
       jobId: ctx.jobId ?? null,
-      ruleKey: spec.ruleKey ?? null,
+      // One open task per (rule, record) is the automations' rule; Hermes's tasks differ by title, so
+      // the title is part of the key and two different tasks on the same lead both exist.
+      ruleKey: spec.ruleKey ? `${spec.ruleKey}:${spec.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60)}` : null,
       entityId: spec.entityId ?? ctx.jobId ?? ctx.leadId ?? ctx.contactId ?? null,
     })
     .onConflictDoNothing()

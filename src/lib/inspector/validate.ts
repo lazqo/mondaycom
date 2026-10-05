@@ -49,6 +49,8 @@ export type ValidateContext = {
   };
   /** The autonomy dial (Settings → Hermes): how far each class goes on its own, and how sure Hermes must be. */
   autonomy?: AutonomySettings;
+  /** Chris's answers to earlier questions about this same email or conversation. */
+  answers?: { key: string; question: string; answer: string }[];
   /** CRM records (refs from the context pack) Hermes may cite as evidence or choose as the work. */
   citable?: string[];
   /**
@@ -442,6 +444,17 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   let planned = planFor(recommended, h, ctx, { known, missing, service, commitments, business, hard });
   for (const x of h.internal_actions) planned.push(...internalAction(x, h));
   for (const r of h.research) planned.push(act("REQUEST_RESEARCH", "auto", "hermes_research", r.why || `Research: ${r.question}`, { question: r.question, kind: r.kind, product: r.product }));
+  // Questions for Chris: a card each, answered on Home. Nothing internal waits for an answer, and a
+  // question Chris has already answered for this item is never asked again.
+  const answered = ctx.answers ?? [];
+  for (const q of h.questions) {
+    const already = answered.find((a) => a.key === q.key || a.question.trim().toLowerCase() === q.question.trim().toLowerCase());
+    if (already) {
+      advisories.push({ rule: "question_answered", message: `Hermes asked again: “${q.question}”. Chris already answered: ${already.answer}.` });
+      continue;
+    }
+    planned.push(act("ASK_CHRIS", "approval", "hermes_question", q.why || q.question, { key: q.key, question: q.question, kind: q.kind, options: q.options, unblocks: q.unblocks, learn: q.learn }));
+  }
   if (h.run_business_brain && !planned.some((p) => p.type === "RUN_BUSINESS_BRAIN")) planned.push(...planFor("RUN_BUSINESS_BRAIN", h, ctx, { known, missing, service, commitments, business, hard }));
   planned = dedupe(planned);
 

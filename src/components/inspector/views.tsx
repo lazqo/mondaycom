@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { BookingDecision } from "@/components/inspector/controls";
+import { AskCard } from "@/components/decisions/ask-card";
 import { Badge } from "@/components/ui";
 import { formatDateTime } from "@/lib/utils";
 import type { CommitmentItem, ConflictItem, AwaitingItem } from "@/queries/inspector";
@@ -96,6 +98,7 @@ export function ConflictLine({ item, showSubject = true }: { item: ConflictItem;
 
 export function AwaitingLine({ item, canApprove, showSubject = true }: { item: AwaitingItem; canApprove: boolean; showSubject?: boolean }) {
   const a = item.action;
+  if (a.type === "ASK_CHRIS") return <AskCard item={item} canApprove={canApprove} />;
   return (
     <div className="space-y-1.5 px-4 py-3 text-sm" data-testid="awaiting-action">
       <p className="text-gray-900">
@@ -121,7 +124,11 @@ export function AwaitingLine({ item, canApprove, showSubject = true }: { item: A
           </>
         ) : null}
       </p>
-      <ActionDecision actionId={a.id} canApprove={canApprove} acceptLabel={ACCEPT_LABELS[a.type as ActionType]} />
+      {(a.type === "PROPOSE_SITE_VISIT" || a.type === "PROPOSE_BOOKING") && Array.isArray((a.payload as { slots?: unknown }).slots) ? (
+        <BookingDecision actionId={a.id} canApprove={canApprove} slots={(a.payload as { slots: { startsAt: string; endsAt: string; label: string }[] }).slots} kind={a.type} />
+      ) : (
+        <ActionDecision actionId={a.id} canApprove={canApprove} acceptLabel={ACCEPT_LABELS[a.type as ActionType]} />
+      )}
     </div>
   );
 }

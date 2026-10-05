@@ -27,7 +27,7 @@ function originOf(input: InspectorInput): string {
   return input.direction === "outbound" ? "Email sent by Get Secure" : "Email received";
 }
 
-export async function buildContextPack(input: InspectorInput, opts: { identity: IdentityResult; leadId: string | null; contactId: string | null; staffNames: string[]; now?: Date }) {
+export async function buildContextPack(input: InspectorInput, opts: { identity: IdentityResult; leadId: string | null; contactId: string | null; staffNames: string[]; now?: Date; answers?: { key: string; question: string; answer: string; at: string }[] }) {
   const now = opts.now ?? new Date();
   const gs = input.utterances.length ? getSecureSpeaker(input.utterances, opts.staffNames) : null;
   const scope = { leadId: opts.leadId, contactId: opts.contactId };
@@ -89,6 +89,8 @@ export async function buildContextPack(input: InspectorInput, opts: { identity: 
     lessonsFromChris: lessons,
     /** Lessons Chris has approved about how Get Secure works. */
     approvedLearnings: learnings,
+    /** Chris's answers to your earlier questions about THIS email or conversation. Use them; do not ask again. */
+    answersFromChris: opts.answers ?? [],
     crm: known
       ? { lead, customer, openTasks: tasks, outstandingCommitments: commitments, quotes, ...visitsJobs, latestBusinessBrainRun: brain, factsOnRecord, recentTimeline: timeline }
       : null,
@@ -132,6 +134,7 @@ For the one email or conversation in the context pack, decide (using the whole c
 6. recommended_action, plus internal_actions for any further internal work (a second task, a follow-up, a call reminder, a note, a Brain run, a visit or booking proposal). Prefer a specific action ("Complete costing for Q-1006", "Call the customer", "Research the NVR model", "Arrange visit", "Check overdue account") over NEEDS_REVIEW. openTasks shows what is already in hand: do not duplicate it.
 7. research: when the CRM, the catalogue and the Business Brain do not know a technical or product answer you need (a model's specification, compatibility, a discontinued model's replacement, firmware, supplier availability), ask it here as a plain question with the product. Only the question leaves the CRM. Do not put the customer's words or details in it.
 8. identity_review.needed: only if you think Chris should link or confirm who the sender is. It never holds up the work.
+9. questions: when the answer changes what you would do and neither the pack nor the CRM's tools hold it (a standing business rule, a commercial choice, which of two readings is right, a missing detail only Chris knows), ask Chris: one question per unknown, with why and which actions it unblocks; kind text | number | yes_no | choice (give options). Set learn=true when the answer is a standing fact about Get Secure, so it is remembered for every future reading. answersFromChris holds his answers for this item: act on them and never ask the same thing again. Internal work never waits for an answer; do the rest now and ask only about what you cannot settle.
 
 Your authority (the CRM carries it out, audited, and Chris can reverse it): create a lead when confident; continue work under an existing site/job/lead; add notes; create and deduplicate tasks; mark commitments kept with evidence; run the Business Brain; prepare a quote, reply, follow-up, site-visit or booking proposal for Chris; ask the research profile; propose Business Brain updates.
 

@@ -19,8 +19,9 @@
  */
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { commitments, emails, inspectorActions, leads, quotes, recordings } from "@/db/schema";
+import { commitments, emails, inspectorActions, leads, quotes, recordings, supplierProducts, suppliers } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
+import { suggestSlots } from "@/lib/calendar/availability";
 import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
 import { type Actor, GuardrailError } from "@/lib/guard/actor";
@@ -57,6 +58,29 @@ async function task(ctx: RouteContext, a: PlannedAction, def: { title: string; k
   const r = await createTask({ leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId }, { title: def.title, kind: def.kind, due: def.due, detail: def.detail ?? a.reason, ruleKey: `inspector:${a.type}:${a.rule}`, entityId: ctx.jobId ?? ctx.leadId ?? ctx.contactId ?? ctx.inspectionId });
   if (r.alreadyOpen) return { taskId: r.taskId, note: "an open task like this already exists", inHand: `Already open: ${r.title}.` };
   return { taskId: r.taskId };
+}
+
+/** A pricing question for this lead already waiting on Home. */
+async function pricingQuestionOpen(leadId: string | null): Promise<boolean> {
+  if (!leadId) return false;
+  const open = await db.query.inspectorActions.findMany({ where: and(eq(inspectorActions.leadId, leadId), eq(inspectorActions.type, "ASK_CHRIS"), eq(inspectorActions.status, "awaiting_approval")), columns: { payload: true } });
+  return open.some((o) => (o.payload as { kind?: string }).kind === "pricing");
+}
+
+/** The unpriced products with the suppliers Chris can enter a cost for: the product's known suppliers, or all of them. */
+async function pricingItems(unpriced: { productId: string; model: string; key: string }[]) {
+  const all = await db.select({ id: suppliers.id, name: suppliers.name }).from(suppliers).orderBy(suppliers.name);
+  const out = [];
+  for (const u of unpriced) {
+    const offers = await db
+      .select({ id: suppliers.id, name: suppliers.name, approved: supplierProducts.priceApproved })
+      .from(supplierProducts)
+      .innerJoin(suppliers, eq(suppliers.id, supplierProducts.supplierId))
+      .where(eq(supplierProducts.productId, u.productId));
+    const options = offers.length ? offers.map((o) => ({ id: o.id, name: o.name })) : all;
+    out.push({ productId: u.productId, model: u.model, key: u.key, suppliers: options, supplierId: options[0]?.id ?? null });
+  }
+  return out;
 }
 
 async function openBrainQuoteNumber(leadId: string | null): Promise<number | null> {
@@ -147,7 +171,12 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       const pricedLines = run.packet.costing.lines.filter((l) => l.priced && l.unitSellExGst != null && !l.internalOnly).length;
       // What the Brain itself says it still needs before it can design (it never guesses an input).
       const needs = (run.packet.missing ?? []).filter((m) => m.importance === "blocks_quote").map((m) => ({ field: m.field, question: m.question }));
-      return { status: "done", result: { assessmentId: run.id, complete: run.packet.costing.complete, pricedLines, unpriced: run.packet.costing.unpriced, siteVisitRequired: siteVisit, siteVisitReasons: run.packet.siteVisit?.reasons ?? [], needs, brainRecommends: run.packet.sales?.recommendedAction ?? null } };
+      // Products in the design with no approved trade cost: what Hermes asks Chris for (by id, never a guess).
+      const seen = new Set<string>();
+      const unpricedItems = run.packet.costing.lines
+        .filter((l) => !l.priced && l.kind === "hardware" && l.productId && !seen.has(l.productId) && seen.add(l.productId))
+        .map((l) => ({ productId: l.productId!, model: l.model ?? l.customerDescription, key: l.key }));
+      return { status: "done", result: { assessmentId: run.id, complete: run.packet.costing.complete, pricedLines, unpriced: run.packet.costing.unpriced, unpricedItems, siteVisitRequired: siteVisit, siteVisitReasons: run.packet.siteVisit?.reasons ?? [], needs, brainRecommends: run.packet.sales?.recommendedAction ?? null } };
     }
     case "PREPARE_QUOTE": {
       const brain = earlier.get("RUN_BUSINESS_BRAIN");
@@ -155,8 +184,10 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       if (brain.siteVisitRequired) return { status: "blocked", result: { reason: "The Business Brain requires a site visit first.", siteVisitRequired: true } };
       const needs = (brain.needs as { question: string }[] | undefined) ?? [];
       if (needs.length) return { status: "blocked", result: { reason: `The Business Brain needs: ${needs.map((n) => n.question).join(" ")}` } };
-      // No approved price for anything in it: no quote and no reply, a pricing task for Chris instead.
+      // No approved price for anything in it: no quote and no reply. Hermes asks Chris for the costs
+      // (the card on Home); only when there is nothing to ask about does a pricing task stand in.
       if (!Number(brain.pricedLines ?? 0)) {
+        if (((brain.unpricedItems as unknown[] | undefined) ?? []).length) return { status: "blocked", result: { reason: "Nothing in the design has an approved price yet, so no quote was prepared. Hermes asks for the costs.", askPricing: true } };
         const title = `Price the quote for ${await who(ctx.leadId)}`;
         const t = await task(ctx, a, { title, kind: "quote", due: today, detail: "The Business Brain designed the system but nothing in it has an approved price yet, so no quote was prepared. Approve the trade prices (or enter the quote by hand), then prepare it from the assessment." });
         return { status: "blocked", result: { reason: "Nothing in the design has an approved price yet, so no quote was prepared.", ...t, created: title } };
@@ -215,7 +246,22 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
         // after the quote step (which makes its own "Price the quote" task when nothing is priced).
         const later = [...queue].some((p) => p.type === "PREPARE_QUOTE");
         const brainOut = earlier.get("RUN_BUSINESS_BRAIN");
-        const gaps = brainOut && !brainOut.complete && !brainOut.siteVisitRequired ? pricingGaps((brainOut.unpriced as string[] | undefined) ?? []) : null;
+        // Products with no approved cost: Hermes asks Chris for them on Home (once per lead), instead
+        // of leaving a task. Entering them re-runs the Brain and prepares the quote.
+        const unpricedItems = (brainOut?.unpricedItems as { productId: string; model: string; key: string }[] | undefined) ?? [];
+        const askNow = a.type === "PREPARE_QUOTE" && unpricedItems.length > 0 && !brainOut?.siteVisitRequired && !((brainOut?.needs as unknown[] | undefined) ?? []).length;
+        const alreadyAsked = askNow && ([...queue, ...planned].some((p) => p.rule === "pricing_needed") || (await pricingQuestionOpen(ctx.leadId)));
+        if (askNow && !alreadyAsked) {
+          const items = await pricingItems(unpricedItems);
+          queue.push({
+            type: "ASK_CHRIS",
+            mode: "approval",
+            rule: "pricing_needed",
+            reason: `No approved trade cost for ${items.length} item${items.length === 1 ? "" : "s"} in the design for ${await who(ctx.leadId)}.`,
+            payload: { kind: "pricing", key: `pricing:${ctx.leadId}`, question: `What do we pay (ex GST) for ${items.map((i) => i.model).join(", ")}? The quote is prepared as soon as the costs are in.`, why: "The Business Brain designed the system but these have no approved trade cost; it never guesses one.", items, unblocks: ["PREPARE_QUOTE"], learn: false },
+          });
+        }
+        const gaps = brainOut && !brainOut.complete && !brainOut.siteVisitRequired && !(askNow && !alreadyAsked) ? pricingGaps((brainOut.unpriced as string[] | undefined) ?? []) : null;
         if (gaps && ((a.type === "RUN_BUSINESS_BRAIN" && !later) || (a.type === "PREPARE_QUOTE" && r.status === "done")) && !queue.some((p) => p.rule === "pricing_only_blocker") && !planned.some((p) => p.rule === "pricing_only_blocker")) {
           const qn = a.type === "PREPARE_QUOTE" ? ((r.result.quoteNumber as number | null) ?? null) : await openBrainQuoteNumber(ctx.leadId);
           queue.push({
@@ -241,9 +287,18 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
         result = { error: err instanceof Error ? err.message : String(err) };
       }
     }
+    // A site visit or booking proposal carries three free slots, so accepting it books a time.
+    let payload = a.payload;
+    if ((a.type === "PROPOSE_SITE_VISIT" || a.type === "PROPOSE_BOOKING") && status === "awaiting_approval") {
+      try {
+        payload = { ...payload, ...(await suggestSlots({ leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId, timing: typeof payload.timing === "string" ? payload.timing : null, durationMin: a.type === "PROPOSE_SITE_VISIT" ? 60 : 180 })) };
+      } catch (err) {
+        payload = { ...payload, slotsError: err instanceof Error ? err.message : String(err) };
+      }
+    }
     const [row] = await db
       .insert(inspectorActions)
-      .values({ inspectionId: ctx.inspectionId, type: a.type, mode: a.mode, status, rule: a.rule, reason: a.reason, payload: a.payload, result, leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId })
+      .values({ inspectionId: ctx.inspectionId, type: a.type, mode: a.mode, status, rule: a.rule, reason: a.reason, payload, result, leadId: ctx.leadId, contactId: ctx.contactId, jobId: ctx.jobId })
       .returning({ id: inspectorActions.id });
     out.push({ id: row.id, type: a.type, status, rule: a.rule, result });
   }

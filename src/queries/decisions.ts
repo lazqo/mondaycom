@@ -12,7 +12,7 @@ import { formatDateTime } from "@/lib/utils";
 import type { DraftView } from "@/components/brain/draft-card";
 import { getInspectorQueue, IDENTITY_ACTIONS, type AwaitingItem, type ConflictItem, type ReviewItem } from "./inspector";
 
-export type DecisionKind = "review" | "proposal" | "reply" | "quote" | "fact" | "knowledge" | "package";
+export type DecisionKind = "ask" | "review" | "proposal" | "reply" | "quote" | "fact" | "knowledge" | "package";
 
 export type QuoteDecision = { id: string; number: number; title: string; status: string; total: string; who: string | null; leadId: string | null; updatedAt: Date; origin: string };
 export type KnowledgeDecision = typeof brainCandidates.$inferSelect;
@@ -20,6 +20,8 @@ export type PackageDecision = typeof packageCandidates.$inferSelect;
 export type ProductOption = { id: string; label: string; category: string };
 
 export type Decisions = {
+  /** Questions Hermes asked; answered on Home. */
+  ask: AwaitingItem[];
   review: ReviewItem[];
   proposal: AwaitingItem[];
   reply: DraftView[];
@@ -62,8 +64,10 @@ export async function getDecisions(): Promise<Decisions> {
   }));
   const quote: QuoteDecision[] = openQuotes.map((x) => ({ id: x.id, number: x.number, title: x.title, status: x.status, total: x.total, who: x.contact?.name ?? x.lead?.name ?? null, leadId: x.leadId, updatedAt: x.updatedAt, origin: x.origin }));
   const productRows = pkgs.length ? await db.select({ id: products.id, manufacturer: products.manufacturer, model: products.model, category: products.category }).from(products).where(ne(products.status, "deprecated")).orderBy(products.category, products.manufacturer, products.model) : [];
+  const ask = q.awaiting.filter((a) => a.action.type === "ASK_CHRIS");
+  const proposal = q.awaiting.filter((a) => a.action.type !== "ASK_CHRIS");
   const total = q.review.length + q.awaiting.length + reply.length + quote.length + q.conflicts.length + knowledge.length + pkgs.length;
-  return { review: q.review, proposal: q.awaiting, reply, quote, fact: q.conflicts, knowledge, package: pkgs, products: productRows.map((p) => ({ id: p.id, label: `${p.manufacturer} ${p.model} (${p.category})`, category: p.category })), total };
+  return { ask, review: q.review, proposal, reply, quote, fact: q.conflicts, knowledge, package: pkgs, products: productRows.map((p) => ({ id: p.id, label: `${p.manufacturer} ${p.model} (${p.category})`, category: p.category })), total };
 }
 
 /** How many decisions wait (the one badge). Cheap: counts only. */

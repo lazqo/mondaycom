@@ -5,12 +5,14 @@ import { CandidateDecision } from "@/components/brain/research-panel";
 import { PackageDecision } from "@/components/brain/package-panel";
 import { ReviewCard } from "@/components/inspector/review-card";
 import { AwaitingLine, ConflictLine } from "@/components/inspector/views";
+import { AskCard } from "@/components/decisions/ask-card";
 import { QUOTE_STATUS_META, type QuoteStatus } from "@/lib/constants";
 import { formatDateTime, formatMoney } from "@/lib/utils";
 import type { DecisionKind, Decisions } from "@/queries/decisions";
 
-const ALL: DecisionKind[] = ["review", "proposal", "quote", "reply", "fact", "package", "knowledge"];
+const ALL: DecisionKind[] = ["ask", "review", "proposal", "quote", "reply", "fact", "package", "knowledge"];
 const TITLES: Record<DecisionKind, string> = {
+  ask: "Hermes asks",
   review: "Hermes needs you to decide",
   proposal: "Proposed: site visits, bookings, revised quotes, links",
   quote: "Quotes ready for your approval",
@@ -20,6 +22,7 @@ const TITLES: Record<DecisionKind, string> = {
   knowledge: "Proposed Business Brain updates",
 };
 const EMPTY: Record<DecisionKind, string> = {
+  ask: "No questions.",
   review: "Nothing Hermes could not settle.",
   proposal: "No site visits, bookings or revised quotes waiting.",
   quote: "No quotes waiting.",
@@ -36,7 +39,7 @@ const count = (n: number) => <Badge className={n ? "bg-[#ffcb00] text-gray-900" 
  * stays behind "details" on the Hermes page.
  */
 export function DecisionsQueue({ d, canApprove, kinds = ALL, showEmpty = true }: { d: Decisions; canApprove: boolean; kinds?: DecisionKind[]; showEmpty?: boolean }) {
-  const n = (k: DecisionKind) => (k === "review" ? d.review.length : k === "proposal" ? d.proposal.length : k === "quote" ? d.quote.length : k === "reply" ? d.reply.length : k === "fact" ? d.fact.length : k === "package" ? d.package.length : d.knowledge.length);
+  const n = (k: DecisionKind) => (k === "ask" ? d.ask.length : k === "review" ? d.review.length : k === "proposal" ? d.proposal.length : k === "quote" ? d.quote.length : k === "reply" ? d.reply.length : k === "fact" ? d.fact.length : k === "package" ? d.package.length : d.knowledge.length);
   const shown = kinds.filter((k) => showEmpty || n(k) > 0);
   if (!shown.length) return null;
   return (
@@ -52,6 +55,7 @@ export function DecisionsQueue({ d, canApprove, kinds = ALL, showEmpty = true }:
           />
           {n(k) === 0 ? <p className="px-4 py-3 text-sm text-gray-500">{EMPTY[k]}</p> : null}
           <div className="divide-y divide-gray-100">
+            {k === "ask" ? d.ask.map((a) => <AskCard key={a.action.id} item={a} canApprove={canApprove} />) : null}
             {k === "review" ? d.review.map((r) => <ReviewCard key={r.inspection.id} item={r} canApprove={canApprove} />) : null}
             {k === "proposal" ? d.proposal.map((a) => <AwaitingLine key={a.action.id} item={a} canApprove={canApprove} />) : null}
             {k === "quote"
