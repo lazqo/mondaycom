@@ -139,7 +139,9 @@ function inspectorItem(action: string, d: Record<string, unknown>, leadId: strin
           : d.engine === "fallback"
             ? "Hermes unavailable: waiting for review"
             : null;
-      return { kind: "inspector", title: `${d.engine === "hermes" ? "Hermes" : "Inspector"} read the ${what}`, meta, body: d.summary ? String(d.summary) : null, href: leadId ? `/leads/${leadId}` : "/inspector" };
+      const STATUS: Record<string, string> = { done: "Done", accepted: "Done", awaiting_approval: "Waiting for you", already_in_hand: "Already in hand", blocked: "Not done", superseded: "Superseded", dismissed: "Dismissed" };
+      const acts = (Array.isArray(d.actions) ? (d.actions as { type: string; status: string; note?: string | null }[]) : []).map((a) => `${STATUS[a.status] ?? a.status}: ${ACTION_LABELS[a.type as ActionType] ?? a.type}${a.note ? ` (${a.note})` : ""}`);
+      return { kind: "inspector", title: `${d.engine === "hermes" ? "Hermes" : "Inspector"} read the ${what}`, meta, body: [d.summary ? String(d.summary) : null, acts.length ? acts.join("\n") : null].filter(Boolean).join("\n\n") || null, href: leadId ? `/leads/${leadId}` : "/inspector" };
     }
     case "inspector_note":
       return null; // the same summary as "inspected"
@@ -556,7 +558,7 @@ async function buildTimeline(scope: Scope): Promise<TimelineItem[]> {
   // ---- Voice recordings ----
   for (const r of recordingRows) {
     const minutes = r.durationSeconds ? `${Math.round(r.durationSeconds / 60)} min` : null;
-    items.push({ id: `rec-${r.id}`, at: r.recordedAt ?? r.createdAt, kind: "recording", title: `Recorded conversation: ${r.title}`, meta: [minutes, "Plaud", r.transcriptPolished ? "cleaned-up transcript" : "original transcript"].filter(Boolean).join(" · "), body: r.transcript, source: leadLabel(r.leadId), href: "/recordings" });
+    items.push({ id: `rec-${r.id}`, at: r.recordedAt ?? r.createdAt, kind: "recording", title: `Recorded conversation: ${r.title}`, meta: [minutes, "Plaud", r.transcriptPolished ? "cleaned-up transcript" : "original transcript", r.matchedBy ? `filed on ${r.matchedBy}` : null].filter(Boolean).join(" · "), body: r.transcript, source: leadLabel(r.leadId), href: "/recordings" });
   }
 
   // ---- Commitments heard on calls and in emails ----

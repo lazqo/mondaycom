@@ -39,6 +39,7 @@ let chris: { kind: "human"; userId: string; name: string; canApprove: true };
 let mailboxId: string;
 const leadIds: string[] = [];
 const recordingIds: string[] = [];
+const contactIds: string[] = [];
 const offerIds: string[] = [];
 let pkgBefore: typeof S.installationPackages.$inferSelect | undefined;
 let n = 0;
@@ -174,6 +175,10 @@ afterAll(async () => {
     await db.delete(S.tasks).where(inArray(S.tasks.leadId, leadIds));
   }
   if (recordingIds.length) await db.delete(S.recordings).where(inArray(S.recordings.id, recordingIds));
+  if (contactIds.length) {
+    await db.delete(S.tasks).where(inArray(S.tasks.contactId, contactIds));
+    await db.delete(S.contacts).where(inArray(S.contacts.id, contactIds));
+  }
   await db.delete(S.emailThreads).where(eq(S.emailThreads.mailboxId, mailboxId));
   if (leadIds.length) await db.delete(S.leads).where(inArray(S.leads.id, leadIds));
   await db.delete(S.mailboxes).where(eq(S.mailboxes.id, mailboxId));
@@ -377,6 +382,47 @@ describe("Test 3: commercial CCTV — Hermes understands it, the Business Brain 
 });
 
 describe("Test 4: ambiguous identity — Hermes may suggest, the hard rule decides", () => {
+  it("the number said at the end of a call, in words: the CRM matches it first and files the recording with what Hermes did", async () => {
+    const phone = `021 ${String(Date.now()).slice(-7)}`;
+    const WORDS: Record<string, string> = { "0": "oh", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine" };
+    const said = phone.replace(/\D/g, "").split("").map((d) => WORDS[d]).join(" ");
+    const [l] = await db.insert(S.leads).values({ name: `Aroha Ngata ${RUN}`, phone, status: "contacted", source: "phone", service: "CCTV" }).returning();
+    leadIds.push(l.id);
+    script = () => ({ conversation_type: "existing_lead", intent: "follow_up", summary: "Aroha wants the two side cameras moved; Chris will call back.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Call Aroha about moving the side cameras ${RUN}`, due: "today", detail: null }, confidence: 0.9, reason: "Follow-up from the call." });
+    const r = await recording("Site visit chat", ["Speaker 1: Hi it's Chris from Get Secure.", "Speaker 2: Could the two side cameras move to cover the gate?", "Speaker 1: Sure, I'll call you back about it.", `Speaker 1: Customer's number for the file: ${said}.`].join("\n"));
+    const out = (await inspect("recording", r.id))!;
+    expect(out).toMatchObject({ engine: "hermes", status: "analysed" });
+    expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!).toMatchObject({ status: "attached", leadId: l.id });
+    expect((await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Call Aroha about moving the side cameras ${RUN}`) }))!.leadId).toBe(l.id);
+    // The lead's timeline carries the reading and what was done about it.
+    const entry = (await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, l.id), eq(S.activityLog.action, "inspected")), orderBy: [desc(S.activityLog.createdAt)] }))!;
+    expect((entry.detail as { actions: { type: string; status: string }[] }).actions).toEqual(expect.arrayContaining([expect.objectContaining({ type: "CREATE_INTERNAL_TASK", status: "done" }), expect.objectContaining({ type: "LINK_RECORDING", status: "done" })]));
+  });
+
+  it("a number the CRM could not read but Hermes did, verbatim: it goes through the same phone rule and files the recording", async () => {
+    const phone = `027 ${String(Date.now()).slice(-7)}`;
+    const WORDS: Record<string, string> = { "0": "oh", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine" };
+    const w = phone.replace(/\D/g, "").split("").map((d) => WORDS[d]);
+    const said = `${w.slice(0, 3).join(", ")}, um, ${w.slice(3, 6).join(" ")}, then ${w.slice(6).join(" ")}`; // broken up by fillers: no unbroken run for the CRM
+    const [c] = await db.insert(S.contacts).values({ name: `Rangi Parata ${RUN}`, phone }).returning();
+    contactIds.push(c.id);
+    script = () => ({ conversation_type: "existing_customer", intent: "service_issue", summary: "Rangi's keypad beeps at night.", facts: [{ key: "phone", value: phone, evidence: said, confidence: 0.9 }], recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Check Rangi's keypad ${RUN}`, due: "today", detail: null }, confidence: 0.9, reason: "Service issue on an existing system." });
+    const r = await recording("Call", ["Speaker 2: The keypad beeps every night around two.", `Speaker 1: Noted. And your number is ${said}?`, "Speaker 2: That's it."].join("\n"));
+    const out = (await inspect("recording", r.id))!;
+    expect(out).toMatchObject({ engine: "hermes", status: "analysed" });
+    expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!).toMatchObject({ status: "attached", contactId: c.id });
+    expect((await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Check Rangi's keypad ${RUN}`) }))!.contactId).toBe(c.id);
+    const ins = (await latestFor(r.id))!;
+    expect((ins.identity as { reason: string }).reason).toMatch(/read by Hermes/);
+
+    // A number that is not in the words does nothing: Hermes cannot file a recording by assertion.
+    script = () => ({ conversation_type: "existing_customer", intent: "service_issue", summary: "Keypad beeps.", facts: [{ key: "phone", value: phone, evidence: "your number is on file", confidence: 0.9 }], recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Check the keypad again ${RUN}`, due: "today", detail: null }, confidence: 0.9, reason: "Service issue." });
+    const r2 = await recording("Call 2", ["Speaker 2: The keypad still beeps.", "Speaker 1: Noted, your number is on file."].join("\n"));
+    const out2 = (await inspect("recording", r2.id))!;
+    expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r2.id) }))!.status).toBe("review");
+    expect(out2.status).toBe("analysed"); // the task still goes ahead, unfiled
+  });
+
   it("a name alone: Hermes's suggestion is shown, nothing is written until Chris confirms", async () => {
     const [l] = await db.insert(S.leads).values({ name: `Hemi Walker`, email: `hemi+${RUN}@example.com`, status: "new", source: "phone", service: "CCTV" }).returning();
     leadIds.push(l.id);

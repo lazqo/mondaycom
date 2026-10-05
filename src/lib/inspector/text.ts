@@ -80,10 +80,71 @@ export function getSecureSpeaker(utterances: Utterance[], staffNames: string[]):
   return null;
 }
 
-/** NZ-looking phone numbers in text, digits only. */
+const DIGIT_WORDS: Record<string, string> = { zero: "0", oh: "0", o: "0", nought: "0", one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9" };
+
+/**
+ * Every digit said or written, in order, as one string: "oh two one, double five five, 0123" →
+ * "02155550123". Words that are not digits are skipped, so "oh two one, um, five five five" still
+ * reads through. Used to check a number Hermes read against the words it cites.
+ */
+export function digitSequence(text: string): string {
+  const tokens = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let out = "";
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "double" || t === "triple") {
+      const next = tokens[i + 1] ?? "";
+      const d = DIGIT_WORDS[next] ?? (/^\d$/.test(next) ? next : null);
+      if (d) {
+        out += d.repeat(t === "double" ? 2 : 3);
+        i++;
+      }
+      continue;
+    }
+    if (DIGIT_WORDS[t]) out += DIGIT_WORDS[t];
+    else if (/^\d+$/.test(t)) out += t;
+  }
+  return out;
+}
+
+/**
+ * Phone numbers said in words, as a transcript writes them when the speaker spells the number out
+ * ("my number is oh two one, five five five, oh one two three"). Only an unbroken run of spoken or
+ * written digits counts, and only one that looks like a New Zealand number, so ordinary speech
+ * ("one or two cameras") never becomes a phone number.
+ */
+export function spokenPhones(text: string): string[] {
+  const out: string[] = [];
+  const tokens = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let run = "";
+  const flush = () => {
+    if (/^(?:0|64)\d{7,11}$/.test(run)) out.push(run);
+    run = "";
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "double" || t === "triple") {
+      const next = tokens[i + 1] ?? "";
+      const d = DIGIT_WORDS[next] ?? (/^\d$/.test(next) ? next : null);
+      if (d) {
+        run += d.repeat(t === "double" ? 2 : 3);
+        i++;
+        continue;
+      }
+      flush();
+    } else if (DIGIT_WORDS[t]) run += DIGIT_WORDS[t];
+    else if (/^\d{1,4}$/.test(t)) run += t;
+    else flush();
+  }
+  flush();
+  return [...new Set(out)];
+}
+
+/** NZ-looking phone numbers in text, digits only: written ("021 555 0123") or said in words. */
 export function phonesIn(text: string): string[] {
   const found = text.match(/(?:\+?64|0)[\s-]?[2-9][\d\s-]{6,12}\d/g) ?? [];
-  return [...new Set(found.map((p) => p.replace(/\D/g, "")).filter((d) => d.length >= 8 && d.length <= 12))];
+  const written = found.map((p) => p.replace(/\D/g, "")).filter((d) => d.length >= 8 && d.length <= 12);
+  return [...new Set([...written, ...spokenPhones(text)])];
 }
 
 /** Email addresses in text, other than Get Secure's own. */

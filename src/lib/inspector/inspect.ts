@@ -23,10 +23,11 @@ import { recordFeedback } from "./feedback";
 import { HERMES_ACTION_LABELS } from "./labels";
 import { alreadyInHand, routeActions, type RoutedAction } from "./router";
 import { collectSignals } from "./signals";
-import { validateHermes, type Validation, SERVICE_DISPLAY } from "./validate";
+import { validateHermes, type Validation, SERVICE_DISPLAY, evidenceFound, sourceHaystack } from "./validate";
 import { askHermes, type HermesStatus } from "@/lib/hermes/inspector";
 import { hermesAutonomy } from "@/lib/hermes/autonomy";
 import { crmKnown, crmState, emailInput, recordingInput, staffNames } from "./sources";
+import { digitSequence, normalisePhone } from "./text";
 import { INSPECTOR_VERSION, type IdentityResult, type InspectorInput, type PlannedAction, type SourceType, type Understanding } from "./types";
 
 export type InspectOutcome = {
@@ -90,6 +91,21 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
   if (hermes.status === "ok" && hermes.result) {
     engine = "hermes";
     const h = hermes.result;
+    // A phone number Hermes read in the words (said at the end of a call, written under an email)
+    // goes through the CRM's own identity rules: it has to be in the source verbatim and belong to
+    // a record. Hermes never decides who it is; it only points the CRM at the number.
+    if (identity.status !== "matched" && identity.status !== "not_applicable") {
+      const phone = phoneReadByHermes(h, input);
+      const again = phone ? decideIdentity(mergeCandidates(await collectSignals(input, { phones: [phone] })), { allowNew: false }) : null;
+      if (again?.status === "matched" && again.chosen?.signals.some((x) => x.kind === "phone")) {
+        identity = { ...again, reason: `${again.reason} The number was read by Hermes from the words.` };
+        leadId = again.chosen.leadId;
+        state = await crmState(leadId, again.chosen.contactId, input);
+        contactId = again.chosen.contactId ?? state.contactId;
+        known = await crmKnown(leadId, contactId);
+        jobId = state.jobId;
+      }
+    }
     const citable = ((hermes.contextRefs as { citable?: string[] }).citable ?? []) as string[];
     // The work Hermes places it in; if it only named it as its suggestion of who the sender is, that is
     // treated as the proposed work too. Either way it must pass the same evidence check.
@@ -229,11 +245,8 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
 
   if (storeCommitmentsFor) await storeCommitments(row.id, input, understanding, factsAbout ? { leadId, contactId, jobId } : { leadId: null, contactId: null, jobId: null });
   await settleClassification(input, { status, leadId, contactId, engine, verified: identity.status === "matched" && !senderUnverified });
-  const detail = { inspectionId: row.id, sourceType, sourceId, title: input.title, summary: understanding.summary, engine, recommended: hermes.result?.recommended_action ?? null, confidence: hermes.result?.confidence ?? null };
-  if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
-  else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
 
-  let actions: RoutedAction[];
+  let actions: RoutedAction[] = [];
   try {
     actions = await routeActions(planned, {
       inspectionId: row.id,
@@ -247,6 +260,20 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
   } finally {
     // Now the review (with its suggestion and buttons) can appear; even if routing failed, it is never lost.
     if (status === "needs_review") await db.update(inspections).set({ status: "needs_review" }).where(and(eq(inspections.id, row.id), eq(inspections.status, "routing")));
+    // The timeline entry: what was read, and what was done about it.
+    const detail = {
+      inspectionId: row.id,
+      sourceType,
+      sourceId,
+      title: input.title,
+      summary: understanding.summary,
+      engine,
+      recommended: hermes.result?.recommended_action ?? null,
+      confidence: hermes.result?.confidence ?? null,
+      actions: actions.filter((a) => !["ADD_INTERNAL_NOTE", "NO_ACTION", "OUTSTANDING"].includes(a.type)).map((a) => ({ type: a.type, status: a.status, note: typeof a.result?.inHand === "string" ? a.result.inHand : a.status === "blocked" && typeof a.result?.reason === "string" ? a.result.reason : null })),
+    };
+    if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
+    else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
   }
   const brain = actions.filter((a) => a.type === "RUN_BUSINESS_BRAIN" || a.type === "PREPARE_QUOTE" || (a.type === "PROPOSE_SITE_VISIT" && a.rule === "business_brain_site_visit"));
   await db
@@ -387,6 +414,21 @@ async function applyLeadDecision(h: HermesResult, input: InspectorInput, u: Unde
     await db.update(emails).set({ classification: "not_lead", classifiedAt: new Date() }).where(eq(emails.id, e.id));
     await logActivity({ entity: "lead", entityId: lead.id, actorId: null, action: "lead_reversed_by_hermes", detail: { emailId: e.id, reason: h.reason, confidence: h.confidence } });
     return { kind: "reversed", leadId: lead.id };
+  }
+  return null;
+}
+
+/**
+ * A phone number Hermes gives as a fact, only when its cited words are in the source verbatim and
+ * read as that number (digits or spoken digits, "oh two one…"). Anything else is ignored.
+ */
+function phoneReadByHermes(h: HermesResult, input: InspectorInput): string | null {
+  const hay = sourceHaystack(input);
+  for (const f of h.facts) {
+    if (f.key !== "phone" || (typeof f.value !== "string" && typeof f.value !== "number") || !f.evidence) continue;
+    const value = normalisePhone(String(f.value));
+    if (value.length < 8 || value.length > 12 || !evidenceFound(f.evidence, hay)) continue;
+    if (normalisePhone(digitSequence(f.evidence)) === value) return value;
   }
   return null;
 }

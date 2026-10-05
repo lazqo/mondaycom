@@ -1038,6 +1038,16 @@ appointment, quote number) or Chris links them. Facts from an unlinked sender ar
 Those are never sent to Hermes. If Hermes cannot be reached, the email waits in Needs review as
 "Hermes could not read it", and it is retried.
 
+**Plaud recordings: the phone number first.** When a new recording comes in, the CRM looks for
+the customer's phone number in the transcript (Chris says it at the end of the call; written as
+digits or in words, "oh two one, double five…") and matches it against leads and customers. A
+match files the recording on that record straight away; Hermes then reads the conversation and
+does the work (tasks, commitments, facts, a quote or visit proposal), and the record's timeline
+shows "Hermes read the conversation" with each thing done under it. If the CRM could not read
+the number but Hermes can (citing the words), the same phone rule applies: the number must be in
+the transcript and belong to a record. A name alone never files a recording; with no number, the
+recording waits in "Who is this?" with the possible matches, and the work still goes ahead.
+
 **Commitments.** Hermes marks an outstanding commitment kept (or no longer needed) when the record
 shows it, citing the record. Example: "Book the installation visit" is kept because `job:…` (J-1008)
 was completed. The commitment is closed, the timeline says "Hermes: commitment kept … shown by …",

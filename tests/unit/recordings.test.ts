@@ -68,6 +68,10 @@ describe("matching signals", () => {
     expect(phoneCandidates("my number is 02108856692")).toContain("02108856692");
     expect(phoneCandidates("+64 21 555 0123")).toContain("0215550123"); // stored the NZ way
     expect(digits("021 555-0123")).toBe("0215550123");
+    // Said in words, as a transcript writes it when the number is read out at the end of a call.
+    expect(phoneCandidates("my number is oh two one, double five five, oh one two three")).toContain("0215550123");
+    expect(phoneCandidates("zero two seven triple five one two three four, cheers")).toContain("0275551234");
+    expect(phoneCandidates("we want one or two cameras, maybe three, for the four bedrooms")).toHaveLength(0);
   });
 
 
