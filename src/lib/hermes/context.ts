@@ -12,6 +12,7 @@ import { getSecureSpeaker } from "@/lib/inspector/text";
 import { TZ } from "@/lib/inspector/dates";
 import { hermesResultJsonSchema, HERMES_INSPECTOR_VERSION } from "./contract";
 import type { HermesMessage } from "./runtime";
+import { listSuppliers } from "@/lib/brain/suppliers/lookup";
 import { readBrainOutcome, readCommitments, readCustomer, readFacts, readLead, readOpenTasks, readQuotes, readRecentCorrections, readTimeline, readVisitsAndJobs } from "./crm-read";
 
 export type HermesContextPack = Awaited<ReturnType<typeof buildContextPack>>["pack"];
@@ -53,10 +54,12 @@ export async function buildContextPack(input: InspectorInput, opts: { identity: 
     score: c.score,
   }));
   const lessons = await readRecentCorrections(12).catch(() => []);
+  // Get Secure's suppliers (names and websites only), so Hermes can recognise supplier mail.
+  const suppliers = (await listSuppliers().catch(() => [])).map((s) => ({ name: s.name, website: s.website }));
 
   const pack = {
     now: { iso: now.toISOString(), local: now.toLocaleString("en-NZ", { timeZone: TZ, dateStyle: "full", timeStyle: "short" }), timeZone: TZ },
-    business: { name: "Get Secure", what: "New Zealand (Auckland) security installer: CCTV, alarms, access control, intercoms.", staff: opts.staffNames },
+    business: { name: "Get Secure", what: "New Zealand (Auckland) security installer: CCTV, alarms, access control, intercoms.", staff: opts.staffNames, suppliers },
     source: {
       type: input.sourceType,
       id: input.sourceId,
@@ -116,9 +119,14 @@ const SYSTEM = `You are Hermes, Get Secure's operational intelligence, acting as
 
 For the one email or conversation in the context pack, use your judgement as an experienced person in the business would: what it is, whether it is a lead, which existing work it belongs to, where the matter stands, which commitments have been kept, and the single best next step. Use the whole context (origin, thread, CRM record, open tasks, commitments, quotes, visits, jobs, history) and do not rely on keywords.
 
+First decide, separately:
+1. business_context: what kind of business relationship this is: "customer_prospect" (a customer or someone who may become one), "existing_work" (an existing site, job or service issue, even from someone new: a tenant, site manager, staff member), "supplier_vendor" (a supplier or distributor: business.suppliers lists Get Secure's), "service_provider" (monitoring centre, telco, software or other provider), "accounting_payment" (statements, invoices, remittances, receipts, payment reminders), "internal_admin", or "irrelevant". Use your judgement from the content, not the sender's address alone. Fill counterparty, and accounting for a financial document.
+2. the operational action that follows (below).
+3. whether the sender's identity matters. It only matters when the work needs a customer record (a quote, the Business Brain, a visit or booking, filing into existing work) and you cannot place it in evidenced work. Supplier, provider, accounting and internal mail never needs "Who is this?". Set identity_review.needed only if Chris should confirm who the sender is anyway.
+
 Your authority. You decide, and the CRM carries out internal work on your decision (audited, and Chris can reverse it):
 - lead_decision: "lead" (a genuine enquiry; the CRM creates the lead), "not_lead" (spam, marketing, supplier, internal, notifications), "existing" (part of existing work), or "undecided".
-- operational_context.ref: the work this is about ("lead:<id>", "job:<id>", "customer:<id>" from the pack), even when the sender is someone new (a tenant, a site manager). Only choose it when the source itself shows it (the site address, a job or quote number, the thread). The sender's identity stays the CRM's call; work still continues in that context.
+- operational_context.ref: the work this is about ("lead:<id>", "job:<id>", "customer:<id>" from the pack or the CRM's lookup tools), even when the sender is someone new (a tenant, a site manager). Set it whenever the source shows it (the site address, a job or quote number, the thread); for a remittance or statement, the customer or job it concerns when the document shows it. The sender's identity stays the CRM's call; the work continues in that context and the sender stays unlinked.
 - resolution: "resolved", "waiting_on_us", "waiting_on_customer" or "open", with evidence refs (job:, visit:, quote:, task:, commitment: from the pack) showing why. To close an enquiry (NO_ACTION) you must cite the CRM records that show it was dealt with, for example a later completed job.
 - commitment_updates: outstanding commitments (by id) that the CRM record shows were kept (status "done") or are void ("cancelled"), each with the evidence ref. Only when a record clearly shows it, for example the installation job was completed after "I'll book the install".
 - recommended_action and its details (task title, reply draft, questions). The CRM does not create a second task, proposal or quote when one is already open: check openTasks first and prefer recommending what is not already in hand.

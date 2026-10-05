@@ -15,7 +15,7 @@ import { commitments, contacts, emails, emailThreads, facts, inspections, inspec
 import { logActivity } from "@/lib/activity";
 import { createLeadFromEmail, markEmailNotLead } from "@/lib/email/pipeline";
 import { type Actor, assertApprover, GuardrailError } from "@/lib/guard/actor";
-import type { HermesResult } from "@/lib/hermes/contract";
+import { NON_CUSTOMER_CONTEXTS, type HermesResult } from "@/lib/hermes/contract";
 import { analyse } from "./analyse";
 import { decideFact, diffFacts, storeFacts } from "./facts";
 import { decideIdentity, mergeCandidates } from "./identity";
@@ -124,7 +124,10 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     engine = "hermes";
     const h = hermes.result;
     const citable = ((hermes.contextRefs as { citable?: string[] }).citable ?? []) as string[];
-    const context = identity.status !== "matched" && h.operational_context.ref ? await checkContext(h.operational_context.ref, input, identity) : null;
+    // The work Hermes places it in; if it only named it as its suggestion of who the sender is, that is
+    // treated as the proposed work too. Either way it must pass the same evidence check.
+    const contextRef = h.operational_context.ref ?? (h.identity.suggestion === "candidate" ? h.identity.candidate_key : null);
+    const context = identity.status !== "matched" && contextRef ? await checkContext(contextRef, input, identity) : null;
     const validate = () =>
       validateHermes(h, {
         input,
@@ -173,7 +176,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       planned = [...planned.filter((p) => p.type !== "NEEDS_REVIEW"), { type: "NEEDS_REVIEW", mode: "approval", rule: "worked_lead_kept", reason: `Hermes: not a lead. ${h.reason}`, payload: { kind: "hermes_flagged", hermesRecommendation: h.recommended_action, confidence: h.confidence } }];
       reviewKind = reviewKind ?? "hermes_flagged";
     }
-    if (h.lead_decision === "not_lead" && !leadId) storeCommitmentsFor = false;
+    if ((effectiveLeadDecision(h) === "not_lead" || NON_CUSTOMER_CONTEXTS.includes(h.business_context)) && !leadId && !validation.workContext) storeCommitmentsFor = false;
 
     // Work in Hermes's evidenced context while the sender stays unverified.
     if (validation.workContext) {
@@ -341,6 +344,9 @@ async function storeCommitments(inspectionId: string, input: InspectorInput, u: 
 
 // ---------------- Hermes's operational decisions ----------------
 
+/** Supplier, provider, internal and irrelevant mail is never a lead, even when Hermes left the decision open. */
+const effectiveLeadDecision = (h: HermesResult) => (h.lead_decision !== "undecided" ? h.lead_decision : NON_CUSTOMER_CONTEXTS.includes(h.business_context) ? "not_lead" : "undecided");
+
 type LeadDecision = { kind: "created"; leadId: string; contactId: string | null; label: string } | { kind: "proposed" } | { kind: "reversed"; leadId: string } | { kind: "kept_for_chris"; leadId: string } | { kind: "not_lead" };
 
 /**
@@ -354,7 +360,8 @@ async function applyLeadDecision(h: HermesResult, input: InspectorInput, minConf
   if (input.sourceType !== "email" || input.direction !== "inbound") return null;
   const e = await db.query.emails.findFirst({ where: eq(emails.id, input.sourceId), columns: { id: true, leadId: true, classification: true, contactId: true } });
   if (!e) return null;
-  if (h.lead_decision === "lead") {
+  const decision = effectiveLeadDecision(h);
+  if (decision === "lead") {
     if (e.leadId) return null;
     if (h.confidence < minConfidence) return { kind: "proposed" };
     const leadId = await createLeadFromEmail(e.id, { actorId: null });
@@ -362,7 +369,7 @@ async function applyLeadDecision(h: HermesResult, input: InspectorInput, minConf
     await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "lead_created_by_hermes", detail: { emailId: e.id, reason: h.reason, confidence: h.confidence, rulesClassification: e.classification } });
     return { kind: "created", leadId, contactId: lead.contactId, label: lead.name };
   }
-  if (h.lead_decision === "not_lead" && h.confidence >= minConfidence) {
+  if (decision === "not_lead" && h.confidence >= minConfidence) {
     if (!e.leadId) {
       if (e.classification === "needs_review") await db.update(emails).set({ classification: "not_lead", classifiedAt: new Date() }).where(eq(emails.id, e.id));
       return { kind: "not_lead" };
@@ -394,35 +401,61 @@ function siteKey(address: string | null | undefined): string | null {
 
 /**
  * The work Hermes says a message belongs to, checked: the record exists, and the source itself
- * shows it (an identity signal other than a name, or the site's street address, the job number or
- * a quote number in the message). A name alone never places it.
+ * shows it: an identity signal other than a name on that work, or a street address of that work
+ * (its own, or of the lead, customer or job it belongs to), its job number or a quote number in the
+ * message. A name alone never places it.
  */
 async function checkContext(ref: string, input: InspectorInput, identity: IdentityResult): Promise<NonNullable<Parameters<typeof validateHermes>[1]["context"]>> {
   const [kind, id] = ref.split(":");
   const no = (label: string, why: string) => ({ ref, label, leadId: null, jobId: null, contactId: null, accepted: false, why });
   if (!id || !/^[0-9a-f-]{36}$/i.test(id) || !["lead", "job", "customer"].includes(kind)) return no(ref, "that is not a CRM record");
-  let rec: { label: string; leadId: string | null; jobId: string | null; contactId: string | null; site: string | null; numbers: RegExp[] } | null = null;
+  // The record, and everything it belongs to: its lead, customer and jobs.
+  let label = ref;
+  let leadId: string | null = null;
+  let jobId: string | null = null;
+  let contactId: string | null = null;
   if (kind === "lead") {
     const l = await db.query.leads.findFirst({ where: eq(leads.id, id), columns: { id: true, name: true, site: true, contactId: true } });
-    const qs = l ? await db.query.quotes.findMany({ where: eq(quotes.leadId, l.id), columns: { number: true } }) : [];
-    if (l) rec = { label: `${l.name}${l.site ? ` (${l.site})` : ""}`, leadId: l.id, jobId: null, contactId: l.contactId, site: l.site, numbers: qs.map((q) => new RegExp(`\\bq\\s?${q.number}\\b`)) };
+    if (!l) return no(ref, "that record does not exist");
+    label = `${l.name}${l.site ? ` (${l.site})` : ""}`;
+    leadId = l.id;
+    contactId = l.contactId;
   } else if (kind === "job") {
     const j = await db.query.jobs.findFirst({ where: eq(jobs.id, id), columns: { id: true, number: true, title: true, siteAddress: true, leadId: true, contactId: true } });
-    if (j) rec = { label: `J-${j.number} ${j.title}${j.siteAddress ? ` (${j.siteAddress})` : ""}`, leadId: j.leadId, jobId: j.id, contactId: j.contactId, site: j.siteAddress, numbers: [new RegExp(`\\b(j|job)\\s?${j.number}\\b`)] };
+    if (!j) return no(ref, "that record does not exist");
+    label = `J-${j.number} ${j.title}${j.siteAddress ? ` (${j.siteAddress})` : ""}`;
+    jobId = j.id;
+    leadId = j.leadId;
+    contactId = j.contactId;
   } else {
     const c = await db.query.contacts.findFirst({ where: eq(contacts.id, id), columns: { id: true, name: true, address: true } });
-    if (c) rec = { label: `${c.name}${c.address ? ` (${c.address})` : ""}`, leadId: null, jobId: null, contactId: c.id, site: c.address, numbers: [] };
+    if (!c) return no(ref, "that record does not exist");
+    label = `${c.name}${c.address ? ` (${c.address})` : ""}`;
+    contactId = c.id;
   }
-  if (!rec) return no(ref, "that record does not exist");
-  const base = { ref, label: rec.label, leadId: rec.leadId, jobId: rec.jobId, contactId: rec.contactId };
-  const cand = identity.candidates.find((c) => (kind === "lead" && c.leadId === id) || (kind === "job" && c.jobId === id) || (kind === "customer" && c.contactId === id));
+  const [lead, contact, relatedJobs, relatedLeads] = await Promise.all([
+    leadId ? db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { site: true } }) : null,
+    contactId ? db.query.contacts.findFirst({ where: eq(contacts.id, contactId), columns: { address: true } }) : null,
+    db.query.jobs.findMany({ where: jobId ? eq(jobs.id, jobId) : leadId ? eq(jobs.leadId, leadId) : eq(jobs.contactId, contactId!), columns: { id: true, number: true, siteAddress: true }, limit: 20 }),
+    kind === "customer" ? db.query.leads.findMany({ where: eq(leads.contactId, contactId!), columns: { id: true, site: true }, limit: 20 }) : Promise.resolve([] as { id: string; site: string | null }[]),
+  ]);
+  const leadIds = [...new Set([leadId, ...relatedLeads.map((l) => l.id)].filter((x): x is string => !!x))];
+  const quoteRows = leadIds.length ? await db.query.quotes.findMany({ where: inArray(quotes.leadId, leadIds), columns: { number: true }, limit: 30 }) : [];
+  const sites = [lead?.site, contact?.address, ...relatedJobs.map((j) => j.siteAddress), ...relatedLeads.map((l) => l.site)].filter((x): x is string => !!x);
+  const numbers = [...relatedJobs.map((j) => new RegExp(`\\b(j|job)\\s?${j.number}\\b`)), ...quoteRows.map((q) => new RegExp(`\\bq\\s?${q.number}\\b`))];
+  const base = { ref, label, leadId, jobId, contactId };
+
+  // A CRM identity signal other than a name, on this work or the lead/customer/job it belongs to.
+  const cand = identity.candidates.find((c) => (c.leadId && c.leadId === leadId) || (c.contactId && c.contactId === contactId) || (c.jobId && (c.jobId === jobId || relatedJobs.some((j) => j.id === c.jobId))));
   const strong = cand?.signals.filter((x) => x.kind !== "name") ?? [];
   if (strong.length) return { ...base, accepted: true, why: `the CRM matched it on ${strong.map((x) => x.detail).join(", ")}` };
   const text = plain([input.title, input.text, ...input.utterances.map((u) => u.text), ...(input.form ? Object.values(input.form.fields) : []), input.form?.address ?? ""].join(" \n "));
-  const key = siteKey(rec.site);
-  if (key && text.includes(key)) return { ...base, accepted: true, why: `the message names the site (${rec.site})` };
-  const num = rec.numbers.find((r) => r.test(text));
-  if (num) return { ...base, accepted: true, why: "the message gives its job or quote number" };
+  const site = sites.find((x) => {
+    const key = siteKey(x);
+    return !!key && text.includes(key);
+  });
+  if (site) return { ...base, accepted: true, why: `the message names the site (${site})` };
+  if (numbers.some((r) => r.test(text))) return { ...base, accepted: true, why: "the message gives its job or quote number" };
   return { ...base, accepted: false, why: "the message does not show its site, job or quote number (a name alone never places it)" };
 }
 

@@ -949,6 +949,45 @@ Hermes recommendation → Chris's correction or acceptance → outcome → Herme
 - where the old rules read it differently;
 - Hermes's own notes.
 
+**Business context first.** For every email and conversation Hermes decides three things separately:
+1. **What kind of business it is** (`business_context`):
+   - customer or prospect;
+   - an existing site, job or service issue;
+   - a supplier or vendor;
+   - a service or monitoring provider;
+   - accounting, payment or statement;
+   - internal or admin;
+   - irrelevant.
+
+   Hermes also records the counterparty, and for statements, invoices and remittances, the
+   document and its reference. The context pack lists Get Secure's suppliers by name and website
+   (never prices or logins). This is Hermes's judgement from the content, not sender-specific rules.
+2. **What happens next**: the operational action, as before.
+3. **Whether the sender's identity matters.** **"Who is this?" appears only when identity actually
+   blocks the work**: the work needs a customer record (the Business Brain, a quote, a visit or a
+   booking, or filing into existing customer work), and the message does not show which. Hermes
+   can also ask Chris to confirm a sender without holding the work up.
+
+How the CRM routes each kind:
+- **Supplier, provider, internal mail:** never a lead and never "Who is this?". Hermes's task or
+  note is created on its own. A lead the rules created from such mail by mistake is marked lost
+  (untouched leads only).
+  - *Dicker Data statement* → accounting task, no lead.
+  - *Alarm Watch statement* → provider/accounting task, no "new customer".
+- **Accounting:** filed on the customer or job only when the document shows which (a job or quote
+  number, the site, or the CRM's own signals). Otherwise the task stands on its own.
+  - *Firehouse remittance quoting J-1234* → reconciliation task on that customer.
+  - Without a reference → the task, unlinked.
+- **Existing work from a new person:** the work continues in the evidenced site or job; the sender
+  stays unlinked. The site counts if the message names it, including the address of the customer,
+  lead or job the work belongs to. A name never counts.
+  - *Zavier about the keypad at 138 Wiri Station Road* → filed on that job, task created, no "Who is
+    this?". The Inspector shows **Link sender to this customer** for when Chris wants to link them.
+- **Customer or prospect:** as before. A new enquiry becomes a lead when Hermes is sure.
+
+Unknown and new people stay unlinked until the evidence is strong enough (phone, email, thread,
+appointment, quote number) or Chris links them. Facts from an unlinked sender are only proposed.
+
 **Lead or not.** Hermes decides `lead_decision` for every inbound email.
 - **Lead:** the lead is created through the same path as accepting it in the Inbox. A customer is
   linked only by an exact email match. The timeline says "Hermes created this lead from the email",
@@ -993,8 +1032,8 @@ When a guardrail or the Brain changed the outcome, it says which. The lead page'
 and the timeline show the same.
 
 **Needs your review** holds:
-- **Who is this?**: the sender is not identified. Hermes's suggestion is shown; you choose. If Hermes
-  placed the message in an evidenced site or job, the work has already continued there.
+- **Who is this?**: only when the work needs the customer and the message does not show which (or
+  Hermes asked). Hermes's suggestion is shown; you choose.
 - **Hermes thinks this is a lead**: Hermes was under the threshold; Make it a lead / Not a lead.
 - **Hermes is unsure**: below the confidence threshold. "Accept recommendation" carries it out as you.
 - **Hermes asks you to look**, or **Hermes could not read it** (see Fallback). You can "Read again"
@@ -1129,7 +1168,7 @@ supplier catalogues, stock, trade prices from approved suppliers, alternatives, 
          Authorization: "Bearer <HERMES_MCP_TOKEN>"
        timeout: 120
    ```
-5. Check Hermes against the ten Inspector scenarios. Nothing is written to the CRM:
+5. Check Hermes against the twelve Inspector scenarios. Nothing is written to the CRM:
    `docker compose -f docker-compose.prod.yml exec web pnpm hermes:check`
 6. Open the Inspector. Items that waited while Hermes was not connected can be read again with
    **Read again**. A re-read uses Hermes, and it never overwrites conflicting facts.

@@ -87,6 +87,19 @@ export function ReopenCommitmentButton({ id }: { id: string }) {
   );
 }
 
+/** The work went ahead in a known site or job: Chris may link the sender to that customer (never required). */
+export function LinkSenderButton({ inspectionId, leadId, contactId, label }: { inspectionId: string; leadId: string | null; contactId: string | null; label: string }) {
+  const { pending, err, act } = useAct();
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Button size="sm" variant="ghost" disabled={pending} data-testid={`link-sender-${inspectionId}`} title={`Confirm the sender belongs to ${label}`} onClick={() => act(() => confirmIdentityAction(inspectionId, { leadId, contactId }))}>
+        Link sender to {label.length > 40 ? `${label.slice(0, 40)}…` : label}
+      </Button>
+      <ErrorText err={err} />
+    </span>
+  );
+}
+
 export function ReinspectButton({ sourceType, sourceId }: { sourceType: "email" | "recording"; sourceId: string }) {
   const { pending, err, act } = useAct();
   return (

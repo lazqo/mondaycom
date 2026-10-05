@@ -118,7 +118,23 @@ const SCENARIOS: Scenario[] = [
     name: "10. Unknown sender about an existing site (work continues there; the sender stays unlinked)",
     input: email("Hi, the keypad at 138 Wiri Station Road is beeping again and won't arm. Zavier", "Keypad", { name: "Zavier", email: "zavier@example.com", phone: null }),
     identity: { status: "needs_review", chosen: null, candidates: [{ leadId: "00000000-0000-0000-0000-00000000000b", contactId: null, jobId: null, label: "Wiri Depot (138 Wiri Station Road)", score: 0.5, signals: [{ kind: "address", detail: "address 138 Wiri Station Road", weight: 0.5 }] }], confidence: 0.5, reason: "Only address evidence." },
-    expect: (h) => (h.operational_context.ref === "lead:00000000-0000-0000-0000-00000000000b" && h.lead_decision !== "lead" ? null : `context ${h.operational_context.ref ?? "none"}, lead_decision ${h.lead_decision}`),
+    expect: (h) => {
+      const key = "lead:00000000-0000-0000-0000-00000000000b";
+      const placed = h.operational_context.ref === key || h.identity.candidate_key === key;
+      return placed && h.lead_decision !== "lead" && ["existing_work", "customer_prospect"].includes(h.business_context) ? null : `context ${h.operational_context.ref ?? h.identity.candidate_key ?? "none"}, business ${h.business_context}, lead_decision ${h.lead_decision}`;
+    },
+  },
+  {
+    name: "11. Supplier statement (accounting/supplier context, not a customer)",
+    input: email("Dear customer, please find attached your statement of account for October 2026. Balance due: $1,840.25 by 20 November. Dicker Data Accounts Receivable", "Statement of account - October 2026", { name: "Dicker Data Accounts", email: "ar@dickerdata.example", phone: null }),
+    identity: { status: "needs_review", chosen: null, candidates: [], confidence: 0, reason: "Nothing identifies who this is." },
+    expect: (h) => (["accounting_payment", "supplier_vendor"].includes(h.business_context) && h.lead_decision !== "lead" ? null : `business ${h.business_context}, lead_decision ${h.lead_decision}`),
+  },
+  {
+    name: "12. Monitoring provider statement (provider/accounting, not a new customer)",
+    input: email("Your Alarm Watch monitoring statement for October is attached. Monitored sites: 14. Amount due $612.50.", "Alarm Watch monthly statement", { name: "Alarm Watch Billing", email: "billing@alarmwatch.example", phone: null }),
+    identity: { status: "needs_review", chosen: null, candidates: [], confidence: 0, reason: "Nothing identifies who this is." },
+    expect: (h) => (["service_provider", "accounting_payment"].includes(h.business_context) && h.lead_decision !== "lead" && h.identity.suggestion !== "new" ? null : `business ${h.business_context}, lead_decision ${h.lead_decision}, identity ${h.identity.suggestion}`),
   },
 ];
 
@@ -142,7 +158,7 @@ async function main() {
     const problem = s.expect(h, v);
     if (problem) failed++;
     console.log(`${problem ? "✘" : "✓"} ${s.name}  (${Math.round(out.durationMs / 100) / 10}s)`);
-    console.log(`    Hermes: ${h.intent} → ${h.recommended_action} · ${Math.round(h.confidence * 100)}% · lead: ${h.lead_decision}${h.operational_context.ref ? ` · context ${h.operational_context.ref}` : ""} · ${h.reason}`);
+    console.log(`    Hermes: ${h.intent} → ${h.recommended_action} · ${Math.round(h.confidence * 100)}% · ${h.business_context} · lead: ${h.lead_decision}${h.operational_context.ref ? ` · context ${h.operational_context.ref}` : ""} · ${h.reason}`);
     console.log(`    CRM would: ${plan(v).join(", ") || "nothing"}${v.headline.changedBy ? ` (changed by ${v.headline.changedBy})` : ""}`);
     for (const c of [...v.hard, ...v.business]) console.log(`    rule: ${c.message}`);
     if (problem) console.log(`    expected otherwise: ${problem}`);

@@ -128,19 +128,56 @@ describe("hard guardrails", () => {
     const zavier = input("Hi, the keypad at 138 Wiri Station Road is beeping again. Zavier", { from: { name: "Zavier", email: "zavier@example.com", phone: null } });
     const h = H({ intent: "service_issue", conversation_type: "existing_job", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Check the keypad at 138 Wiri Station Road", due: "today", detail: null }, operational_context: { ref: "lead:L2", reason: "same site" }, facts: [{ key: "site_address", value: "138 Wiri Station Road", evidence: "138 Wiri Station Road", confidence: 0.9 }] });
 
-    it("accepted context: the task runs there, facts are only proposed, and Chris still links the sender", () => {
-      const v = validateHermes(h, ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot (138 Wiri Station Road)", leadId: "L2", jobId: null, contactId: "K2", accepted: true, why: "the message names the site" } }));
+    it("Zavier: accepted context → the task runs there, facts are only proposed, and no 'Who is this?'", () => {
+      const v = validateHermes({ ...h, business_context: "existing_work", lead_decision: "existing" }, ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot (138 Wiri Station Road)", leadId: "L2", jobId: null, contactId: "K2", accepted: true, why: "the message names the site" } }));
       expect(v.workContext).toMatchObject({ leadId: "L2" });
       expect(v.personVerified).toBe(false);
-      expect(types(v)).toEqual(expect.arrayContaining(["CREATE_INTERNAL_TASK", "NEEDS_REVIEW", "PROPOSE_LEAD_FACT_UPDATE"]));
+      expect(types(v)).toEqual(expect.arrayContaining(["CREATE_INTERNAL_TASK", "PROPOSE_LEAD_FACT_UPDATE"]));
+      expect(types(v)).not.toContain("NEEDS_REVIEW");
       expect(v.plan.find((p) => p.type === "PROPOSE_LEAD_FACT_UPDATE")!.payload.proposeOnly).toBe(true);
+      expect(v.reviewKind).toBeNull();
+      expect(v.hard.map((c) => c.rule)).toContain("sender_unverified");
+    });
+
+    it("existing work the message does not evidence (a name alone): the work needs the customer, so 'Who is this?'", () => {
+      const v = validateHermes({ ...h, business_context: "existing_work", lead_decision: "existing" }, ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot", leadId: "L2", jobId: null, contactId: "K2", accepted: false, why: "the message does not show its site" } }));
+      expect(v.workContext).toBeNull();
+      expect(types(v)).toEqual(["NEEDS_REVIEW"]);
       expect(v.reviewKind).toBe("identity");
     });
 
-    it("a context the message does not show (a name alone) is not used: identity review only", () => {
-      const v = validateHermes(h, ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot", leadId: "L2", jobId: null, contactId: "K2", accepted: false, why: "the message does not show its site" } }));
-      expect(v.workContext).toBeNull();
+    it("supplier, provider and accounting mail from an unknown sender: routed by context, never 'Who is this?'", () => {
+      for (const [bc, title] of [
+        ["accounting_payment", "Check the Dicker Data statement"],
+        ["service_provider", "Check the Alarm Watch statement"],
+        ["supplier_vendor", "File the supplier price list"],
+      ] as const) {
+        const v = validateHermes(
+          H({ intent: "information", conversation_type: "supplier", business_context: bc, counterparty: { name: "Dicker Data", kind: "supplier" }, accounting: bc === "accounting_payment" ? { document: "statement", reference: "Oct 2026", amount: 1234.5, due: null } : null, recommended_action: "CREATE_INTERNAL_TASK", task: { title, due: null, detail: null } }),
+          ctx(input("Please find your statement attached."), { identity: unknown }),
+        );
+        expect(v.reviewKind).toBeNull();
+        expect(types(v)).toContain("CREATE_INTERNAL_TASK");
+        expect(types(v)).not.toContain("NEEDS_REVIEW");
+      }
+    });
+
+    it("a prospect whose quote needs the customer record, with only a name to go on: 'Who is this?'", () => {
+      const v = validateHermes(
+        H({ business_context: "customer_prospect", lead_decision: "existing", recommended_action: "PREPARE_QUOTE", facts: [{ key: "camera_count", value: 4, evidence: "4 cameras", confidence: 0.9 }, { key: "storeys", value: 1, evidence: "single storey", confidence: 0.9 }] }),
+        ctx(input("4 cameras for the single storey house please"), { identity: unknown }),
+      );
+      expect(v.reviewKind).toBe("identity");
       expect(types(v)).toEqual(["NEEDS_REVIEW"]);
+    });
+
+    it("Hermes may ask Chris to confirm the sender without holding the work up", () => {
+      const v = validateHermes(
+        H({ intent: "service_issue", conversation_type: "existing_job", business_context: "existing_work", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Check keypad", due: null, detail: null }, identity_review: { needed: true, reason: "Says they are the new owner." } }),
+        ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot", leadId: "L2", jobId: null, contactId: "K2", accepted: true, why: "the message names the site" } }),
+      );
+      expect(v.reviewKind).toBe("identity");
+      expect(types(v)).toEqual(expect.arrayContaining(["CREATE_INTERNAL_TASK", "NEEDS_REVIEW"]));
     });
 
     it("not a lead and nothing to do: nothing filed, no identity question", () => {

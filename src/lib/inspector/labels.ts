@@ -1,5 +1,6 @@
 /** How the Inspector's actions and facts are named on screen. Plain module (server and client). */
 import type { ActionType, FactKey } from "./types";
+import type { BusinessContext } from "@/lib/hermes/contract";
 
 export const ACTION_LABELS: Record<ActionType, string> = {
   PREPARE_QUOTE: "Prepare quote",
@@ -70,4 +71,16 @@ export const REVIEW_KIND_LABELS: Record<string, string> = {
   hermes_low_confidence: "Hermes is unsure",
   hermes_flagged: "Hermes asks you to look",
   hermes_proposed_lead: "Hermes thinks this is a lead",
+};
+
+/** Hermes's business-context classification, as Chris reads it. */
+export const BUSINESS_CONTEXT_LABELS: Record<BusinessContext, string> = {
+  customer_prospect: "customer or prospect",
+  existing_work: "existing site, job or service issue",
+  supplier_vendor: "supplier / vendor",
+  service_provider: "service or monitoring provider",
+  accounting_payment: "accounting, payment or statement",
+  internal_admin: "internal / admin",
+  irrelevant: "irrelevant",
+  unknown: "unknown",
 };

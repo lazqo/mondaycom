@@ -21,7 +21,8 @@
  *
  * Pure: everything it needs is passed in.
  */
-import type { HermesAction, HermesResult } from "@/lib/hermes/contract";
+import { NON_CUSTOMER_CONTEXTS, type HermesAction, type HermesResult } from "@/lib/hermes/contract";
+import { BUSINESS_CONTEXT_LABELS } from "./labels";
 import { resolveDue } from "./dates";
 import { normalisePhone, toNumber } from "./text";
 import type { Known } from "./missing";
@@ -186,6 +187,8 @@ export function replyProblem(body: string): string | null {
 
 const has = (k: Known, key: FactKey) => k[key] !== undefined && k[key] !== null && k[key] !== "";
 const ENQUIRY_INTENTS = ["new_enquiry", "quote_request", "site_visit_request", "booking_request"];
+/** Planned work that can only be done on a customer's record. */
+const NEEDS_CUSTOMER_RECORD: PlannedAction["type"][] = ["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE", "PREPARE_REVISED_QUOTE", "PROPOSE_SITE_VISIT", "PROPOSE_BOOKING"];
 
 export function validateHermes(h: HermesResult, ctx: ValidateContext): Validation {
   const hard: Check[] = [];
@@ -286,40 +289,38 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   const out: PlannedAction[] = [];
   const result = (plan: PlannedAction[], reviewKind: Validation["reviewKind"], workContext: Validation["workContext"], personVerified: boolean): Validation => ({ understanding, hard, business, advisories, rejectedFacts, plan, reviewKind, headline, workContext, personVerified });
 
-  // Hermes is sure this is not a lead and nothing needs doing: no sender to identify, nothing to file.
-  if (h.lead_decision === "not_lead" && recommended === "NO_ACTION" && h.confidence >= ctx.minConfidence && identity.status !== "matched") {
-    advisories.push({ rule: "not_a_lead", message: "Hermes: not a lead, nothing to do. Nothing filed." });
+  // ---- Business context: Hermes's judgement of what kind of relationship this is ----
+  const nonCustomer = NON_CUSTOMER_CONTEXTS.includes(h.business_context);
+  if (h.business_context !== "unknown") advisories.push({ rule: "business_context", message: `Hermes: ${BUSINESS_CONTEXT_LABELS[h.business_context]}${h.counterparty.name ? ` (${h.counterparty.name})` : ""}${h.accounting ? `; ${h.accounting.document}${h.accounting.reference ? ` ${h.accounting.reference}` : ""}` : ""}.` });
+
+  // Hermes is sure this is not a lead or not customer business, and nothing needs doing: no sender to identify, nothing to file.
+  if ((h.lead_decision === "not_lead" || nonCustomer) && recommended === "NO_ACTION" && h.confidence >= ctx.minConfidence && identity.status !== "matched") {
+    advisories.push({ rule: "not_a_lead", message: "Hermes: nothing to do. Nothing filed." });
     return result([], null, null, false);
   }
 
   // ---- GUARDRAIL: the sender's identity is the CRM's; the work can still go on in an evidenced context ----
   let workContext: Validation["workContext"] = null;
   const personVerified = identity.status === "matched";
-  const identityReview: PlannedAction[] = [];
-  if (identity.status === "needs_review" || identity.status === "new") {
-    const suggestion = h.identity.suggestion === "candidate" && h.identity.candidate_key ? { key: h.identity.candidate_key, reason: h.identity.reason } : h.identity.suggestion === "new" ? { key: "new", reason: h.identity.reason } : null;
+  const personUnknown = identity.status === "needs_review" || identity.status === "new";
+  const suggestion = h.identity.suggestion === "candidate" && h.identity.candidate_key ? { key: h.identity.candidate_key, reason: h.identity.reason } : h.identity.suggestion === "new" ? { key: "new", reason: h.identity.reason } : null;
+  if (personUnknown) {
     const c = ctx.context;
     if (c?.accepted) {
       workContext = { ref: c.ref, label: c.label, leadId: c.leadId, jobId: c.jobId, contactId: c.contactId };
-      hard.push({ rule: "sender_unverified", message: `The sender is not a verified customer (${identity.reason}). Hermes places this in ${c.label} (${c.why}); work continues there, and nothing about the person is written until Chris links them.`, effect: "work continues; sender unlinked" });
+      hard.push({ rule: "sender_unverified", message: `The sender is not linked to a customer (${identity.reason}). Hermes places this in ${c.label} (${c.why}); the work continues there, and nothing about the person is written until the evidence is strong enough or Chris links them.` });
     } else if (c) {
       advisories.push({ rule: "context_not_evidenced", message: `Hermes placed this in ${c.label}, but ${c.why}, so the work is not filed there.` });
     }
-    if (identity.status === "needs_review" || !workContext) {
-      if (identity.status === "needs_review") {
-        hard.push({ rule: "identity_uncertain", message: `${identity.reason}${suggestion ? ` Hermes suggests ${suggestion.key === "new" ? "a new customer" : suggestion.key}; that cannot link the person on its own.` : ""}`, effect: workContext ? "Chris links the sender" : "nothing written to a customer until Chris confirms" });
-        identityReview.push(act("NEEDS_REVIEW", "approval", "identity_uncertain", identity.reason, { kind: "identity", hermesSuggestion: suggestion, workContext: workContext?.label ?? null, candidates: identity.candidates.slice(0, 5).map((x) => ({ leadId: x.leadId, contactId: x.contactId, label: x.label, score: x.score, signals: x.signals })) }));
-        if (input.sourceType === "recording") identityReview.push(act("LINK_RECORDING", "approval", "identity_uncertain", "File the recording once Chris confirms who it is with."));
-      }
-      if (!workContext) {
-        if (identity.status === "needs_review") {
-          headline.final = "NEEDS_REVIEW";
-          headline.changedBy = "identity_uncertain";
-          return result(identityReview, "identity", null, false);
-        }
-      }
-    }
   }
+  /** "Who is this?": the sender, for Chris to link (or say it is nobody). */
+  const identityReviewOf = (why: string): PlannedAction[] => [
+    act("NEEDS_REVIEW", "approval", "identity_uncertain", why, { kind: "identity", hermesSuggestion: suggestion, workContext: workContext?.label ?? null, candidates: identity.candidates.slice(0, 5).map((x) => ({ leadId: x.leadId, contactId: x.contactId, label: x.label, score: x.score, signals: x.signals })) }),
+    ...(input.sourceType === "recording" ? [act("LINK_RECORDING", "approval", "identity_uncertain", "File the recording once Chris confirms who it is with.")] : []),
+  ];
+  // Hermes itself may ask Chris to confirm the sender, without holding the work up.
+  const identityReview: PlannedAction[] = personUnknown && identity.status === "needs_review" && h.identity_review.needed ? identityReviewOf(h.identity_review.reason || identity.reason) : [];
+  if (identityReview.length) hard.push({ rule: "identity_review_requested", message: `Hermes asks Chris to confirm who the sender is: ${h.identity_review.reason || identity.reason}` });
   if (identity.status === "matched" && h.identity.suggestion === "candidate" && h.identity.candidate_key && identity.chosen) {
     const chosenKey = identity.chosen.leadId ? `lead:${identity.chosen.leadId}` : `customer:${identity.chosen.contactId}`;
     if (h.identity.candidate_key !== chosenKey) advisories.push({ rule: "identity_disagreement", message: `Hermes suggested ${h.identity.candidate_key}; the CRM matched ${identity.chosen.label} on ${identity.chosen.signals.map((s) => s.detail).join(", ")}, which stands.` });
@@ -329,7 +330,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   // Internal record keeping happens whatever the recommendation.
   if (identity.status !== "not_applicable") base.push(act("ADD_INTERNAL_NOTE", "auto", "always_note", "What Hermes understood.", { summary: h.summary }));
   if (input.sourceType === "recording" && personVerified && !crm.recordingLinked) base.push(act("LINK_RECORDING", "auto", "identity_matched", identity.reason));
-  if (onWork && facts.length)
+  if (onWork && facts.length && !nonCustomer)
     base.push(
       act(
         "PROPOSE_LEAD_FACT_UPDATE",
@@ -345,7 +346,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
     return result(base, null, null, personVerified);
   }
 
-  const isEnquiry = ENQUIRY_INTENTS.includes(h.intent) || h.conversation_type === "new_enquiry";
+  const isEnquiry = !nonCustomer && (ENQUIRY_INTENTS.includes(h.intent) || h.conversation_type === "new_enquiry");
   const reviewKind = identityReview.length ? ("identity" as const) : null;
 
   // ---- GUARDRAIL: closing an enquiry needs evidence; Hermes's own doubt and low confidence go to Chris ----
@@ -382,6 +383,22 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   if (h.intent === "acceptance" && !planned.some((p) => p.type === "CREATE_INTERNAL_TASK")) {
     hard.push({ rule: "no_autonomous_acceptance", message: "The customer wants to go ahead: Chris confirms the terms; the CRM never accepts them itself.", effect: "task for Chris" });
     planned.push(act("CREATE_INTERNAL_TASK", "auto", "customer_accepted", "The customer says they want to go ahead. Chris confirms and marks the quote accepted.", { title: "Customer wants to go ahead: confirm and mark the quote accepted", kind: "task", due: "today" }));
+  }
+  // ---- GUARDRAIL: "Who is this?" only when the sender's identity actually blocks the work ----
+  // Customer work that needs a customer record (the Brain, a quote, a visit or booking, or filing into
+  // existing work) cannot go ahead for an unidentified sender with no evidenced work context. Supplier,
+  // provider, accounting and internal mail, and anything Hermes files in evidenced work, never waits on it.
+  const customerWork = !nonCustomer && h.business_context !== "accounting_payment";
+  // Existing customer work (Hermes says so, or reads it as an existing lead, customer or job, or
+  // suggests a known customer) can only be filed on that customer's record.
+  const existingWork =
+    h.lead_decision === "existing" || h.business_context === "existing_work" || ["existing_lead", "existing_customer", "existing_job", "quote_follow_up"].includes(h.conversation_type) || h.identity.suggestion === "candidate";
+  const needsRecord = planned.some((p) => NEEDS_CUSTOMER_RECORD.includes(p.type)) || existingWork;
+  if (identity.status === "needs_review" && !workContext && customerWork && needsRecord && h.lead_decision !== "lead") {
+    hard.push({ rule: "identity_uncertain", message: `${identity.reason}${suggestion ? ` Hermes suggests ${suggestion.key === "new" ? "a new customer" : suggestion.key}; that cannot link the person on its own.` : ""} What Hermes recommends needs the customer, so it waits for Chris.`, effect: "nothing written to a customer until Chris confirms" });
+    headline.final = "NEEDS_REVIEW";
+    headline.changedBy = "identity_uncertain";
+    return result(identityReviewOf(identity.reason), "identity", null, false);
   }
   const meaningful = planned.filter((p) => !["ADD_INTERNAL_NOTE", "LINK_RECORDING", "PROPOSE_LEAD_FACT_UPDATE"].includes(p.type));
   const first = meaningful.find((p) => p.type === "PREPARE_QUOTE") ?? meaningful[0];

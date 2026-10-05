@@ -65,6 +65,10 @@ const R = (over: Partial<HermesResult>): HermesResult => ({
   task: null,
   reply_draft: null,
   identity: { suggestion: "unknown", candidate_key: null, reason: "" },
+  business_context: "unknown",
+  counterparty: { name: null, kind: "unknown" },
+  accounting: null,
+  identity_review: { needed: false, reason: "" },
   lead_decision: "undecided",
   operational_context: { ref: null, reason: "" },
   resolution: { status: "open", evidence: [] },
@@ -254,7 +258,7 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     expect((ins.rulesView as { primaryIntent: string }).primaryIntent).toBeTruthy();
     // Audit: the run records the model, the context it was given, the recommendation and the outcome.
     const run = (await runFor(ins.id))!;
-    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-2" });
+    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-3" });
     expect(Number(run.confidence)).toBeCloseTo(0.94);
     expect(run.contextRefs).toMatchObject({ leadId: ins.leadId, source: { type: "email", id: e.id } });
     expect((run.brainResult as { steps: { type: string }[] }).steps.map((s) => s.type)).toContain("RUN_BUSINESS_BRAIN");
@@ -292,7 +296,7 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     await expect(sendDraft(d.id, { kind: "agent", agent: "hermes" })).rejects.toBeInstanceOf(GuardrailError);
   });
 
-  it("the context Hermes gets carries no supplier, cost, margin or credential data", async () => {
+  it("the context Hermes gets carries no supplier pricing, cost, margin or credential data (supplier names only, for routing)", async () => {
     script = () => landingReading(4, 1, "1 Test Street");
     const lead = leadIds[leadIds.length - 1];
     const e = await email({ from: `aroha+${RUN}@example.com`, name: "Aroha Ngata", subject: "Re: CCTV", text: "Any update on the quote?" });
@@ -300,7 +304,9 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     await inspect("email", e.id);
     const json = JSON.stringify(packs[0]);
     expect(packs[0].crm).toBeTruthy();
-    for (const word of ["costExGst", "unitCost", "markup", "margin", "supplier", "password", "credential", "IT Plus", "internalCosting", "labourRate"]) expect(json).not.toContain(word);
+    for (const word of ["costExGst", "unitCost", "tradeCost", "supplierSku", "markup", "margin", "password", "credential", "secret", "username", "internalCosting", "labourRate"]) expect(json).not.toContain(word);
+    // Suppliers appear by name and website only, so Hermes can recognise supplier mail.
+    for (const s of (packs[0] as unknown as { business: { suppliers: Record<string, unknown>[] } }).business.suppliers) expect(Object.keys(s).sort()).toEqual(["name", "website"]);
   });
 });
 
@@ -654,10 +660,15 @@ describe("other guardrails", () => {
   });
 
   it("dismissing the recording on the Recordings page closes its review", async () => {
-    script = () => ({ intent: "not_relevant", conversation_type: "internal", recommended_action: "NO_ACTION", confidence: 0.9, service: null, property_type: null });
-    const r = await recording("Note to self", "Speaker 1: Remember to order more cable for Tuesday.");
+    // A note to self needs nobody identified: nothing for Chris.
+    script = () => ({ intent: "not_relevant", conversation_type: "internal", business_context: "internal_admin", recommended_action: "NO_ACTION", confidence: 0.9, service: null, property_type: null });
+    const note = await recording("Note to self", "Speaker 1: Remember to order more cable for Tuesday.");
+    expect((await inspect("recording", note.id))!.status).toBe("analysed");
+    // A customer conversation nobody can place waits in "Who is this?"; dismissing the recording closes it.
+    script = () => ({ intent: "follow_up", conversation_type: "existing_customer", business_context: "existing_work", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring back", due: null, detail: null }, confidence: 0.9, service: "cctv", property_type: null });
+    const r = await recording("Customer call", "Speaker 1: Hi it's me again about the cameras. Speaker 2: Sure, I'll ring you back.");
     const out = (await inspect("recording", r.id))!;
-    expect(out.status).toBe("needs_review"); // nobody identified: identity review
+    expect(out.status).toBe("needs_review"); // existing customer work, nobody identified
     await closeReviews("recording", [r.id], chris);
     expect((await db.query.inspections.findFirst({ where: eq(S.inspections.id, out.inspectionId) }))!.status).toBe("superseded");
     expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!.status).toBe("dismissed");
@@ -892,7 +903,9 @@ describe("Hermes judges; the guardrails only check evidence and authority (real 
     // Facts from an unverified sender are proposed, never filled in.
     expect((await db.query.facts.findMany({ where: and(eq(S.facts.sourceId, e.id)) })).every((f) => f.state !== "applied")).toBe(true);
     expect(JSON.stringify(ins.validation)).toContain("sender_unverified");
-    expect(out.status === "analysed" || out.status === "needs_review").toBe(true);
+    // The sender's identity does not block this work: no "Who is this?".
+    expect(out.status).toBe("analysed");
+    expect(ins.reviewKind).toBeNull();
 
     // A context the message does not show (here: another lead, by name only) is not used.
     const { leadId: other } = await customerWithLead("Elsewhere");
@@ -928,5 +941,99 @@ describe("Hermes judges; the guardrails only check evidence and authority (real 
     const r = await acceptAction(sv.id, chris);
     expect(r).toMatchObject({ inHand: "Site visit already awaiting arrangement." });
     expect(await db.query.tasks.findMany({ where: and(eq(S.tasks.leadId, leadId), eq(S.tasks.status, "open")) })).toHaveLength(1);
+  });
+});
+
+describe("business context first: route by what kind of business it is; 'Who is this?' only when identity blocks", () => {
+  const made: { jobs: string[]; contacts: string[] } = { jobs: [], contacts: [] };
+  afterAll(async () => {
+    if (made.jobs.length) await db.delete(S.jobs).where(inArray(S.jobs.id, made.jobs));
+    if (made.contacts.length) await db.delete(S.contacts).where(inArray(S.contacts.id, made.contacts));
+  });
+
+  it("a supplier statement from an unknown sender: accounting context, a task, no lead, no 'Who is this?'", async () => {
+    script = () => ({
+      conversation_type: "supplier",
+      intent: "information",
+      business_context: "accounting_payment",
+      counterparty: { name: `Dicker Data ${RUN}`, kind: "supplier" },
+      accounting: { document: "statement", reference: "October 2026", amount: 1840.25, due: "20 Nov" },
+      lead_decision: "not_lead",
+      service: null,
+      property_type: null,
+      recommended_action: "CREATE_INTERNAL_TASK",
+      task: { title: `Check the Dicker Data statement ${RUN}`, due: null, detail: null },
+      confidence: 0.92,
+      reason: "Monthly supplier statement for accounts.",
+    });
+    const e = await email({ from: `accounts+${RUN}@dickerdata.example`, name: "Dicker Data Accounts", subject: "Statement of account", text: "Please find attached your statement for October 2026. Balance due $1,840.25." });
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const ins = (await latestFor(e.id))!;
+    expect(ins).toMatchObject({ reviewKind: null, leadId: null });
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Check the Dicker Data statement ${RUN}`) })).toBeTruthy();
+    expect(await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) })).toBeUndefined();
+  });
+
+  it("a monitoring provider's statement the rules took for a lead: Hermes routes it as provider/accounting, the untouched lead is closed", async () => {
+    script = () => ({ conversation_type: "supplier", intent: "information", business_context: "service_provider", counterparty: { name: "Alarm Watch", kind: "service_provider" }, accounting: { document: "statement", reference: null, amount: null, due: null }, service: null, property_type: null, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Check the Alarm Watch statement ${RUN}`, due: null, detail: null }, confidence: 0.9, reason: "Monitoring provider statement." });
+    const e = await email({ from: `billing+${RUN}@alarmwatch.example`, name: "Alarm Watch", subject: "Your monitoring statement", text: "Monitoring statement for your alarm monitoring accounts. Need anything? Contact us." });
+    expect((await processEmail(e.id)).classification).toBe("lead"); // the old rules' guess
+    await settleInspectorQueue();
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.sourceEmailId, e.id) }))!;
+    leadIds.push(lead.id);
+    expect(lead.status).toBe("lost"); // lead_decision was left open; a provider is never a lead
+    const ins = (await latestFor(e.id))!;
+    expect(ins.reviewKind).toBeNull();
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Check the Alarm Watch statement ${RUN}`) })).toBeTruthy();
+  });
+
+  it("a customer's remittance quoting a job number: filed to that job's customer; without evidence the task stays unlinked (no 'Who is this?')", async () => {
+    const [c] = await db.insert(S.contacts).values({ name: `Firehouse ${RUN}`, company: "Firehouse Ltd" }).returning();
+    made.contacts.push(c.id);
+    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "Alarm install", contactId: c.id, status: "invoiced" }).returning();
+    made.jobs.push(j.id);
+    const remit = (ref: string | null): Partial<HermesResult> => ({ conversation_type: "existing_customer", intent: "information", business_context: "accounting_payment", counterparty: { name: "Firehouse Ltd", kind: "customer" }, accounting: { document: "remittance", reference: ref, amount: 2300, due: null }, operational_context: { ref: `customer:${c.id}`, reason: "Firehouse is the customer." }, lead_decision: "not_lead", service: null, property_type: null, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Reconcile Firehouse remittance ${ref ?? "?"} ${RUN}`, due: null, detail: null }, confidence: 0.9, reason: "Payment advice." });
+    script = () => remit(`J-${j.number}`);
+    const e = await email({ from: `ap+${RUN}@firehouse.example`, name: "Firehouse Accounts", subject: "Remittance advice", text: `Remittance advice: $2,300.00 paid for job J-${j.number}.` });
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const t = (await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Reconcile Firehouse remittance J-${j.number} ${RUN}`) }))!;
+    expect(t.contactId).toBe(c.id);
+    // The sender (accounts@) stays unlinked.
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.contactId).toBeNull();
+
+    script = () => remit(null);
+    const e2 = await email({ from: `ap2+${RUN}@firehouse.example`, name: "Firehouse Accounts", subject: "Remittance advice", text: "Remittance advice: $2,300.00 paid. Thanks." });
+    const out2 = (await inspect("email", e2.id))!;
+    expect(out2.status).toBe("analysed");
+    const t2 = (await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Reconcile Firehouse remittance ? ${RUN}`) }))!;
+    expect(t2.contactId).toBeNull();
+  });
+
+  it("Zavier (the production case): a job with no site address of its own still matches on its customer's site; Hermes named it only as its sender suggestion", async () => {
+    const street = `${300 + Math.floor(Math.random() * 99)} Wiri${RUN} Station Road`;
+    const [c] = await db.insert(S.contacts).values({ name: `Wiri Depot Ltd ${RUN}`, address: `${street}, Manukau` }).returning();
+    made.contacts.push(c.id);
+    const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "Keypad fault", contactId: c.id, status: "scheduled" }).returning();
+    made.jobs.push(j.id);
+    script = () => ({
+      conversation_type: "existing_job",
+      intent: "service_issue",
+      business_context: "existing_work",
+      recommended_action: "CREATE_INTERNAL_TASK",
+      task: { title: `Keypad still beeping at ${street}`, due: "today", detail: null },
+      identity: { suggestion: "candidate", candidate_key: `job:${j.id}`, reason: "Same site as the keypad job." },
+      confidence: 0.86,
+      reason: "Follow-up on the keypad issue at the site.",
+    });
+    const e = await email({ from: `zavier.k+${RUN}@example.com`, name: "Zavier", subject: "Keypad", text: `Hi, the keypad at ${street} is still beeping. Can someone look? Zavier` });
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed");
+    const ins = (await latestFor(e.id))!;
+    expect(ins).toMatchObject({ reviewKind: null, jobId: j.id, contactId: c.id });
+    const t = (await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Keypad still beeping at ${street}`) }))!;
+    expect(t).toMatchObject({ jobId: j.id, contactId: c.id });
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.contactId).toBeNull();
   });
 });

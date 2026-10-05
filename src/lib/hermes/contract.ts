@@ -10,7 +10,7 @@ import { z } from "zod";
 import { COMMITMENT_KEYS, FACT_KEYS, INTENTS } from "@/lib/inspector/types";
 
 /** Bump when the prompt or the contract changes: every run records it. */
-export const HERMES_INSPECTOR_VERSION = "hermes-inspector-2";
+export const HERMES_INSPECTOR_VERSION = "hermes-inspector-3";
 
 /** The controlled next actions Hermes may recommend. Nothing outside this list is ever executed. */
 export const HERMES_ACTIONS = [
@@ -26,6 +26,15 @@ export const HERMES_ACTIONS = [
   "NO_ACTION",
 ] as const;
 export type HermesAction = (typeof HERMES_ACTIONS)[number];
+
+/**
+ * What kind of business relationship a message belongs to: Hermes's judgement, decided before (and
+ * separately from) who the sender is. The CRM routes on it; only customer work can need a customer.
+ */
+export const BUSINESS_CONTEXTS = ["customer_prospect", "existing_work", "supplier_vendor", "service_provider", "accounting_payment", "internal_admin", "irrelevant", "unknown"] as const;
+export type BusinessContext = (typeof BUSINESS_CONTEXTS)[number];
+/** Contexts that are never about a customer: no lead, and no "Who is this?" for the sender. */
+export const NON_CUSTOMER_CONTEXTS: BusinessContext[] = ["supplier_vendor", "service_provider", "internal_admin", "irrelevant"];
 
 export const CONVERSATION_TYPES = ["new_enquiry", "existing_lead", "existing_customer", "existing_job", "quote_follow_up", "service_request", "supplier", "spam_or_marketing", "internal", "other"] as const;
 
@@ -103,6 +112,23 @@ export const hermesResultSchema = z.object({
       reason: text(300).default(""),
     })
     .default({ suggestion: "unknown", candidate_key: null, reason: "" }),
+  /** The kind of business relationship (customer/prospect, existing work, supplier, provider, accounting, internal, irrelevant). */
+  business_context: z.enum(BUSINESS_CONTEXTS).catch("unknown").default("unknown"),
+  /** Who the other party is as an organisation or person, in Hermes's reading (not an identity link). */
+  counterparty: z
+    .object({ name: opt(text(120)), kind: z.enum(["customer", "prospect", "supplier", "service_provider", "internal", "unknown"]).catch("unknown") })
+    .default({ name: null, kind: "unknown" }),
+  /** For statements, invoices, remittances and receipts: what the document is and its reference. */
+  accounting: opt(
+    z.object({
+      document: z.enum(["statement", "invoice", "remittance", "receipt", "credit_note", "reminder", "other"]).catch("other"),
+      reference: opt(text(80)),
+      amount: opt(z.coerce.number()),
+      due: opt(text(40)),
+    }),
+  ),
+  /** Hermes asks Chris to confirm who the sender is even though the work does not need it. */
+  identity_review: z.object({ needed: z.boolean().default(false), reason: text(300).default("") }).default({ needed: false, reason: "" }),
   /** Hermes's decision on an email: a new lead, not a lead, or part of existing work. */
   lead_decision: z.enum(["lead", "not_lead", "existing", "undecided"]).catch("undecided").default("undecided"),
   /**

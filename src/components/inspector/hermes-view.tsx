@@ -2,11 +2,11 @@ import Link from "next/link";
 import { Badge } from "@/components/ui";
 import type { Inspection, InspectorActionRow } from "@/db/schema";
 import type { HermesResult } from "@/lib/hermes/contract";
-import { ACTION_LABELS, FACT_LABELS, HERMES_ACTION_LABELS } from "@/lib/inspector/labels";
+import { ACTION_LABELS, BUSINESS_CONTEXT_LABELS, FACT_LABELS, HERMES_ACTION_LABELS } from "@/lib/inspector/labels";
 import type { Check, Validation } from "@/lib/inspector/validate";
 import type { ActionType, FactKey, Understanding } from "@/lib/inspector/types";
 import { ActionStatus } from "./views";
-import { ReopenCommitmentButton } from "./controls";
+import { LinkSenderButton, ReopenCommitmentButton } from "./controls";
 
 type StoredValidation = Pick<Validation, "hard" | "business" | "advisories" | "rejectedFacts" | "headline"> & { fallback?: { hermesStatus: string; error: string | null } };
 
@@ -54,8 +54,21 @@ export function HermesView({ inspection, actions, compact = false }: { inspectio
     <div className="space-y-2 text-sm" data-testid="hermes-view">
       <p className="flex flex-wrap items-center gap-2">
         <EngineBadge engine={inspection.engine} />
+        {h?.business_context && h.business_context !== "unknown" ? (
+          <Badge className="bg-gray-100 text-gray-700" data-testid="business-context">
+            {BUSINESS_CONTEXT_LABELS[h.business_context]}
+            {h.counterparty?.name ? ` · ${h.counterparty.name}` : ""}
+            {h.accounting ? ` · ${h.accounting.document}${h.accounting.reference ? ` ${h.accounting.reference}` : ""}` : ""}
+          </Badge>
+        ) : null}
         <span className="font-medium text-gray-900">{inspection.summary}</span>
       </p>
+      {!compact && (v?.hard ?? []).some((c) => c.rule === "sender_unverified") && (inspection.leadId || inspection.contactId) ? (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-gray-600" data-testid="sender-unlinked">
+          The sender is not linked to a customer; the work went ahead in this record.
+          <LinkSenderButton inspectionId={inspection.id} leadId={inspection.leadId} contactId={inspection.contactId} label="this customer" />
+        </p>
+      ) : null}
 
       {h ? (
         <div className="rounded-md bg-gray-50 px-3 py-2" data-testid="hermes-recommendation">
