@@ -416,21 +416,30 @@ snapshots you can take before a risky change. These restore the whole machine. T
 once the CRM is working, before you put real data in.
 
 **Nightly database dumps, kept off the server.** A whole-machine weekly snapshot is not enough for
-business records. The repo ships the script:
+business records. The repo ships the script `deploy/backup.sh`:
+- it takes one `pg_dump` to `/opt/getsecure-backups/getsecure-<date>.dump`;
+- it checks the dump is not empty;
+- it keeps only the newest 14 nightly dumps on the server. Set `KEEP_NIGHTLY_BACKUPS` to change
+  that.
 
-```bash
-mkdir -p /opt/getsecure-backups
-cd /opt/getsecure
-docker compose -f docker-compose.prod.yml exec -T db \
-  pg_dump --format=custom --no-owner --no-privileges -U getsecure getsecure \
-  > /opt/getsecure-backups/getsecure-$(date -u +%Y-%m-%dT%H%M).dump
-```
-
-Put that on a nightly cron (`crontab -e`):
+Put it on a nightly cron (`crontab -e`):
 
 ```
-0 3 * * * cd /opt/getsecure && docker compose -f docker-compose.prod.yml exec -T db pg_dump --format=custom --no-owner --no-privileges -U getsecure getsecure > /opt/getsecure-backups/getsecure-$(date -u +\%Y-\%m-\%dT\%H\%M).dump 2>> /var/log/crm-backup.log
+0 3 * * * /opt/getsecure/deploy/backup.sh >> /var/log/crm-backup.log 2>&1
 ```
+
+If you already have the older one-line `pg_dump` cron, replace it with this line: the old one never
+deletes anything.
+
+**Disk housekeeping.** `./deploy/update.sh` cleans up after itself:
+- It keeps the newest 5 `pre-update-*.dump` backups. Set `KEEP_UPDATE_BACKUPS` to change that.
+- After a healthy deploy only, it removes unused Docker images and build cache unused for a day.
+  The running images are never touched.
+- It prints the disk use at the end.
+
+Container logs are capped at 3 × 10 MB per container (`docker-compose.prod.yml`). To see what uses
+space: `df -h /`, `docker system df` and `du -sh /opt/getsecure-backups`. To clear the build cache
+by hand at any time (safe while running): `docker builder prune -af`.
 
 **Copy those dumps somewhere that is not this VPS** — your laptop, Google Drive, a NAS. A backup that
 only exists on the machine it protects is not a backup. From your own computer:

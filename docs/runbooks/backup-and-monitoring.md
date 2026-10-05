@@ -13,7 +13,8 @@ Two secrets must be kept alongside the backup, or restored data is unusable:
 
 - **Hostinger VPS (the production setup)**: hPanel → VPS → Backups gives free weekly whole-machine
   backups plus manual snapshots. That is not enough on its own for business records — also run the
-  nightly database dump in section 11 of `docs/DEPLOYMENT_HANDOFF.md` and copy it off the server.
+  nightly database dump (`deploy/backup.sh`, keeps the newest 14; cron line in section 11 of
+  `docs/DEPLOYMENT_HANDOFF.md`) and copy the dumps off the server.
 - **Railway**: Postgres service → Backups → enable daily; retention 6 days daily, 27 weekly, 89 monthly.
 - **Render**: managed Postgres includes daily backups on paid plans; Dashboard → Database → Backups.
 
