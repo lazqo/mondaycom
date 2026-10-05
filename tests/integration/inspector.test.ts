@@ -31,6 +31,11 @@ const { applyReferenceCatalogue, resetReferenceMarker } = await import("@/lib/br
 const brain = await import("@/lib/brain/store");
 const { getOutstandingCommitments } = await import("@/queries/inspector");
 type HermesResult = import("@/lib/hermes/contract").HermesResult;
+/** What a test scripts Hermes to say: structured evidence refs are optional, as in Hermes's own JSON. */
+type Loose = Omit<Partial<HermesResult>, "facts" | "commitments"> & {
+  facts?: (Omit<HermesResult["facts"][number], "evidence_ref" | "evidence"> & { evidence?: string; evidence_ref?: string | null })[];
+  commitments?: (Omit<HermesResult["commitments"][number], "evidence_ref"> & { evidence_ref?: string | null })[];
+};
 
 const RUN = `hi${Date.now().toString(36)}`;
 let chris: { kind: "human"; userId: string; name: string; canApprove: true };
@@ -46,18 +51,16 @@ const QUIET = new Date("2031-03-04T21:00:00Z"); // 10am, 5 March 2031 in Aucklan
 // ---------------- the stand-in Hermes ----------------
 
 type Pack = { source: { origin: string; text: string; form: unknown }; identity: { status: string; candidates: { key: string }[] }; crm: unknown };
-let script: (pack: Pack) => Partial<HermesResult> | string | Error = () => new Error("no script");
+let script: (pack: Pack) => Loose | string | Error = () => new Error("no script");
 const packs: Pack[] = [];
 let calls = 0;
-const R = (over: Partial<HermesResult>): HermesResult => ({
+const R = ({ facts, commitments, ...over }: Loose): HermesResult => ({
   conversation_type: "new_enquiry",
   intent: "new_enquiry",
   service: "cctv",
   property_type: "residential",
   summary: "New enquiry",
-  facts: [],
   objections: [],
-  commitments: [],
   urgency: "normal",
   missing: [],
   recommended_action: "NO_ACTION",
@@ -77,7 +80,12 @@ const R = (over: Partial<HermesResult>): HermesResult => ({
   confidence: 0.9,
   reason: "test",
   advisories: [],
+  internal_actions: [],
+  research: [],
+  review_question: null,
   ...over,
+  facts: (facts ?? []).map((f: NonNullable<Loose["facts"]>[number]) => ({ evidence: "", evidence_ref: null, ...f })),
+  commitments: (commitments ?? []).map((c: NonNullable<Loose["commitments"]>[number]) => ({ evidence_ref: null, ...c })),
 });
 function useStandInHermes() {
   setHermes({
@@ -195,7 +203,7 @@ afterAll(async () => {
 });
 
 /** What Hermes says about a landing-page form: understood as a new residential CCTV enquiry. */
-const landingReading = (cams: number, storeys: number, address: string): Partial<HermesResult> => ({
+const landingReading = (cams: number, storeys: number, address: string): Loose => ({
   conversation_type: "new_enquiry",
   intent: "new_enquiry",
   summary: `New residential CCTV enquiry from the CCTV landing page: ${cams} cameras, ${storeys === 2 ? "two-storey" : "single-storey"}, new installation.`,
@@ -254,11 +262,11 @@ describe("Test 1: a CCTV landing-page lead is a genuine enquiry, never 'informat
     // Advisories: two storeys, and the old rules' different reading, logged but not used.
     const v = ins.validation as { advisories: { rule: string }[]; headline: { recommended: string } };
     expect(v.headline.recommended).toBe("PREPARE_QUOTE");
-    expect(v.advisories.map((x) => x.rule)).toContain("two_storey_complexity");
+    expect(v.advisories.map((x) => x.rule)).not.toContain("two_storey_complexity"); // the Brain allows for storeys itself
     expect((ins.rulesView as { primaryIntent: string }).primaryIntent).toBeTruthy();
     // Audit: the run records the model, the context it was given, the recommendation and the outcome.
     const run = (await runFor(ins.id))!;
-    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-3" });
+    expect(run).toMatchObject({ status: "ok", model: "stand-in-hermes", runtime: "test-hermes", recommendedAction: "PREPARE_QUOTE", version: "hermes-inspector-4" });
     expect(Number(run.confidence)).toBeCloseTo(0.94);
     expect(run.contextRefs).toMatchObject({ leadId: ins.leadId, source: { type: "email", id: e.id } });
     expect((run.brainResult as { steps: { type: string }[] }).steps.map((s) => s.type)).toContain("RUN_BUSINESS_BRAIN");
@@ -344,7 +352,7 @@ describe("Test 2: a vague residential CCTV email asks only what blocks a quote",
   });
 });
 
-describe("Test 3: commercial CCTV — Hermes understands it, the Business Brain policy still decides", () => {
+describe("Test 3: commercial CCTV — Hermes understands it, the Business Brain itself decides the site visit", () => {
   it("Hermes recommends a quote; commercial CCTV goes to a site visit proposal for Chris instead", async () => {
     script = () => ({
       property_type: "commercial",
@@ -365,11 +373,15 @@ describe("Test 3: commercial CCTV — Hermes understands it, the Business Brain 
     const ins = (await latestFor(e.id))!;
     leadIds.push(ins.leadId!);
     const acts = await actionsOf(ins.id);
-    expect(acts.map((a) => a.type)).not.toContain("RUN_BUSINESS_BRAIN");
+    // The validator does not second-guess it: the Brain runs, requires the visit, and no quote is made.
+    expect(acts.find((a) => a.type === "RUN_BUSINESS_BRAIN")).toMatchObject({ status: "done", result: { siteVisitRequired: true } });
+    expect(acts.find((a) => a.type === "PREPARE_QUOTE")).toMatchObject({ status: "blocked" });
+    expect(await db.query.quotes.findFirst({ where: eq(S.quotes.leadId, ins.leadId!) })).toBeUndefined();
     const sv = acts.find((a) => a.type === "PROPOSE_SITE_VISIT")!;
-    expect(sv).toMatchObject({ status: "awaiting_approval", rule: "commercial_cctv_site_visit" });
-    const v = ins.validation as { business: { rule: string }[]; headline: { recommended: string; final: string; changedBy: string } };
-    expect(v.headline).toMatchObject({ recommended: "PREPARE_QUOTE", final: "PROPOSE_SITE_VISIT", changedBy: "commercial_cctv_site_visit" });
+    expect(sv).toMatchObject({ status: "awaiting_approval", rule: "business_brain_site_visit" });
+    expect(String(sv.reason)).toMatch(/Commercial CCTV always needs a site visit/);
+    const v = ins.validation as { business: { rule: string }[]; headline: { recommended: string; final: string; changedBy: string | null } };
+    expect(v.business).toEqual([]);
     // Accepting makes Chris's task; nothing is booked or confirmed.
     const before = await db.select().from(S.events).where(eq(S.events.leadId, ins.leadId!));
     await acceptAction(sv.id, chris);
@@ -401,11 +413,13 @@ describe("Test 4: ambiguous identity — Hermes may suggest, the hard rule decid
     expect(out).toMatchObject({ engine: "hermes", status: "needs_review" });
     const acts = await actionsOf(out.inspectionId);
     expect(acts.map((a) => [a.type, a.status])).toEqual([
+      ["ADD_INTERNAL_NOTE", "done"],
       ["NEEDS_REVIEW", "awaiting_approval"],
       ["LINK_RECORDING", "awaiting_approval"],
     ]);
-    const p = acts[0].payload as { kind: string; hermesSuggestion: { key: string }; candidates: { leadId: string; signals: { kind: string }[] }[] };
+    const p = acts[1].payload as { kind: string; hermesSuggestion: { key: string }; waitingFor: string[]; candidates: { leadId: string; signals: { kind: string }[] }[] };
     expect(p.kind).toBe("identity");
+    expect(p.waitingFor).toEqual(["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]);
     expect(p.hermesSuggestion.key).toBe(`lead:${l.id}`);
     expect(p.candidates.find((c) => c.leadId === l.id)!.signals.map((s) => s.kind)).toEqual(["name"]);
     expect(await db.query.facts.findMany({ where: eq(S.facts.leadId, l.id) })).toHaveLength(0);
@@ -632,19 +646,20 @@ describe("other guardrails", () => {
     expect(t.reason).toMatch(/quotes a price/);
   });
 
-  it("low confidence: the recommendation waits for Chris; accepting carries it out as Chris", async () => {
+  it("low confidence: internal work still goes ahead; what prepares customer output waits for Chris, and accepting carries it out as Chris", async () => {
     const [l] = await db.insert(S.leads).values({ name: `Unsure ${RUN}`, email: `unsure+${RUN}@example.com`, status: "new", source: "email", service: "CCTV" }).returning();
     leadIds.push(l.id);
-    script = () => ({ intent: "follow_up", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring the customer back ${RUN}`, due: "today", detail: null }, confidence: 0.4, reason: "Not sure what they want." });
+    script = () => ({ intent: "follow_up", recommended_action: "DRAFT_REPLY", reply_draft: { subject: "Re: Hmm", body: "Thanks, could you tell me a bit more about what you need?" }, internal_actions: [{ action: "CREATE_INTERNAL_TASK", title: `Ring the customer back ${RUN}`, due: "today", detail: null, reason: "check" }], confidence: 0.4, reason: "Not sure what they want." });
     const e = await email({ from: `unsure+${RUN}@example.com`, name: "U", subject: "Hmm", text: "Can we talk about the thing from before?" });
     await db.update(S.emails).set({ leadId: l.id }).where(eq(S.emails.id, e.id));
     const out = (await inspect("email", e.id))!;
     expect(out).toMatchObject({ status: "needs_review" });
     const nr = (await actionsOf(out.inspectionId)).find((a) => a.type === "NEEDS_REVIEW")!;
-    expect(nr.payload).toMatchObject({ kind: "hermes_low_confidence", hermesRecommendation: "CREATE_INTERNAL_TASK" });
-    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Ring the customer back ${RUN}`) })).toBeUndefined();
-    await acceptAction(nr.id, chris);
+    expect(nr.payload).toMatchObject({ kind: "hermes_low_confidence", hermesRecommendation: "DRAFT_REPLY" });
     expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Ring the customer back ${RUN}`) })).toBeTruthy();
+    expect(await db.query.drafts.findFirst({ where: eq(S.drafts.leadId, l.id) })).toBeUndefined();
+    await acceptAction(nr.id, chris);
+    expect(await db.query.drafts.findFirst({ where: eq(S.drafts.leadId, l.id) })).toBeTruthy();
     expect((await db.query.inspections.findFirst({ where: eq(S.inspections.id, out.inspectionId) }))!.status).toBe("analysed");
   });
 
@@ -664,8 +679,8 @@ describe("other guardrails", () => {
     script = () => ({ intent: "not_relevant", conversation_type: "internal", business_context: "internal_admin", recommended_action: "NO_ACTION", confidence: 0.9, service: null, property_type: null });
     const note = await recording("Note to self", "Speaker 1: Remember to order more cable for Tuesday.");
     expect((await inspect("recording", note.id))!.status).toBe("analysed");
-    // A customer conversation nobody can place waits in "Who is this?"; dismissing the recording closes it.
-    script = () => ({ intent: "follow_up", conversation_type: "existing_customer", business_context: "existing_work", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring back", due: null, detail: null }, confidence: 0.9, service: "cctv", property_type: null });
+    // A customer conversation nobody can place, whose next step needs the customer, waits in "Who is this?"; dismissing the recording closes it.
+    script = () => ({ intent: "follow_up", conversation_type: "existing_customer", business_context: "existing_work", recommended_action: "PROPOSE_SITE_VISIT", confidence: 0.9, service: "cctv", property_type: null });
     const r = await recording("Customer call", "Speaker 1: Hi it's me again about the cameras. Speaker 2: Sure, I'll ring you back.");
     const out = (await inspect("recording", r.id))!;
     expect(out.status).toBe("needs_review"); // existing customer work, nobody identified
@@ -686,7 +701,7 @@ describe("Hermes decides lead / not lead (audited and reversible); the rules are
     }),
   };
   const yesLead = { ...notLead, name: "test", classify: async (input: Parameters<typeof notLead.classify>[0]) => ({ ...(await notLead.classify(input)), result: { ...(await notLead.classify(input)).result, is_lead: true, service: "CCTV" } }) };
-  const enquiry = (confidence: number): Partial<HermesResult> => ({ intent: "quote_request", lead_decision: "lead", summary: "Wants cameras for a shop.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring about the shop cameras ${RUN}`, due: null, detail: null }, confidence, reason: "A shop owner asking for 6 cameras." });
+  const enquiry = (confidence: number): Loose => ({ intent: "quote_request", lead_decision: "lead", summary: "Wants cameras for a shop.", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Ring about the shop cameras ${RUN}`, due: null, detail: null }, confidence, reason: "A shop owner asking for 6 cameras." });
 
   it("the rules said not a lead, Hermes is sure it is one: the lead is created through the normal path and the work goes on", async () => {
     setClassifier(notLead as never);
@@ -907,13 +922,30 @@ describe("Hermes judges; the guardrails only check evidence and authority (real 
     expect(out.status).toBe("analysed");
     expect(ins.reviewKind).toBeNull();
 
-    // A context the message does not show (here: another lead, by name only) is not used.
+    // A context the message does not show (here: another lead, by name only) is not used: the task
+    // still goes ahead (internal work needs no customer), but it is not filed on that lead.
     const { leadId: other } = await customerWithLead("Elsewhere");
     script = () => ({ conversation_type: "existing_job", intent: "service_issue", lead_decision: "existing", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Other ${RUN}`, due: null, detail: null }, operational_context: { ref: `lead:${other}`, reason: "Sounds like them." }, confidence: 0.9, reason: "?" });
     const e2 = await email({ from: `nobody+${RUN}@example.com`, name: "Nobody", subject: "Help", text: "Our alarm is beeping." });
     await inspect("email", e2.id);
-    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Other ${RUN}`) })).toBeUndefined();
+    expect(await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Other ${RUN}`) })).toMatchObject({ leadId: null, contactId: null });
     expect((await latestFor(e2.id))!.leadId).toBeNull();
+  });
+
+  it("unknown sender at a known site, Hermes thinks they belong there: an optional 'Link sender' proposal, never blocking; accepting links them", async () => {
+    const site = `${800 + Math.floor(Math.random() * 99)} Link${RUN} Road, Penrose`;
+    const { leadId, contactId } = await customerWithLead("Linkable", site);
+    script = () => ({ conversation_type: "existing_job", intent: "service_issue", business_context: "existing_work", lead_decision: "existing", recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Check camera 3 at ${site.split(",")[0]}`, due: "today", detail: null }, operational_context: { ref: `lead:${leadId}`, reason: "Same site." }, identity_review: { needed: true, reason: "Says they are the new site manager." }, confidence: 0.9, reason: "Camera 3 is offline at this site." });
+    const e = await email({ from: `newmanager+${RUN}@example.com`, name: "Mere", subject: "Camera 3", text: `Hi, camera 3 at ${site.split(",")[0]} is offline. I'm the new site manager. Mere` });
+    const out = (await inspect("email", e.id))!;
+    expect(out.status).toBe("analysed"); // nothing waits on who they are
+    const acts = await actionsOf(out.inspectionId);
+    expect(acts.find((a) => a.type === "CREATE_INTERNAL_TASK")!.status).toBe("done");
+    const link = acts.find((a) => a.type === "PROPOSE_LINK_SENDER")!;
+    expect(link).toMatchObject({ status: "awaiting_approval", leadId });
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.contactId).toBeNull();
+    await acceptAction(link.id, chris);
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ leadId, contactId });
   });
 
   it("Andre: an open task to arrange the site visit already exists, so another is not offered", async () => {
@@ -993,7 +1025,7 @@ describe("business context first: route by what kind of business it is; 'Who is 
     made.contacts.push(c.id);
     const [j] = await db.insert(S.jobs).values({ number: 900000 + Math.floor(Math.random() * 99999), title: "Alarm install", contactId: c.id, status: "invoiced" }).returning();
     made.jobs.push(j.id);
-    const remit = (ref: string | null): Partial<HermesResult> => ({ conversation_type: "existing_customer", intent: "information", business_context: "accounting_payment", counterparty: { name: "Firehouse Ltd", kind: "customer" }, accounting: { document: "remittance", reference: ref, amount: 2300, due: null }, operational_context: { ref: `customer:${c.id}`, reason: "Firehouse is the customer." }, lead_decision: "not_lead", service: null, property_type: null, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Reconcile Firehouse remittance ${ref ?? "?"} ${RUN}`, due: null, detail: null }, confidence: 0.9, reason: "Payment advice." });
+    const remit = (ref: string | null): Loose => ({ conversation_type: "existing_customer", intent: "information", business_context: "accounting_payment", counterparty: { name: "Firehouse Ltd", kind: "customer" }, accounting: { document: "remittance", reference: ref, amount: 2300, due: null }, operational_context: { ref: `customer:${c.id}`, reason: "Firehouse is the customer." }, lead_decision: "not_lead", service: null, property_type: null, recommended_action: "CREATE_INTERNAL_TASK", task: { title: `Reconcile Firehouse remittance ${ref ?? "?"} ${RUN}`, due: null, detail: null }, confidence: 0.9, reason: "Payment advice." });
     script = () => remit(`J-${j.number}`);
     const e = await email({ from: `ap+${RUN}@firehouse.example`, name: "Firehouse Accounts", subject: "Remittance advice", text: `Remittance advice: $2,300.00 paid for job J-${j.number}.` });
     const out = (await inspect("email", e.id))!;

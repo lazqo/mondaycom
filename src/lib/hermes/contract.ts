@@ -10,7 +10,7 @@ import { z } from "zod";
 import { COMMITMENT_KEYS, FACT_KEYS, INTENTS } from "@/lib/inspector/types";
 
 /** Bump when the prompt or the contract changes: every run records it. */
-export const HERMES_INSPECTOR_VERSION = "hermes-inspector-3";
+export const HERMES_INSPECTOR_VERSION = "hermes-inspector-4";
 
 /** The controlled next actions Hermes may recommend. Nothing outside this list is ever executed. */
 export const HERMES_ACTIONS = [
@@ -19,13 +19,30 @@ export const HERMES_ACTIONS = [
   "ASK_CUSTOMER",
   "PROPOSE_SITE_VISIT",
   "DRAFT_REPLY",
+  "PROPOSE_BOOKING",
   "CREATE_INTERNAL_TASK",
   "FOLLOW_UP",
+  "CALL_CUSTOMER",
+  "REQUEST_RESEARCH",
   "WAITING_ON_CUSTOMER",
   "NEEDS_REVIEW",
   "NO_ACTION",
 ] as const;
 export type HermesAction = (typeof HERMES_ACTIONS)[number];
+
+/** Extra internal work Hermes may ask for beside its main recommendation (all audited; none reaches a customer). */
+export const HERMES_INTERNAL_ACTIONS = ["CREATE_INTERNAL_TASK", "FOLLOW_UP", "CALL_CUSTOMER", "ADD_INTERNAL_NOTE", "RUN_BUSINESS_BRAIN", "PROPOSE_SITE_VISIT", "PROPOSE_BOOKING"] as const;
+
+/**
+ * Structured evidence Hermes can cite instead of (or as well as) quoting words: the CRM checks the
+ * cited field exists in the source or the record and supports the value.
+ *   form:<Field>       a website form field as shown in source.form.fields ("form:Cameras"), or
+ *                      form:name / form:email / form:phone / form:address / form:service
+ *   turn:<n>           transcript turn n (source.transcript.turns[].n)
+ *   email:subject      the subject; email:from the sender's name, address or phone
+ *   crm:<fact key>     a value already on the CRM record (crm:site_address)
+ */
+export const EVIDENCE_REF_HINT = "form:<Field> | form:name|email|phone|address|service | turn:<n> | email:subject | email:from | crm:<fact key>";
 
 /**
  * What kind of business relationship a message belongs to: Hermes's judgement, decided before (and
@@ -55,8 +72,10 @@ export const hermesResultSchema = z.object({
       z.object({
         key: z.enum(FACT_KEYS),
         value: z.union([z.string().max(500), z.number(), z.boolean()]),
-        /** The customer's own words (or form field) the fact comes from, quoted from the source. */
-        evidence: text(500),
+        /** The customer's own words the fact comes from, quoted from the source (optional when evidence_ref is given). */
+        evidence: text(500).default(""),
+        /** Structured provenance instead of a quote: see EVIDENCE_REF_HINT. */
+        evidence_ref: opt(text(120)),
         confidence,
       }),
     )
@@ -77,7 +96,8 @@ export const hermesResultSchema = z.object({
         due_text: opt(text(80)),
         /** ISO 8601, if Hermes worked out a time. The validator prefers its own reading of due_text. */
         due_at: opt(z.string().max(40)),
-        evidence: text(500),
+        evidence: text(500).default(""),
+        evidence_ref: opt(text(120)),
       }),
     )
     .max(10)
@@ -100,8 +120,24 @@ export const hermesResultSchema = z.object({
     .default([]),
   recommended_action: z.enum(HERMES_ACTIONS),
   run_business_brain: z.boolean().default(false),
-  /** For CREATE_INTERNAL_TASK / FOLLOW_UP. */
+  /** For CREATE_INTERNAL_TASK / FOLLOW_UP / CALL_CUSTOMER. */
   task: opt(z.object({ title: text(200), due: opt(text(40)), detail: opt(text(1000)) })),
+  /** Further internal work beside the main recommendation (a second task, a follow-up, a Brain run…). */
+  internal_actions: z
+    .array(z.object({ action: z.enum(HERMES_INTERNAL_ACTIONS), title: opt(text(200)), due: opt(text(40)), detail: opt(text(1000)), reason: text(300).default("") }))
+    .max(6)
+    .default([]),
+  /**
+   * Questions for the research profile when the CRM and the Business Brain do not know the answer
+   * (a model's specification, compatibility, a replacement for a discontinued product). Only the
+   * question and product details go out, never the customer's message.
+   */
+  research: z
+    .array(z.object({ question: text(600), kind: z.enum(["product", "compatibility", "manual", "firmware", "supplier", "availability", "standard", "other"]).catch("other"), product: opt(text(120)), why: text(300).default("") }))
+    .max(3)
+    .default([]),
+  /** For NEEDS_REVIEW: the one judgement Chris has to make (not "please look"). */
+  review_question: opt(text(300)),
   /** For DRAFT_REPLY: the reply Chris will review. It must not quote prices, dates or discounts. */
   reply_draft: opt(z.object({ subject: opt(text(200)), body: text(4000) })),
   /** Who Hermes thinks the sender is. Advisory only: a person's identity is decided by the CRM's guarded rules. */

@@ -158,6 +158,10 @@ export const ACTION_TYPES = [
   "OUTSTANDING",
   /** Hermes: the CRM record shows an outstanding commitment was kept (or is void). Reversible. */
   "RESOLVE_COMMITMENT",
+  /** Hermes asks the research profile a question (only the question leaves the CRM). */
+  "REQUEST_RESEARCH",
+  /** Optional: link the sender to the work this went ahead in. Never blocks the work. */
+  "PROPOSE_LINK_SENDER",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 

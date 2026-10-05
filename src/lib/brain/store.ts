@@ -25,6 +25,7 @@ import {
   users,
 } from "@/db/schema";
 import { type Actor, GuardrailError, actorLabel, assertAgentMay, assertApprover } from "@/lib/guard/actor";
+import { enquiryFromForm } from "./form-input";
 import { parseWebsiteLead } from "@/lib/email/website-lead";
 import { createDraft } from "@/lib/drafts/workflow";
 import { createPreparedQuote } from "@/lib/quotes/workflow";
@@ -376,20 +377,16 @@ export async function enquiryFromLead(leadId: string): Promise<EnquiryInput | nu
   if (!lead) return null;
   const src = lead.sourceEmailId ? await db.query.emails.findFirst({ where: eq(emails.id, lead.sourceEmailId), columns: { subject: true, textBody: true, fromAddress: true } }) : null;
   const form = src ? parseWebsiteLead({ subject: src.subject, text: src.textBody ?? "", fromAddress: src.fromAddress }) : null;
-  const f = form?.fields ?? {};
-  const property = (f["Property"] ?? "").toLowerCase();
-  const storeys = (f["Storeys"] ?? "").toLowerCase();
-  const setup = (f["Current Setup"] ?? "").toLowerCase();
-  const cams = Number((f["Cameras"] ?? "").match(/\d+/)?.[0] ?? NaN);
+  const fromForm = enquiryFromForm(form?.fields ?? {});
   const message = src?.textBody ?? lead.summary ?? lead.notes ?? null;
   const text = `${lead.service ?? ""} ${message ?? ""}`.toLowerCase();
   return {
-    propertyType: /commercial|business|office|shop|warehouse|retail/.test(property) ? "commercial" : /residential|home|house/.test(property) ? "residential" : null,
-    jobType: /upgrade|replace|existing/.test(setup) ? "upgrade" : /repair|fault|not working/.test(setup) ? "repair" : /new/.test(setup) ? "new" : null,
-    cameraCount: Number.isFinite(cams) && cams > 0 ? cams : null,
+    propertyType: fromForm.propertyType,
+    jobType: fromForm.jobType,
+    cameraCount: fromForm.cameraCount,
     areas: [],
-    storeys: /double|two|2/.test(storeys) ? 2 : /single|one|1/.test(storeys) ? 1 : null,
-    address: lead.site ?? f["Address"] ?? f["Location"] ?? null,
+    storeys: fromForm.storeys,
+    address: lead.site ?? fromForm.address,
     recordingMode: null,
     retentionDays: null,
     remoteViewing: /phone|app|remote|view.*(away|anywhere)/.test(text) ? true : null,

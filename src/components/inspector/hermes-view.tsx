@@ -63,7 +63,7 @@ export function HermesView({ inspection, actions, compact = false }: { inspectio
         ) : null}
         <span className="font-medium text-gray-900">{inspection.summary}</span>
       </p>
-      {!compact && (v?.hard ?? []).some((c) => c.rule === "sender_unverified") && (inspection.leadId || inspection.contactId) ? (
+      {!compact && [...(v?.hard ?? []), ...(v?.advisories ?? [])].some((c) => c.rule === "sender_unverified") && (inspection.leadId || inspection.contactId) ? (
         <p className="flex flex-wrap items-center gap-2 text-xs text-gray-600" data-testid="sender-unlinked">
           The sender is not linked to a customer; the work went ahead in this record.
           <LinkSenderButton inspectionId={inspection.id} leadId={inspection.leadId} contactId={inspection.contactId} label="this customer" />
@@ -82,6 +82,12 @@ export function HermesView({ inspection, actions, compact = false }: { inspectio
             <span className="text-gray-500">Reason: </span>
             {h.reason}
           </p>
+          {h.review_question ? (
+            <p className="text-gray-700" data-testid="hermes-question">
+              <span className="text-gray-500">Question for Chris: </span>
+              {h.review_question}
+            </p>
+          ) : null}
           {v?.headline?.changedBy ? (
             <p className="mt-1 text-xs text-[#a25b00]">
               Changed by rule “{v.headline.changedBy.replace(/_/g, " ")}”: {ACTION_LABELS[v.headline.final as ActionType] ?? v.headline.final.replace(/_/g, " ").toLowerCase()} instead.

@@ -12,7 +12,7 @@ import { formatDateTime } from "@/lib/utils";
 export const metadata: Metadata = { title: "Research" };
 
 type Source = { url: string; title: string | null; tier: number; tierLabel: string; publishedAt: string | null };
-type Finding = { claim: string; confidence: number; knowledge: string; sources: Source[] };
+type Finding = { claim: string; confidence: number; knowledge: string; product?: string | null; sku?: string | null; conflictsWithBrain?: boolean; conflictNote?: string | null; sources: Source[] };
 
 const TONE: Record<string, string> = { proposed: "bg-[#ffcb00] text-gray-900", accepted: "bg-[#00c875] text-white", rejected: "bg-gray-200 text-gray-600" };
 
@@ -112,8 +112,10 @@ export default async function ResearchPage() {
                   <div key={i}>
                     <p>
                       <Badge className={x.knowledge === "approved" ? "mr-1 bg-[#00c875] text-white" : "mr-1 bg-[#579bfc] text-white"}>{x.knowledge === "approved" ? "approved knowledge" : "new information"}</Badge>
-                      {x.claim} <span className="text-xs text-gray-500">({Math.round(x.confidence * 100)}%)</span>
+                      {x.conflictsWithBrain ? <Badge className="mr-1 bg-[#e2445c] text-white">conflicts with the Business Brain</Badge> : null}
+                      {x.claim} <span className="text-xs text-gray-500">({Math.round(x.confidence * 100)}%{x.product ? ` · ${x.product}` : ""}{x.sku ? ` · SKU ${x.sku}` : ""})</span>
                     </p>
+                    {x.conflictNote ? <p className="text-xs text-[#a25b00]">{x.conflictNote}</p> : null}
                     <Sources sources={x.sources} />
                   </div>
                 ))}

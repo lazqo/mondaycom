@@ -20,6 +20,8 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   NEEDS_REVIEW: "Needs review",
   OUTSTANDING: "Outstanding",
   RESOLVE_COMMITMENT: "Commitment kept",
+  REQUEST_RESEARCH: "Research",
+  PROPOSE_LINK_SENDER: "Link sender (optional)",
 };
 
 /** What accepting does, in Chris's words. Never "send" or "confirm". */
@@ -27,6 +29,7 @@ export const ACCEPT_LABELS: Partial<Record<ActionType, string>> = {
   PROPOSE_SITE_VISIT: "Add task to arrange",
   PROPOSE_BOOKING: "Add task to arrange",
   PREPARE_REVISED_QUOTE: "Prepare revised quote",
+  PROPOSE_LINK_SENDER: "Link sender",
 };
 
 export const FACT_LABELS: Record<FactKey, string> = {
@@ -59,6 +62,9 @@ export const HERMES_ACTION_LABELS: Record<string, string> = {
   DRAFT_REPLY: "Draft a reply",
   CREATE_INTERNAL_TASK: "Create a task",
   FOLLOW_UP: "Follow up",
+  PROPOSE_BOOKING: "Propose a booking",
+  CALL_CUSTOMER: "Call the customer",
+  REQUEST_RESEARCH: "Research",
   WAITING_ON_CUSTOMER: "Waiting on the customer",
   NEEDS_REVIEW: "Needs review",
   NO_ACTION: "No action",

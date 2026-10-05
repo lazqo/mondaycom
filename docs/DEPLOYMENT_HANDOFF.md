@@ -901,62 +901,74 @@ So real-world corrections feed back as:
 Hermes recommendation → Chris's correction or acceptance → outcome → Hermes's next judgement
 ```
 
-**Guardrails (enforced in code; Hermes cannot override them)**
-- **Nothing is binding without Chris:**
-  - no sending an email, quote or follow-up;
-  - no confirming a booking, visit or date;
-  - no accepting terms;
-  - no discount.
-  A prepared reply may not contain a price, a discount or a promised date. If it does, it is held
-  back and Chris gets a task. A customer saying yes becomes a task for Chris; terms are never
-  accepted automatically.
-- **No invented prices, costs or products, and no overriding the Business Brain.** Prices come only
-  from the Brain's approved data.
-- **A person's identity:**
-  - It is never decided by Hermes or by a name alone.
-  - No customer records are merged on weak evidence.
-  - The sender of a message is linked to a customer only by the CRM's identity rules (phone,
-    email, thread, appointment, quote number), or by Chris.
-- **Work can still continue in an evidenced context.** Example: an unknown sender, Zavier, writes
-  about the keypad at 138 Wiri Station Road.
-  - Hermes may place the message in that site's existing lead or job, as long as the message itself
-    shows it (the site's street address, the job or quote number, the thread), or the CRM found a
-    signal other than a name.
-  - The email is filed there and Hermes's tasks run there.
-  - Facts are only proposed, and a reply goes to the sender's own address.
-  - The sender stays unlinked until Chris links them. A context the message does not show is not
-    used.
-- **Data integrity:**
-  - A fact needs the source's own words (or the form field) and a sane value.
-  - A fact that differs from the CRM is flagged for Chris, never overwritten.
-  - A commitment needs the words that were said.
-  - **Closing an enquiry** ("no action") or **marking a commitment kept** needs Hermes to cite a CRM
-    record from its context (for example `job:…` completed). Otherwise it goes to Chris. The CRM
-    checks the record is real; it does not re-judge it.
-- **Confidence:** below the threshold (`HERMES_MIN_CONFIDENCE`, default 60%), Hermes's
-  recommendation waits for Chris.
-- **Leads someone has worked on:** Hermes never deletes anything. It may mark lost ("Not a lead
-  (Hermes)") only a lead the rules created from that same email that nobody has touched. A lead
-  that has been worked on is left for Chris.
-- No supplier credentials or secrets reach Hermes, and Hermes has no direct database access.
+**Hermes's authority** (one table in code: `src/lib/hermes/authority.ts`; the validator, the router,
+the MCP tools and the tests all read it). Hermes is the employee: it understands, decides,
+investigates, organises and does internal work. The guardrails are its employment limits.
 
-**Business Brain authority (applied after Hermes's decision)**
-- Commercial CCTV is designed from a site visit, whatever Hermes recommended.
-- Only CCTV has a Business Brain; other services become a manual-quote task.
-- The Brain runs only with its inputs (home or business, cameras or areas, storeys for a home). If
-  any are missing, the customer is asked for them.
-- One prepared quote at a time. A revised quote after a sent one waits for Chris.
-- After a run, the Brain decides:
-  - site visit needed → a visit is proposed;
-  - nothing priced → "Price the quote";
-  - only commercial inputs missing → "Price the quote / complete costing".
+| Hermes may do on its own (audited, reversible where practical) | Hermes may only prepare or propose (Chris decides) |
+| --- | --- |
+| lead / not lead; create a **lead** when confident (never a permanent customer for an enquiry; a customer is linked only on an exact email match) | linking the sender to a customer ("Link sender", optional) |
+| continue work under an existing site, job or lead the source evidences, with the sender unverified | a site visit or booking (accepting makes Chris's task; nothing is confirmed) |
+| next action, no action, waiting on us / customer, resolved, outstanding, urgency | a revised quote after one was sent |
+| mark a commitment kept or void, citing a CRM record (Chris can reopen it) | a quote or reply: prepared, waits in Approvals; never sent |
+| internal notes; create, deduplicate and follow up internal tasks; call reminders | a candidate Business Brain update or **candidate package** (never approved by Hermes) |
+| run the Business Brain | "Needs review": only Chris's genuine judgement, with the question to decide |
+| ask the research profile a question (only the question leaves) | |
+| read attachments and photos through the CRM | |
 
-**Advisories** (shown, never deciding):
-- two-storey complexity;
-- unknown upgrade cabling;
-- gaps that don't block progress;
-- where the old rules read it differently;
-- Hermes's own notes.
+**Hard guardrails (enforced in code; Hermes cannot override them)**
+- **Customer-facing:** no sending an email, quote or follow-up; no confirming a site visit,
+  appointment or install date; no accepting or declining terms; no discount; no binding promise. A
+  prepared reply may not contain a price, a discount or a promised date (it is held back and Chris
+  gets a task). A customer saying yes becomes Chris's task.
+- **Commercial:** no invented price or trade cost (an unknown cost is never $0); no overriding
+  approved labour rules, products, kits or packages; no changing markup or discount policy; research
+  never silently becomes approved Business Brain knowledge.
+- **Identity and data integrity:** nobody is linked or merged on a name alone; a conflicting fact is
+  flagged, never overwritten; an unknown person is never treated as a verified customer. **Identity
+  uncertainty only holds the actions that need a customer record** (the Business Brain and a quote
+  need a lead; a visit, booking, commitment or fact needs the work it belongs to). Everything else
+  (notes, tasks, follow-ups, research) goes ahead, and "Who is this?" says what is waiting on it.
+- **Evidence for a write:** a fact or commitment needs provenance; closing open customer work or
+  marking a commitment kept needs a cited CRM record from the context (the CRM checks it exists and
+  belongs to this work; it does not re-judge it).
+- **Destructive:** nothing deletes, merges or approves anything financial. A lead someone has worked
+  on is never marked lost by Hermes.
+- **Confidence:** below `HERMES_MIN_CONFIDENCE` (default 60%) Hermes's internal work still goes
+  ahead; what prepares customer output or changes state waits for Chris ("Hermes is unsure").
+- **Secrets:** no supplier credentials, cookies, tokens or secrets reach Hermes; no database access.
+
+Every guardrail decision, allowed or refused, is stored with the run (`validation.decisions`).
+
+**Structured evidence.** Hermes either quotes the source's words, or cites where the value is:
+`form:<Field>` (a website form field, e.g. `form:Cameras`), `form:name|email|phone|address|service`,
+`turn:<n>` (a numbered transcript turn), `email:subject`, `email:from`, or `crm:<fact>` (a value on
+the record). The CRM resolves the reference and checks it supports the value ("Cameras: 4" supports 4
+cameras; "six cameras" supports 6), so the guardrail proves provenance rather than throwing away
+structured input. A form's camera count, storeys, property type, setup and address also reach the
+Business Brain directly from the form (`src/lib/brain/form-input.ts`), so the Brain never asks for
+what the form supplied.
+
+**The Business Brain decides its own inputs.** The validator no longer runs a second copy of the
+Brain's rules. When Hermes asks for the Brain or a quote, the Brain runs and its outcome decides:
+- it requires a site visit (commercial CCTV, no address, a customer request…) → a visit is proposed
+  for Chris, no quote;
+- it cannot design yet (no camera count or areas, home or business unknown) → its own questions are
+  drafted for Chris to send, no quote;
+- only pricing Chris enters is missing → "Price the quote / complete costing";
+- nothing priced → "Price the quote"; otherwise the quote and reply wait in Approvals.
+
+Still checked before it runs (authority, not interpretation): only CCTV has a Brain (other services
+become a manual-quote task); one prepared quote at a time; a revised quote after a sent one waits for
+Chris.
+
+**Removed as decision rules** (Hermes decides these now): the validator's commercial-CCTV site-visit
+override, its "Brain inputs missing → ask the customer", "service unknown → ask", the address
+question on a site visit, the blanket "Who is this?" for existing work without a context, the
+two-storey and upgrade-cabling advisories, and holding Hermes's internal tasks at low confidence.
+
+**Advisories** (shown, never deciding): gaps that don't block progress, what the CRM already has,
+where the old rules read it differently, Hermes's own notes.
 
 **Business context first.** For every email and conversation Hermes decides three things separately:
 1. **What kind of business it is** (`business_context`):
@@ -1040,9 +1052,11 @@ action, confidence and reason. Under it you see:
 When a guardrail or the Brain changed the outcome, it says which. The lead page's Inspector panel
 and the timeline show the same.
 
-**Needs your review** holds:
-- **Who is this?**: only when the work needs the customer and the message does not show which (or
-  Hermes asked). Hermes's suggestion is shown; you choose.
+**Needs your review** is for Chris's genuine judgement only, and says what to decide:
+- **Who is this?**: only when an action needs the customer record and the message does not show
+  which (it lists the waiting actions), or Hermes asks with no work to link to. Hermes's suggestion is
+  shown; you choose. When the work is known, Hermes's request is instead an optional **Link sender**
+  proposal under "Waiting for you", which never holds anything up.
 - **Hermes thinks this is a lead**: Hermes was under the threshold; Make it a lead / Not a lead.
 - **Hermes is unsure**: below the confidence threshold. "Accept recommendation" carries it out as you.
 - **Hermes asks you to look**, or **Hermes could not read it** (see Fallback). You can "Read again"
@@ -1096,6 +1110,15 @@ Until Hermes is connected, every new enquiry therefore waits in the Inspector fo
   - `crm_search_catalogue`: the approved catalogue, without costs.
   - `crm_request_research`: a question passed by the CRM to the research profile (below).
   - `crm_propose_brain_update`: a candidate change to approved knowledge, for Chris.
+- **Attachments and photos** (as content, never a file path):
+  - `crm_list_attachments`: an email's attachments by id;
+  - `crm_read_document`: a document's text (PDF supplier quotes, price lists and datasheets, text,
+    HTML, CSV; scanned PDFs come back empty and say so);
+  - `crm_analyse_image`: an attachment or job photo, resized and returned as an image for Hermes's
+    own model to read (model stickers, alarm panels, NVR screens, floor plans, labels);
+  - `crm_get_recording`: a recording's numbered transcript turns.
+- **Packages:** `brain_list_packages` (kits, open candidates, installation packages and hours; no
+  costs) and `brain_propose_package` (below).
 
 **Research and supplier tools.** Hermes can research what the CRM and the Business Brain do not
 know: manufacturer specifications, current models, compatibility, manuals, firmware changes,
@@ -1177,8 +1200,17 @@ supplier catalogues, stock, trade prices from approved suppliers, alternatives, 
          Authorization: "Bearer <HERMES_MCP_TOKEN>"
        timeout: 120
    ```
-5. Check Hermes against the twelve Inspector scenarios. Nothing is written to the CRM:
+5. Check Hermes against the Inspector's invariants. Nothing is written to the CRM:
    `docker compose -f docker-compose.prod.yml exec web pnpm hermes:check`
+   It sends thirteen situations (a complete form, a vague email, commercial CCTV, an ambiguous name,
+   an unknown sender at a known site, supplier and provider statements, a research question, a
+   discount request after a sent quote…) and checks the general invariants in
+   `src/lib/hermes/invariants.ts` for each: Hermes received the evidence; customer-facing work stays
+   gated; the Brain keeps its authority; structured evidence survives; a form's inputs reach the
+   Brain and nobody asks for them again; no unsafe linking; known work proceeds for an unknown
+   sender; ambiguous identity holds only what needs a record; research carries the question only;
+   review says what to decide. A failure prints the exact invariant and why. The situations are not
+   business rules: nothing in the CRM is keyed on them.
 6. Open the Inspector. Items that waited while Hermes was not connected can be read again with
    **Read again**. A re-read uses Hermes, and it never overwrites conflicting facts.
 
@@ -1232,8 +1264,9 @@ customer email.
 hermes profile create research
 ```
 
-In `~/.hermes/profiles/research/config.yaml`, enable web access and the CRM's research tools, and
-nothing else (no terminal, files, code execution or memory):
+In `~/.hermes/profiles/research/config.yaml`, enable web access (search and, if you want it, the
+browser for manufacturer and supplier sites) and the CRM's research tools, and nothing else (no
+terminal, files, code execution, memory, skills, cron or delegation):
 
 ```yaml
 toolsets:
@@ -1257,17 +1290,36 @@ Then:
 4. Check with `hermes tools` that the research profile has `web` and `mcp-getsecure_research`
    only.
 
-With its token, `/api/mcp` shows that profile only the supplier and candidate-update tools: no
-customer data, and no actions on leads. Without the research profile, research requests are
+With its token, `/api/mcp` shows that profile only the supplier, package and candidate-update tools
+(`supplier_*`, `brain_list_packages`, `brain_quote_patterns`, `brain_propose_package`,
+`crm_propose_brain_update`): no customer email, attachments or history, and no actions on leads.
+Authenticated supplier lookups reuse the IT Plus connector: logins stay server-side, a CAPTCHA or MFA
+stops the lookup and is reported, nothing is recorded as a cost, and every call is audited. Without the research profile, research requests are
 recorded and answered "not connected", and nothing else changes.
 
 Which model Hermes runs on is set in Hermes Agent (its provider configuration), not in the CRM.
 The CRM records the model name Hermes reports with every run.
 
+**Candidate packages (Business Brain proposals).** Hermes may design a package (first: a CCTV kit)
+or propose a change to an approved one (replace a discontinued camera or NVR, a new HDD, a supplier
+route, a variant, retirement) with `brain_propose_package`. The CRM also looks once a day for a
+configuration Get Secure keeps quoting with no approved kit ("used in 8 of the last 10 similar
+quotes") and proposes it. Either way it is a **candidate**: internal planning, never used for
+quoting. The CRM attaches the evidence itself: each item's supplier route with the approved trade
+cost and its date (an unapproved cost is "unknown", never $0), the hardware total at the Brain's
+current markup (Hermes's suggested markup is shown, never applied), compatibility checks (recorder
+channels, PoE ports, documented pairings), the labour basis (the matching installation package),
+and the quotes and jobs behind it. **Settings → Business Brain → Proposed packages**: Approve, Edit
+and approve, or Reject (with a reason). Only then does it become an approved kit, and only an
+approved kit is ever selected by the Brain. Markup, labour rules and prices are not changed by this.
+
 **Deploying:**
 - Migration `0019_hermes_inspector` adds the run, feedback, audit and queue tables, and new columns
   on inspections. Migration `0020_research_candidates` adds the research findings and candidate
-  Business Brain updates. `./deploy/update.sh` runs them.
+  Business Brain updates. Migration `0021_package_candidates` adds candidate packages.
+  `./deploy/update.sh` runs them.
+- The Inspector contract is now `hermes-inspector-4` (structured evidence refs, internal actions,
+  research requests, review question). Hermes needs no change: the prompt carries the schema.
 - Earlier inspections are kept as they were, marked "Rules (before Hermes)".
 - Nothing is re-read automatically.
 

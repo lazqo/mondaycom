@@ -49,6 +49,10 @@ export const AGENT_CAPABILITIES = [
   "create_internal_task",
   "propose_fact_update",
   "request_review",
+  // Attachments and photos, as content for Hermes's own model (never a file path).
+  "read_attachments",
+  // Candidate Business Brain packages/kits: proposed for Chris, never approved by an agent.
+  "propose_package",
   // Research (Hermes's research profile and the CRM's research broker): read and propose only.
   "research",
   "supplier_lookup",

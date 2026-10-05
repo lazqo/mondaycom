@@ -31,7 +31,7 @@ const ctx = (i: InspectorInput, over: Partial<ValidateContext> = {}): ValidateCo
   rules: null,
   ...over,
 });
-const H = (over: Partial<HermesResult>): HermesResult =>
+const H = (over: Record<string, unknown>): HermesResult =>
   parseHermesResult(JSON.stringify({ conversation_type: "new_enquiry", intent: "new_enquiry", service: "cctv", property_type: "residential", summary: "s", recommended_action: "NO_ACTION", confidence: 0.9, reason: "r", ...over }));
 const types = (v: { plan: { type: string }[] }) => v.plan.map((p) => p.type);
 
@@ -74,20 +74,31 @@ describe("hard guardrails", () => {
     expect(replyProblem("Thanks! Chris will put a quote together and be in touch.")).toBeNull();
   });
 
-  it("identity: Hermes's suggestion never files anything; uncertain identity goes to Chris", () => {
+  it("identity: Hermes's suggestion never files anything; only the work that needs a customer record waits", () => {
     const i = input("Hemi Walker here, 4 cameras please");
     const v = validateHermes(H({ recommended_action: "PREPARE_QUOTE", identity: { suggestion: "candidate", candidate_key: "lead:L9", reason: "same name" } }), ctx(i, { identity: { status: "needs_review", chosen: null, candidates: [], confidence: 0.2, reason: "Only name evidence." } }));
-    expect(types(v)).toEqual(["NEEDS_REVIEW"]);
+    expect(types(v)).toEqual(["ADD_INTERNAL_NOTE", "NEEDS_REVIEW"]);
     expect(v.reviewKind).toBe("identity");
-    expect(v.plan[0].payload).toMatchObject({ hermesSuggestion: { key: "lead:L9" } });
+    const review = v.plan.find((p) => p.type === "NEEDS_REVIEW")!;
+    expect(review.payload).toMatchObject({ hermesSuggestion: { key: "lead:L9" }, waitingFor: ["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"] });
+    expect(v.decisions.filter((d) => !d.allowed).map((d) => d.rule)).toEqual(["needs_record", "needs_record"]);
   });
 
-  it("an enquiry closed without CRM evidence goes to Chris; low confidence waits for Chris with the plan attached", () => {
+  it("an enquiry closed without CRM evidence goes to Chris with the question to decide", () => {
+    const v = validateHermes(H({ recommended_action: "NO_ACTION" }), ctx(input("Interested in cameras")));
+    expect(v.reviewKind).toBe("hermes_flagged");
+    expect(v.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.question).toMatch(/dealt with/);
+  });
+
+  it("low confidence: internal work goes ahead; what prepares customer output waits for Chris with the plan attached", () => {
     const i = input("Interested in cameras");
-    expect(validateHermes(H({ recommended_action: "NO_ACTION" }), ctx(i)).reviewKind).toBe("hermes_flagged");
-    const low = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.3 }), ctx(i));
-    expect(low.reviewKind).toBe("hermes_low_confidence");
-    expect((low.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.plan as { type: string }[]).map((p) => p.type)).toEqual(["CREATE_INTERNAL_TASK"]);
+    const task = validateHermes(H({ intent: "follow_up", conversation_type: "existing_lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring", due: null, detail: null }, confidence: 0.3 }), ctx(i));
+    expect(task.reviewKind).toBeNull();
+    expect(types(task)).toContain("CREATE_INTERNAL_TASK");
+    const quote = validateHermes(H({ recommended_action: "PREPARE_QUOTE", internal_actions: [{ action: "CREATE_INTERNAL_TASK", title: "Check the site on Maps", reason: "x" }], confidence: 0.3 }), ctx(i));
+    expect(quote.reviewKind).toBe("hermes_low_confidence");
+    expect(types(quote)).toContain("CREATE_INTERNAL_TASK");
+    expect((quote.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.plan as { type: string }[]).map((p) => p.type)).toEqual(["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]);
   });
 
   describe("Hermes decides whether a matter is resolved; the CRM only checks the evidence is real", () => {
@@ -98,13 +109,13 @@ describe("hard guardrails", () => {
       const v = validateHermes(H({ recommended_action: "NO_ACTION", resolution: { status: "resolved", evidence: [{ ref: "job:J1", note: "J-1008 completed and invoiced" }] } }), withRefs(["job:J1"]));
       expect(v.reviewKind).toBeNull();
       expect(v.headline).toMatchObject({ final: "NO_ACTION", changedBy: null });
-      expect(v.hard.find((c) => c.rule === "enquiry_closed_with_evidence")!.message).toContain("job:J1");
+      expect(v.advisories.find((c) => c.rule === "closed_with_evidence")!.message).toContain("job:J1");
     });
 
     it("evidence that is not a record in this context does not count", () => {
       const v = validateHermes(H({ recommended_action: "NO_ACTION", resolution: { status: "resolved", evidence: [{ ref: "job:made-up", note: "" }] } }), withRefs(["job:J1"]));
       expect(v.reviewKind).toBe("hermes_flagged");
-      expect(v.headline.changedBy).toBe("enquiry_close_needs_evidence");
+      expect(v.headline.changedBy).toBe("close_needs_evidence");
     });
 
     it("Hermes marks a commitment kept when the record shows it; a made-up ref is refused", () => {
@@ -136,14 +147,17 @@ describe("hard guardrails", () => {
       expect(types(v)).not.toContain("NEEDS_REVIEW");
       expect(v.plan.find((p) => p.type === "PROPOSE_LEAD_FACT_UPDATE")!.payload.proposeOnly).toBe(true);
       expect(v.reviewKind).toBeNull();
-      expect(v.hard.map((c) => c.rule)).toContain("sender_unverified");
+      expect(v.advisories.map((c) => c.rule)).toContain("sender_unverified");
     });
 
-    it("existing work the message does not evidence (a name alone): the work needs the customer, so 'Who is this?'", () => {
+    it("existing work the message does not evidence (a name alone): nothing is filed there; the task still goes ahead and Chris is asked whose it is", () => {
       const v = validateHermes({ ...h, business_context: "existing_work", lead_decision: "existing" }, ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot", leadId: "L2", jobId: null, contactId: "K2", accepted: false, why: "the message does not show its site" } }));
       expect(v.workContext).toBeNull();
-      expect(types(v)).toEqual(["NEEDS_REVIEW"]);
+      expect(types(v)).toEqual(["ADD_INTERNAL_NOTE", "CREATE_INTERNAL_TASK", "NEEDS_REVIEW"]);
       expect(v.reviewKind).toBe("identity");
+      expect(v.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload).toMatchObject({ waitingFor: [], unfiled: true });
+      expect(v.decisions.filter((d) => !d.allowed)).toEqual([]);
+      expect(v.advisories.map((a) => a.rule)).toContain("context_not_evidenced");
     });
 
     it("supplier, provider and accounting mail from an unknown sender: routed by context, never 'Who is this?'", () => {
@@ -168,16 +182,17 @@ describe("hard guardrails", () => {
         ctx(input("4 cameras for the single storey house please"), { identity: unknown }),
       );
       expect(v.reviewKind).toBe("identity");
-      expect(types(v)).toEqual(["NEEDS_REVIEW"]);
+      expect(types(v)).toEqual(["ADD_INTERNAL_NOTE", "NEEDS_REVIEW"]);
     });
 
-    it("Hermes may ask Chris to confirm the sender without holding the work up", () => {
+    it("Hermes may ask Chris to confirm the sender without holding the work up: an optional link proposal", () => {
       const v = validateHermes(
         H({ intent: "service_issue", conversation_type: "existing_job", business_context: "existing_work", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Check keypad", due: null, detail: null }, identity_review: { needed: true, reason: "Says they are the new owner." } }),
         ctx(zavier, { identity: unknown, context: { ref: "lead:L2", label: "Wiri Depot", leadId: "L2", jobId: null, contactId: "K2", accepted: true, why: "the message names the site" } }),
       );
-      expect(v.reviewKind).toBe("identity");
-      expect(types(v)).toEqual(expect.arrayContaining(["CREATE_INTERNAL_TASK", "NEEDS_REVIEW"]));
+      expect(v.reviewKind).toBeNull();
+      expect(types(v)).toEqual(expect.arrayContaining(["CREATE_INTERNAL_TASK", "PROPOSE_LINK_SENDER"]));
+      expect(v.plan.find((p) => p.type === "PROPOSE_LINK_SENDER")).toMatchObject({ mode: "approval", payload: { target: "lead:L2", sender: "zavier@example.com" } });
     });
 
     it("not a lead and nothing to do: nothing filed, no identity question", () => {
@@ -208,7 +223,7 @@ describe("hard guardrails", () => {
   });
 });
 
-describe("business rules decide over Hermes", () => {
+describe("the Business Brain keeps its authority (and decides its own inputs when it runs)", () => {
   const ready = { facts: [{ key: "camera_count" as const, value: 4, evidence: "4 cameras", confidence: 0.9 }, { key: "storeys" as const, value: 1, evidence: "single storey", confidence: 0.9 }], recommended_action: "PREPARE_QUOTE" as const, run_business_brain: true };
 
   it("residential CCTV with the Brain's inputs: Brain then quote", () => {
@@ -217,18 +232,13 @@ describe("business rules decide over Hermes", () => {
     expect(v.headline).toMatchObject({ recommended: "PREPARE_QUOTE", final: "PREPARE_QUOTE", changedBy: null });
   });
 
-  it("commercial CCTV: site visit, whatever Hermes recommended", () => {
-    const v = validateHermes(H({ ...ready, property_type: "commercial" }), ctx(input("4 cameras, single storey warehouse"), { known: { site_address: "5 Allens Rd" } }));
-    expect(types(v)).toContain("PROPOSE_SITE_VISIT");
-    expect(types(v)).not.toContain("RUN_BUSINESS_BRAIN");
-    expect(v.business[0].rule).toBe("commercial_cctv_site_visit");
-  });
-
-  it("the Brain never guesses its inputs: missing storeys → ask, not quote", () => {
-    const v = validateHermes(H({ recommended_action: "PREPARE_QUOTE", facts: [{ key: "camera_count", value: 4, evidence: "4 cameras", confidence: 0.9 }] }), ctx(input("4 cameras please")));
-    expect(types(v)).toContain("DRAFT_EMAIL");
-    expect(types(v)).not.toContain("PREPARE_QUOTE");
-    expect(v.business[0].rule).toBe("brain_inputs_missing");
+  it("commercial CCTV and missing inputs are the Brain's to decide when it runs (the router acts on its outcome), not the validator's", () => {
+    const commercial = validateHermes(H({ ...ready, property_type: "commercial" }), ctx(input("4 cameras, single storey warehouse"), { known: { site_address: "5 Allens Rd" } }));
+    expect(types(commercial)).toEqual(expect.arrayContaining(["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]));
+    expect(commercial.business).toEqual([]);
+    const missing = validateHermes(H({ recommended_action: "PREPARE_QUOTE", facts: [{ key: "camera_count", value: 4, evidence: "4 cameras", confidence: 0.9 }] }), ctx(input("4 cameras please")));
+    expect(types(missing)).toEqual(expect.arrayContaining(["RUN_BUSINESS_BRAIN", "PREPARE_QUOTE"]));
+    expect(types(missing)).not.toContain("DRAFT_EMAIL");
   });
 
   it("no Business Brain for alarms: quoted by hand", () => {
@@ -250,12 +260,13 @@ describe("business rules decide over Hermes", () => {
 });
 
 describe("advisories never block", () => {
-  it("two storeys and the old rules' different reading are logged; the recommendation stands", () => {
+  it("the old rules' different reading is logged; the recommendation stands", () => {
     const v = validateHermes(
       H({ facts: [{ key: "camera_count", value: 2, evidence: "Cameras: 2", confidence: 0.95 }, { key: "storeys", value: 2, evidence: "Storeys: Double storey", confidence: 0.95 }], recommended_action: "PREPARE_QUOTE" }),
       ctx(input("Cameras: 2 Storeys: Double storey"), { rules: { primaryIntent: "information", firstAction: "NO_ACTION", urgency: "normal" } }),
     );
-    expect(v.advisories.map((a) => a.rule)).toEqual(expect.arrayContaining(["two_storey_complexity", "rules_disagree"]));
+    expect(v.advisories.map((a) => a.rule)).toContain("rules_disagree");
+    expect(v.advisories.map((a) => a.rule)).not.toContain("two_storey_complexity");
     expect(types(v)).toContain("PREPARE_QUOTE");
   });
 });
@@ -281,5 +292,76 @@ describe("commitments", () => {
     expect(ours.dueAt).toBe("2026-10-07T08:00:00.000Z"); // 9pm that day, not Hermes's date
     expect(theirs.dueAt).toBe("2026-10-08T04:00:00.000Z"); // 5pm the next day
     expect(v.plan.find((p) => p.rule === "waiting_on_customer")).toBeTruthy();
+  });
+});
+
+describe("structured evidence: provenance, not re-typed quotes", () => {
+  const form = { fields: { Property: "Residential Home", Storeys: "Double storey", Cameras: "4", "Current Setup": "New Installation", Address: "7 Solo Place, Manurewa" }, name: "Isapela", email: "i@example.com", phone: null, service: "CCTV", address: "7 Solo Place, Manurewa" };
+  const web = input("New Lead · CCTV Landing PropertyResidential HomeStoreysDouble storeyCameras4", { form });
+
+  it("a form field cited by ref is evidence for the value it holds", () => {
+    const v = validateHermes(
+      H({
+        recommended_action: "PREPARE_QUOTE",
+        facts: [
+          { key: "camera_count", value: 4, evidence: "", evidence_ref: "form:Cameras", confidence: 0.95 },
+          { key: "storeys", value: 2, evidence_ref: "form:Storeys", confidence: 0.95 },
+          { key: "property_type", value: "residential", evidence: "source.form.fields.Property", confidence: 0.95 },
+          { key: "site_address", value: "7 Solo Place, Manurewa", evidence_ref: "form:address", confidence: 0.95 },
+          { key: "camera_count", value: 4, evidence: "form field Cameras: 4", confidence: 0.95 },
+        ],
+      }),
+      ctx(web),
+    );
+    expect(v.rejectedFacts).toEqual([]);
+    expect(v.understanding.facts.map((f) => [f.key, f.value])).toEqual([["camera_count", 4], ["storeys", 2], ["property_type", "residential"], ["site_address", "7 Solo Place, Manurewa"]]);
+    expect(v.understanding.facts[0].evidence).toBe("form field Cameras: 4");
+  });
+
+  it("a ref that does not support the value, or points at nothing, is refused", () => {
+    const v = validateHermes(H({ facts: [{ key: "camera_count", value: 8, evidence_ref: "form:Cameras", confidence: 0.9 }, { key: "storeys", value: 2, evidence_ref: "form:Floors", confidence: 0.9 }, { key: "budget", value: "5000", evidence_ref: "crm:budget", confidence: 0.9 }] }), ctx(web));
+    expect(v.rejectedFacts.map((r) => r.key)).toEqual(["camera_count", "storeys", "budget"]);
+  });
+
+  it("transcript turns, the subject and CRM fields can be cited", () => {
+    const call = input("transcript", { sourceType: "recording", direction: "conversation", utterances: [{ speaker: "Speaker 1", text: "Hi it's Chris", at: null }, { speaker: "Speaker 2", text: "We want six cameras on the house", at: null }] });
+    const v = validateHermes(
+      H({ facts: [{ key: "camera_count", value: 6, evidence_ref: "turn:1", confidence: 0.9 }, { key: "site_address", value: "12 Kauri Street", evidence_ref: "crm:site_address", confidence: 0.9 }], commitments: [{ owner: "customer", action: "send photos", action_key: "send_photos", evidence_ref: "turn:1", evidence: "" }] }),
+      ctx(call, { known: { site_address: "12 Kauri Street" } }),
+    );
+    expect(v.rejectedFacts).toEqual([]);
+    expect(v.understanding.commitments).toHaveLength(1);
+    expect(v.understanding.commitments[0].evidence).toMatch(/turn 1/);
+  });
+});
+
+describe("Hermes's internal work and research", () => {
+  it("extra internal actions are carried out beside the main recommendation, deduplicated", () => {
+    const v = validateHermes(
+      H({
+        intent: "follow_up",
+        conversation_type: "existing_lead",
+        recommended_action: "CREATE_INTERNAL_TASK",
+        task: { title: "Complete costing for Q-1006", due: "today", detail: null },
+        internal_actions: [
+          { action: "CALL_CUSTOMER", title: "Call Nympha about the timing", reason: "she asked for a call" },
+          { action: "FOLLOW_UP", title: "Follow up Q-1006", due: "2026-10-12", reason: "quote outstanding" },
+          { action: "CREATE_INTERNAL_TASK", title: "Complete costing for Q-1006", reason: "dup" },
+        ],
+      }),
+      ctx(input("Any update?")),
+    );
+    expect(types(v)).toEqual(["ADD_INTERNAL_NOTE", "CREATE_INTERNAL_TASK", "CALL_CUSTOMER", "PREPARE_FOLLOW_UP"]);
+    expect(v.plan.every((p) => p.mode === "auto")).toBe(true);
+  });
+
+  it("research requests carry only the question", () => {
+    const v = validateHermes(H({ intent: "question", conversation_type: "existing_lead", recommended_action: "REQUEST_RESEARCH", research: [{ question: "Which current Hikvision NVR replaces the DS-7608NI-K2?", kind: "product", product: "DS-7608NI-K2", why: "the recorder died" }] }), ctx(input("Our recorder died")));
+    expect(v.plan.find((p) => p.type === "REQUEST_RESEARCH")).toMatchObject({ mode: "auto", payload: { question: "Which current Hikvision NVR replaces the DS-7608NI-K2?", product: "DS-7608NI-K2" } });
+  });
+
+  it("Needs review carries Hermes's question for Chris", () => {
+    const v = validateHermes(H({ intent: "question", conversation_type: "existing_lead", recommended_action: "NEEDS_REVIEW", review_question: "Do we still support the Wiri contract after the price change?" }), ctx(input("x")));
+    expect(v.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.question).toMatch(/Wiri contract/);
   });
 });

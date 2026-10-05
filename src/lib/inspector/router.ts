@@ -1,11 +1,16 @@
 /**
  * The Unified Action Router. Every recommended action from an email or a conversation comes
- * through here, and only internal work is done automatically:
+ * through here, and only internal work is done automatically (the authority matrix:
+ * src/lib/hermes/authority.ts):
  *
- *   automatically: internal notes, tasks, service cases, call reminders, follow-ups, filing a
- *   recording, filling blank facts, running the Business Brain, preparing a quote and an email
- *   draft (both wait in Approvals);
- *   with Chris: bookings, site visits, revised quotes, uncertain identity, conflicting facts.
+ *   automatically: internal notes, tasks, service cases, call reminders, follow-ups, research
+ *   requests, filing a recording, filling blank facts, commitments kept (reversible), running the
+ *   Business Brain, preparing a quote and an email draft (both wait in Approvals);
+ *   with Chris: bookings, site visits, revised quotes, linking a sender, conflicting facts.
+ *
+ * The Business Brain's own outcome decides what follows a Brain run: a site visit when it requires
+ * one, its own questions when it cannot design yet, a pricing task when only pricing Chris enters
+ * is missing, otherwise the quote. The router acts on that outcome; it does not second-guess it.
  *
  * It never sends an email or a quote, confirms a booking or site visit, promises a price or date,
  * discounts or accepts terms. It runs as system:inspector, which the guard refuses for every
@@ -21,29 +26,18 @@ import { createDraft } from "@/lib/drafts/workflow";
 import { prepareFromAssessment, runAssessment } from "@/lib/brain/store";
 import { type Actor, GuardrailError } from "@/lib/guard/actor";
 import { dateInAppTz } from "@/lib/email/pipeline";
+import { AUTHORITY } from "@/lib/hermes/authority";
+import { requestResearch } from "@/lib/hermes/research";
 import { enquiryWithFacts } from "./brain";
 import { composeQuestionsEmail } from "./plan";
+import { serviceKey } from "./sources";
 import { pricingGaps, pricingTaskTitle } from "./validate";
-import type { ActionType, InspectorInput, PlannedAction } from "./types";
+import { ACTION_TYPES, type ActionType, type InspectorInput, type PlannedAction } from "./types";
 
 export const INSPECTOR_ACTOR: Actor = { kind: "system", process: "inspector" };
 
-/** Action types the router may complete without Chris. Everything else waits for him. */
-export const AUTO_ALLOWED: ActionType[] = [
-  "ADD_INTERNAL_NOTE",
-  "CREATE_INTERNAL_TASK",
-  "CREATE_SERVICE_CASE",
-  "CALL_CUSTOMER",
-  "PREPARE_FOLLOW_UP",
-  "LINK_RECORDING",
-  "PROPOSE_LEAD_FACT_UPDATE",
-  "RUN_BUSINESS_BRAIN",
-  "PREPARE_QUOTE",
-  "DRAFT_EMAIL",
-  "NO_ACTION",
-  "OUTSTANDING",
-  "RESOLVE_COMMITMENT",
-];
+/** Action types the router may complete without Chris (autonomous in the authority matrix). Everything else waits for him. */
+export const AUTO_ALLOWED: ActionType[] = ACTION_TYPES.filter((t) => AUTHORITY[t].autonomous);
 
 export type RouteContext = {
   inspectionId: string;
@@ -220,7 +214,20 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       return { status: "done", result: await task(ctx, a, { title: `Service case: ${await who(ctx.leadId)}`, kind: "service_case", due: a.payload.urgency === "urgent" ? today : businessDay(new Date(), 1), detail: `${a.reason} "${ctx.input.text.slice(0, 300)}"` }) };
     case "CALL_CUSTOMER": {
       const ask = Array.isArray(a.payload.ask) ? ` Ask: ${(a.payload.ask as string[]).join("; ")}.` : "";
-      return { status: "done", result: await task(ctx, a, { title: `Call ${await who(ctx.leadId)}`, kind: "call", due: today, detail: `${a.reason}${ask}` }) };
+      return { status: "done", result: await task(ctx, a, { title: a.payload.title ? String(a.payload.title) : `Call ${await who(ctx.leadId)}`, kind: "call", due: today, detail: `${a.payload.detail ? `${String(a.payload.detail)} ` : ""}${a.reason}${ask}` }) };
+    }
+    case "REQUEST_RESEARCH": {
+      // Only the question (and product) goes to the research profile: never the customer's message.
+      const question = String(a.payload.question ?? a.reason).slice(0, 1000);
+      const product = a.payload.product ? String(a.payload.product).slice(0, 120) : null;
+      const r = await requestResearch({ question: product && !question.toLowerCase().includes(product.toLowerCase()) ? `${question} (product: ${product})` : question, kind: (a.payload.kind as never) ?? "other", requestedBy: "agent:hermes (inspector)", leadId: ctx.leadId, inspectionId: ctx.inspectionId });
+      if (r.status !== "ok") {
+        // Research is not connected (or failed): the question becomes Chris's task, so it is not lost.
+        const t = await task(ctx, a, { title: `Research: ${question.slice(0, 160)}`, kind: "task", due: businessDay(new Date(), 1), detail: `${a.reason}\n(Research ${r.status.replace(/_/g, " ")}${r.error ? `: ${r.error}` : ""}.)` });
+        return { status: "done", result: { findingId: r.findingId, research: r.status, ...t, created: `Research: ${question.slice(0, 80)}` } };
+      }
+      if (ctx.leadId) await logActivity({ entity: "lead", entityId: ctx.leadId, actorId: null, action: "research_by_hermes", detail: { findingId: r.findingId, question, findings: r.findings.length, candidates: r.candidates.length } });
+      return { status: "done", result: { findingId: r.findingId, research: r.status, summary: r.summary, findings: r.findings.length, candidates: r.candidates.map((c) => c.title) } };
     }
     case "PREPARE_FOLLOW_UP":
       return {
@@ -229,6 +236,13 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       };
     case "RUN_BUSINESS_BRAIN": {
       if (!ctx.leadId) return { status: "blocked", result: { reason: "No open lead to assess. Create a lead for this customer first." } };
+      // BRAIN AUTHORITY: only CCTV has a Business Brain. Anything else is quoted by hand.
+      const leadRow = await db.query.leads.findFirst({ where: eq(leads.id, ctx.leadId), columns: { service: true } });
+      const svc = leadRow?.service ? serviceKey(leadRow.service) : null;
+      if (svc && ["alarm", "access_control", "intercom"].includes(svc)) {
+        const t = await task(ctx, a, { title: `Quote ${svc.replace(/_/g, " ")} enquiry manually`, kind: "quote", due: businessDay(new Date(), 1), detail: "Only CCTV has a Business Brain." });
+        return { status: "blocked", result: { reason: `There is no Business Brain for ${svc.replace(/_/g, " ")}: it is quoted by hand.`, ...t, created: `Quote ${svc.replace(/_/g, " ")} enquiry manually` } };
+      }
       const input = await enquiryWithFacts(ctx.leadId);
       if (!input) return { status: "blocked", result: { reason: "Lead not found." } };
       const run = await runAssessment(ctx.leadId, input, actor);
@@ -236,12 +250,16 @@ async function execute(a: PlannedAction, ctx: RouteContext, earlier: Map<ActionT
       await logActivity({ entity: "lead", entityId: ctx.leadId, actorId: null, action: "brain_run_by_inspector", detail: { assessmentId: run.id, inspectionId: ctx.inspectionId, complete: run.packet.costing.complete, siteVisit } });
       // Lines a customer quote can carry: priced from approved costs only (the Brain never invents one).
       const pricedLines = run.packet.costing.lines.filter((l) => l.priced && l.unitSellExGst != null && !l.internalOnly).length;
-      return { status: "done", result: { assessmentId: run.id, complete: run.packet.costing.complete, pricedLines, unpriced: run.packet.costing.unpriced, siteVisitRequired: siteVisit, siteVisitReasons: run.packet.siteVisit?.reasons ?? [] } };
+      // What the Brain itself says it still needs before it can design (it never guesses an input).
+      const needs = (run.packet.missing ?? []).filter((m) => m.importance === "blocks_quote").map((m) => ({ field: m.field, question: m.question }));
+      return { status: "done", result: { assessmentId: run.id, complete: run.packet.costing.complete, pricedLines, unpriced: run.packet.costing.unpriced, siteVisitRequired: siteVisit, siteVisitReasons: run.packet.siteVisit?.reasons ?? [], needs, brainRecommends: run.packet.sales?.recommendedAction ?? null } };
     }
     case "PREPARE_QUOTE": {
       const brain = earlier.get("RUN_BUSINESS_BRAIN");
       if (!brain?.assessmentId) return { status: "blocked", result: { reason: "The Business Brain did not run." } };
       if (brain.siteVisitRequired) return { status: "blocked", result: { reason: "The Business Brain requires a site visit first.", siteVisitRequired: true } };
+      const needs = (brain.needs as { question: string }[] | undefined) ?? [];
+      if (needs.length) return { status: "blocked", result: { reason: `The Business Brain needs: ${needs.map((n) => n.question).join(" ")}` } };
       // No approved price for anything in it: no quote and no reply, a pricing task for Chris instead.
       if (!Number(brain.pricedLines ?? 0)) {
         const title = `Price the quote for ${await who(ctx.leadId)}`;
@@ -312,6 +330,11 @@ export async function routeActions(planned: PlannedAction[], ctx: RouteContext):
             reason: `The Business Brain cannot finish the costing: ${gaps.join("; ")}.`,
             payload: { title: pricingTaskTitle(qn, await who(ctx.leadId)), kind: "quote", due: "today", detail: `Enter or approve these, then re-run the Brain: ${gaps.join("; ")}.` },
           });
+        }
+        // The Brain cannot design yet: its own questions go to the customer (a draft for Chris), once.
+        const brainNeeds = a.type === "RUN_BUSINESS_BRAIN" && !r.result.siteVisitRequired ? ((r.result.needs as { question: string }[] | undefined) ?? []) : [];
+        if (brainNeeds.length && ![...planned, ...queue].some((p) => p.type === "DRAFT_EMAIL" || p.type === "CALL_CUSTOMER") && !out.some((o) => o.type === "DRAFT_EMAIL")) {
+          queue.push({ type: "DRAFT_EMAIL", mode: "auto", rule: "business_brain_needs", reason: `The Business Brain needs a little more before it can design: ${brainNeeds.map((n) => n.question).join(" ")}`, payload: { ask: brainNeeds.map((n) => n.question) } });
         }
         // The Brain decides a site visit is needed: propose one instead of quoting.
         if ((a.type === "PREPARE_QUOTE" || a.type === "RUN_BUSINESS_BRAIN") && r.result.siteVisitRequired && ![...planned, ...queue].some((p) => p.type === "PROPOSE_SITE_VISIT") && !out.some((o) => o.type === "PROPOSE_SITE_VISIT")) {

@@ -9,8 +9,9 @@
  */
 import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { cctvAssessments, commitments, contacts, emails, events, facts, inspections, inspectorFeedback, jobs, leads, quotes, recordings, tasks } from "@/db/schema";
+import { brainCandidates, cctvAssessments, commitments, contacts, emailAttachments, emails, events, facts, inspections, inspectorFeedback, jobs, leads, quotes, recordings, tasks } from "@/db/schema";
 import { getContactTimeline, getLeadTimeline } from "@/queries/timeline";
+import { parseTranscript } from "@/lib/inspector/text";
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
 
@@ -131,6 +132,21 @@ export async function readRecentCorrections(limit = 12) {
   }));
 }
 
+/**
+ * What Chris has approved as a lesson for how the business works (accepted "workflow" candidates):
+ * the CRM is Hermes's memory, not Hermes's own notes.
+ */
+export async function readApprovedLearnings(limit = 15) {
+  const rows = await db.query.brainCandidates.findMany({ where: and(eq(brainCandidates.status, "accepted"), eq(brainCandidates.kind, "workflow")), orderBy: [desc(brainCandidates.decidedAt)], limit, columns: { title: true, detail: true, decidedAt: true } });
+  return rows.map((r) => ({ lesson: r.title, detail: r.detail, approvedAt: iso(r.decidedAt) }));
+}
+
+/** An email's attachments, by id: what Hermes may ask the CRM to read or look at (never a file path). */
+export async function readAttachmentList(emailId: string) {
+  const rows = await db.select({ id: emailAttachments.id, filename: emailAttachments.filename, contentType: emailAttachments.contentType, size: emailAttachments.size, inline: emailAttachments.contentId }).from(emailAttachments).where(eq(emailAttachments.emailId, emailId));
+  return rows.map((r) => ({ ref: `attachment:${r.id}`, id: r.id, filename: r.filename, contentType: r.contentType, size: r.size, inline: !!r.inline }));
+}
+
 /** The latest Business Brain run for a lead, as an outcome: never its costs. */
 export async function readBrainOutcome(leadId: string) {
   const a = await db.query.cctvAssessments.findFirst({ where: eq(cctvAssessments.leadId, leadId), orderBy: [desc(cctvAssessments.createdAt)] });
@@ -166,8 +182,11 @@ export async function readEmailThread(threadId: string) {
 }
 
 export async function readRecording(recordingId: string) {
-  const r = await db.query.recordings.findFirst({ where: eq(recordings.id, recordingId), columns: { id: true, title: true, recordedAt: true, transcript: true, status: true, leadId: true, contactId: true } });
-  return r ? { id: r.id, title: r.title, at: iso(r.recordedAt), status: r.status, leadId: r.leadId, customerId: r.contactId, transcript: r.transcript.slice(0, 20000) } : null;
+  const r = await db.query.recordings.findFirst({ where: eq(recordings.id, recordingId), columns: { id: true, title: true, recordedAt: true, durationSeconds: true, transcript: true, status: true, leadId: true, contactId: true } });
+  if (!r) return null;
+  // Numbered turns (turn:<n>), the same numbering the Inspector's context pack uses.
+  const turns = parseTranscript(r.transcript).slice(0, 400).map((u, n) => ({ n, speaker: u.speaker, at: u.at, text: u.text }));
+  return { id: r.id, title: r.title, at: iso(r.recordedAt), durationSeconds: r.durationSeconds, status: r.status, leadId: r.leadId, customerId: r.contactId, turns: turns.length ? turns : null, transcript: turns.length ? null : r.transcript.slice(0, 20000) };
 }
 
 export async function readInspection(inspectionId: string) {

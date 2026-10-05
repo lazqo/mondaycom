@@ -248,7 +248,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       understanding: understanding as unknown as Record<string, unknown>,
       hermes: (hermes.result as unknown as Record<string, unknown>) ?? null,
       validation: validation
-        ? { hard: validation.hard, business: validation.business, advisories: validation.advisories, rejectedFacts: validation.rejectedFacts, headline: validation.headline, reviewKind: validation.reviewKind }
+        ? { hard: validation.hard, business: validation.business, advisories: validation.advisories, rejectedFacts: validation.rejectedFacts, headline: validation.headline, reviewKind: validation.reviewKind, decisions: validation.decisions }
         : { fallback: { hermesStatus: hermes.status, error: hermes.error } },
       rulesView,
       summary: understanding.summary,
@@ -274,7 +274,7 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       confidence: hermes.result ? hermes.result.confidence.toFixed(3) : null,
       recommendedAction: hermes.result?.recommended_action ?? null,
       reason: hermes.result?.reason ?? null,
-      validation: validation ? { hard: validation.hard, business: validation.business, advisories: validation.advisories, rejectedFacts: validation.rejectedFacts, headline: validation.headline, reviewKind: validation.reviewKind } : { fallback: true, reviewKind },
+      validation: validation ? { hard: validation.hard, business: validation.business, advisories: validation.advisories, rejectedFacts: validation.rejectedFacts, headline: validation.headline, reviewKind: validation.reviewKind, decisions: validation.decisions } : { fallback: true, reviewKind },
     })
     .returning({ id: inspectorRuns.id });
 
@@ -549,6 +549,13 @@ export async function acceptAction(actionId: string, actor: Actor): Promise<Reco
         { type: "PREPARE_QUOTE", mode: "auto", rule: "accepted:PREPARE_REVISED_QUOTE", reason: "Revised quote for Chris to review (no discount is applied automatically).", payload: {} },
       ];
       break;
+    case "PROPOSE_LINK_SENDER": {
+      // Chris agrees the sender belongs to the work: linked as if he had chosen it (the source is read again).
+      await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date() }).where(eq(inspectorActions.id, actionId));
+      await recordFeedback({ inspectionId: ins.id, kind: "action_accepted", subject: a.type, value: { rule: a.rule, target: p.target ?? null }, userId: actor.userId });
+      await confirmIdentity(ins.id, { leadId: a.leadId, contactId: a.contactId }, actor);
+      return { linked: p.label ?? null };
+    }
     case "NEEDS_REVIEW": {
       // Hermes was unsure: accepting carries out what it recommended, as Chris.
       const proposed = Array.isArray(p.plan) ? (p.plan as PlannedAction[]) : null;

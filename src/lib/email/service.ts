@@ -61,6 +61,9 @@ export function startIngestionLoop(log: (m: string) => void = console.log): () =
       const run = await runAutomationsIfDue(5);
       if (run && (run.created || run.resolved)) log(`automations: ${run.created} new reminders, ${run.resolved} resolved`);
       await runCalendarSyncIfDue(env.CALENDAR_SYNC_SECONDS, log);
+      // Once a day: configurations Get Secure keeps quoting with no approved kit become candidate packages for Chris.
+      const { runPackagePatternsIfDue } = await import("@/lib/brain/packages");
+      await runPackagePatternsIfDue(log).catch((err) => log(`package patterns: ${err instanceof Error ? err.message : String(err)}`));
     } catch (err) {
       log(`ingestion refresh error: ${err instanceof Error ? err.message : String(err)}`);
     }

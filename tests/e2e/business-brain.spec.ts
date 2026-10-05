@@ -80,7 +80,8 @@ test.describe("CCTV Business Brain", () => {
   test.afterAll(async () => {
     if (leadId) await sql`delete from quotes where lead_id = ${leadId}`;
     if (leadId) await sql`delete from leads where id = ${leadId}`;
-    await sql`delete from cctv_kits where name = ${KIT}`;
+    await sql`delete from package_candidates where name like ${`%${RUN}%`}`;
+    await sql`delete from cctv_kits where name = ${KIT} or name like ${`%${RUN}%`}`;
     const imgs = await sql`select quote_image_id from products where manufacturer = ${MAKER} and quote_image_id is not null`;
     await sql`delete from products where manufacturer = ${MAKER}`;
     for (const i of imgs) await sql`delete from catalogue_images where id = ${i.quote_image_id}`;
@@ -275,6 +276,40 @@ test.describe("CCTV Business Brain", () => {
     await expect(page.getByTestId("packet-upgrade")).toContainText("IP upgrade: existing Cat6 runs and camera positions reused");
     await expect(page.getByTestId("packet-labour")).toContainText("RES_CCTV_UPGRADE_IP_4");
   });
+  test("Proposed packages: a candidate is never a kit until Chris approves it; rejecting records why", async ({ page }) => {
+    const [cam] = await sql`select id from products where manufacturer = ${MAKER} and model = 'FX-CAM-4'`;
+    const [nvr] = await sql`select id from products where manufacturer = ${MAKER} and model = 'FX-NVR-4'`;
+    const comps = [
+      { role: "camera", productId: cam.id, quantity: 4, perCamera: false },
+      { role: "nvr", productId: nvr.id, quantity: 1, perCamera: false },
+    ];
+    const evidence = { costs: { hardwareTradeExGst: 600, hardwareSellExGst: 810, hardwareMarginExGst: 210, markupPct: 35, unknown: [], note: "" }, compatibility: [{ name: "recorder channels", pass: true, detail: "FX-NVR-4: 4 channels for 4 cameras." }], supplierRoute: [], quotes: [{ number: 1234, status: "accepted" }] };
+    for (const name of [`Approve me ${RUN}`, `Reject me ${RUN}`])
+      await sql`insert into package_candidates (kind, name, property_type, tier, camera_count, storey_type, components, evidence, reasoning, confidence, proposed_by)
+                values ('new', ${name}, 'residential', 'good', 4, 'single', ${sql.json(comps as never)}, ${sql.json(evidence as never)}, 'Used in 4 of the last 5 similar quotes.', 0.8, 'crm:pattern')`;
+    await login(page);
+    await page.goto("/settings/brain");
+    await page.getByTestId("brain-packages-tab").click();
+    await expect(page.getByRole("heading", { name: "Proposed packages", exact: true })).toBeVisible();
+    const approve = page.getByTestId("package-candidate").filter({ hasText: `Approve me ${RUN}` });
+    await expect(approve).toContainText("Used in 4 of the last 5 similar quotes.");
+    await expect(approve.getByTestId("package-costs")).toContainText("$600.00");
+    await expect(approve).toContainText("Q-1234 (accepted)");
+    expect(await sql`select id from cctv_kits where name = ${`Approve me ${RUN}`}`).toHaveLength(0);
+    await approve.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(approve).toContainText("Approved");
+    const [kit] = await sql`select status, camera_count, approved_by_id from cctv_kits where name = ${`Approve me ${RUN}`}`;
+    expect(kit).toMatchObject({ status: "getsecure_approved", camera_count: 4 });
+    expect(kit.approved_by_id).toBeTruthy();
+    const reject = page.getByTestId("package-candidate").filter({ hasText: `Reject me ${RUN}` });
+    await reject.getByRole("button", { name: "Reject", exact: true }).click();
+    await reject.getByLabel("Reason").fill("We do not sell this camera any more");
+    await reject.getByRole("button", { name: "Reject", exact: true }).click();
+    await expect(reject).toContainText("Rejected");
+    await expect(reject).toContainText("We do not sell this camera any more");
+    expect(await sql`select id from cctv_kits where name = ${`Reject me ${RUN}`}`).toHaveLength(0);
+  });
+
   test("Research: Chris can ask Hermes and review candidate Business Brain updates (nothing applied automatically)", async ({ page }) => {
     await login(page);
     await page.goto("/settings/brain");

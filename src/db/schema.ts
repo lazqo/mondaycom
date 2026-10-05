@@ -1327,6 +1327,60 @@ export const brainCandidates = pgTable(
   (t) => [index("brain_candidates_status_idx").on(t.status, t.createdAt)],
 );
 
+/**
+ * A proposed Business Brain package (first: a CCTV kit), or a proposed change to an approved one,
+ * designed by Hermes or found by the CRM in repeated quotes and jobs. It is internal planning: it
+ * never quotes anything. Only Chris turns it into an approved kit (Approve / Edit and approve), and
+ * only an approved kit is ever selected by the Business Brain. Trade costs in the evidence come from
+ * the CRM's stored supplier prices at proposal time, never from Hermes.
+ */
+export const packageCandidates = pgTable(
+  "package_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** new | variant | update | retire */
+    kind: text("kind").notNull().default("new"),
+    /** cctv first; alarm, access control and intercom packages later. */
+    domain: text("domain").notNull().default("cctv"),
+    /** The approved kit an update, variant or retirement is about. */
+    targetKitId: uuid("target_kit_id").references(() => cctvKits.id, { onDelete: "set null" }),
+    name: text("name").notNull(),
+    key: text("key"),
+    propertyType: text("property_type").notNull().default("residential"),
+    tier: text("tier"),
+    cameraCount: integer("camera_count"),
+    /** single | double | null (any) */
+    storeyType: text("storey_type"),
+    /** Who it is for, in words: "two-storey family homes wanting app viewing". */
+    segment: text("segment"),
+    /** [{ role: camera | nvr | hdd | accessory, productId, quantity, perCamera }] */
+    components: jsonb("components").$type<{ role: string; productId: string; quantity: number; perCamera: boolean }[]>().notNull().default([]),
+    /** The installation package it goes with (RES_CCTV_DOUBLE_4…), when there is one. */
+    installationPackageKey: text("installation_package_key"),
+    /** What the CRM worked out when it was proposed: supplier route, costs with dates, compatibility, labour basis, quotes/jobs used, sources. */
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+    /** Hermes's suggested markup: shown to Chris, never applied (markup is Business Brain policy). */
+    proposedMarkupPct: numeric("proposed_markup_pct", { precision: 6, scale: 2 }),
+    assumptions: jsonb("assumptions").$type<string[]>().notNull().default([]),
+    missing: jsonb("missing").$type<string[]>().notNull().default([]),
+    reasoning: text("reasoning"),
+    confidence: numeric("confidence", { precision: 4, scale: 3 }),
+    /** candidate | approved | rejected | superseded */
+    status: text("status").notNull().default("candidate"),
+    /** "agent:hermes", "agent:hermes-research" or "crm:pattern" */
+    proposedBy: text("proposed_by").notNull(),
+    /** For candidates found in repeated quotes: the configuration's signature (never proposed twice). */
+    patternKey: text("pattern_key"),
+    createdKitId: uuid("created_kit_id").references(() => cctvKits.id, { onDelete: "set null" }),
+    decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("package_candidates_status_idx").on(t.status, t.createdAt), index("package_candidates_pattern_idx").on(t.patternKey)],
+);
+
 /** Emails and conversations waiting to be inspected, with retries when Hermes is unavailable. */
 export const inspectorQueue = pgTable(
   "inspector_queue",
