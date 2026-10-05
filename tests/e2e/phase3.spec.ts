@@ -58,7 +58,7 @@ test.describe("Calendar, dispatch, My Day and Today", () => {
 
   test("Home shows the day's sections and can complete a task", async ({ page }) => {
     await login(page);
-    for (const s of ["overdue-reminders", "reminders-for-today", "our-commitments", "today-s-jobs-site-visits", "jobs-not-yet-scheduled", "new-leads", "leads-needing-follow-up", "quotes-waiting-on-action"]) {
+    for (const s of ["next-steps-overdue", "next-steps-today", "coming-up", "waiting-on-customers", "today-s-jobs-site-visits", "new-leads", "quotes-waiting-on-action"]) {
       await expect(page.getByTestId(`section-${s}`)).toBeVisible();
     }
     await page.getByRole("button", { name: "Add reminder" }).click();
@@ -166,13 +166,14 @@ test.describe("Calendar, dispatch, My Day and Today", () => {
     await expect(page.getByRole("heading", { name: /Photos \(1\)/ })).toBeVisible();
   });
 
-  test("Automations settings: thresholds save and reminders appear", async ({ page }) => {
+  test("Next steps: checklist timings save and the job's step follows them", async ({ page }) => {
     await login(page);
     await page.goto("/settings/automations");
     await page.getByLabel("Job done, not invoiced after (days)").fill("0");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved and re-evaluated.")).toBeVisible();
-    await expect(page.locator("[data-testid^=task-]", { hasText: `Invoice job` }).filter({ hasText: leadName })).toBeVisible();
+    // The job (done a moment ago) now carries "Invoice J-…" as its one next step, due today.
+    await expect(page.getByTestId("steps-today").locator("[data-step]", { hasText: /Invoice J-/ }).filter({ hasText: leadName })).toBeVisible();
     await page.getByLabel("Job done, not invoiced after (days)").fill("3");
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Saved and re-evaluated.")).toBeVisible();

@@ -28,7 +28,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
     setMsg(null);
     startTransition(async () => {
       const res = await runAutomationsNow();
-      setMsg(res.ok ? `${res.data.created} new, ${res.data.resolved} resolved, ${res.data.open} open` : res.error);
+      setMsg(res.ok ? `${res.data.overdue} overdue, ${res.data.today} today, ${res.data.waiting} waiting on customers${res.data.closed ? `, ${res.data.closed} closed` : ""}` : res.error);
       router.refresh();
     });
   }
@@ -75,7 +75,7 @@ export function AutomationSettingsForm({ settings }: { settings: AutomationSetti
       {msg ? <p className="text-sm text-green-700">{msg}</p> : null}
       <div className="flex justify-between">
         <Button type="button" variant="secondary" onClick={run} disabled={pending}>
-          Run now
+          Check now
         </Button>
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save"}

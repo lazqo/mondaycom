@@ -59,9 +59,9 @@ export async function getSetupSteps(): Promise<{ steps: SetupStep[]; complete: b
     },
     {
       key: "hours",
-      title: "Business hours & reminder rules",
+      title: "Business hours & next-step timings",
       done: !!settingsRow || !!state.hoursConfirmedAt,
-      detail: settingsRow ? "Saved." : "Set your working hours for the calendar and when reminders should fire.",
+      detail: settingsRow ? "Saved." : "Set your working hours for the calendar and the checklist timings behind next steps.",
       href: "/settings/automations",
       action: "Review settings",
     },

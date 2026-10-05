@@ -53,7 +53,7 @@ export async function getHealth(): Promise<Health> {
     const last = await lastAutomationRun();
     const mins = last ? Math.round((now - new Date(last.ranAt).getTime()) / 60000) : null;
     auto = { lastRunAt: last?.ranAt ?? null, minutesSinceRun: mins, open: last?.open ?? null };
-    if (mins !== null && mins > 60) warnings.push(`Reminder rules last ran ${mins} min ago`);
+    if (mins !== null && mins > 60) warnings.push(`The next-steps checklist last ran ${mins} min ago`);
   } else {
     warnings.push("Database is unreachable");
   }

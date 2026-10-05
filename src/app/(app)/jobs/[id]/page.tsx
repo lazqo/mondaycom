@@ -15,13 +15,16 @@ import { formatMoney } from "@/lib/utils";
 import { JourneyBar } from "@/components/journey/journey-bar";
 import { buildJourney } from "@/lib/journey";
 import { getJourneyForJob } from "@/queries/journey";
+import { nextStepForJob } from "@/queries/next-steps";
+import { StepSummary } from "@/components/next-steps/step-line";
+import { appDay } from "@/queries/dashboard";
 
 export const metadata: Metadata = { title: "Job" };
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
-  const [job, contacts, users, activity] = await Promise.all([getJob(id), listContacts(), listActiveUsers(), getActivity("job", id)]);
+  const [job, contacts, users, activity, step] = await Promise.all([getJob(id), listContacts(), listActiveUsers(), getActivity("job", id), nextStepForJob(id)]);
   if (!job) notFound();
   const meta = JOB_STATUS_META[job.status];
   const journey = buildJourney(await getJourneyForJob(job), "job");
@@ -62,6 +65,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         <JobStatusActions jobId={job.id} status={job.status} />
       </div>
 
+      {step && step.kind !== "closed" ? (
+        <div className="rounded-md border border-gray-200 bg-white px-4 py-2" data-testid="job-next-step">
+          <StepSummary step={step} today={appDay().today} />
+        </div>
+      ) : null}
       <JourneyBar steps={journey.steps} cta={journey.cta} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

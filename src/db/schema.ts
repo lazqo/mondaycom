@@ -94,6 +94,8 @@ export const leads = pgTable(
     status: leadStatusEnum("status").notNull().default("new"),
     assignedToId: uuid("assigned_to_id").references(() => users.id, { onDelete: "set null" }),
     followUpAt: date("follow_up_at"),
+    /** When the follow-up date was last set: one set before the customer's latest contact no longer applies. */
+    followUpSetAt: timestamp("follow_up_set_at", { withTimezone: true }),
     lastContactAt: date("last_contact_at"),
     source: leadSourceEnum("source").notNull().default("other"),
     // Extra

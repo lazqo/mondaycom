@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { emails, events, jobs, leads, notifications, quotes, tasks } from "@/db/schema";
 import { env } from "@/lib/env";
@@ -30,18 +30,12 @@ function tzOffsetMinutes(at: Date): number {
 
 export async function getDashboard(userId: string) {
   const { today, start, end } = appDay();
-  const [newLeads, followUps, todayEvents, quotesDraft, quotesSent, openTasks, needsReview, unassignedJobs, activeJobs, myNotifications] = await Promise.all([
+  const [newLeads, todayEvents, quotesDraft, quotesSent, needsReview, activeJobs, myNotifications] = await Promise.all([
     db.query.leads.findMany({
       where: and(eq(leads.status, "new"), isNull(leads.archivedAt)),
       with: { assignedTo: { columns: { id: true, name: true } } },
       orderBy: [desc(leads.createdAt)],
       limit: 20,
-    }),
-    db.query.leads.findMany({
-      where: and(lte(leads.followUpAt, today), inArray(leads.status, ["new", "contacted", "site_visit", "quote_required", "quote_sent"]), isNull(leads.archivedAt)),
-      with: { assignedTo: { columns: { id: true, name: true } } },
-      orderBy: [asc(leads.followUpAt)],
-      limit: 30,
     }),
     db.query.events.findMany({
       where: and(lt(events.startsAt, end), gte(events.endsAt, start)),
@@ -64,31 +58,10 @@ export async function getDashboard(userId: string) {
       orderBy: [asc(quotes.sentAt)],
       limit: 20,
     }),
-    // Overdue and due-today are read separately, so a long overdue list never pushes today's off.
-    Promise.all([
-      db.query.tasks.findMany({
-        where: and(eq(tasks.status, "open"), lt(tasks.dueAt, today)),
-        with: { assignedTo: { columns: { id: true, name: true } } },
-        orderBy: [asc(tasks.dueAt), asc(tasks.createdAt)],
-        limit: 50,
-      }),
-      db.query.tasks.findMany({
-        where: and(eq(tasks.status, "open"), or(eq(tasks.dueAt, today), isNull(tasks.dueAt))),
-        with: { assignedTo: { columns: { id: true, name: true } } },
-        orderBy: [desc(tasks.createdAt)],
-        limit: 50,
-      }),
-    ]).then(([a, b]) => [...a, ...b]),
     db.query.emails.findMany({
       where: and(eq(emails.direction, "inbound"), inArray(emails.classification, ["needs_review", "error"])),
       columns: { id: true, threadId: true, fromName: true, fromAddress: true, subject: true, receivedAt: true, classification: true, snippet: true },
       orderBy: [desc(emails.receivedAt)],
-      limit: 20,
-    }),
-    db.query.jobs.findMany({
-      where: eq(jobs.status, "unscheduled"),
-      with: { contact: { columns: { id: true, name: true } } },
-      orderBy: [asc(jobs.createdAt)],
       limit: 20,
     }),
     db.select({ n: count() }).from(jobs).where(inArray(jobs.status, OPEN_JOB_STATUSES)),
@@ -98,19 +71,13 @@ export async function getDashboard(userId: string) {
       limit: 10,
     }),
   ]);
-  const overdue = openTasks.filter((t) => t.dueAt && t.dueAt < today);
-  const dueToday = openTasks.filter((t) => !t.dueAt || t.dueAt === today);
   return {
     today,
     newLeads,
-    followUps,
     todayEvents,
     quotesDraft,
     quotesSent,
-    overdueTasks: overdue,
-    tasksToday: dueToday,
     needsReview,
-    unassignedJobs,
     activeJobCount: Number(activeJobs[0]?.n ?? 0),
     myNotifications,
   };

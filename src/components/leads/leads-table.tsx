@@ -111,7 +111,8 @@ function LeadTableRow({
   today: string;
 }) {
   const p = (patch: LeadPatch) => onPatch(row.id, patch);
-  const action = nextActionFor(row, { today, siteVisits: row.events, quotes: row.quotes, jobs: row.jobs });
+  // The server works out the one next step; after an edit on the board, the stage default fills in until the page refreshes.
+  const action = row.nextStep ? { text: row.nextStep.text, kind: row.nextStep.typed ? ("typed" as const) : ("suggested" as const), overdue: row.nextStep.overdue } : nextActionFor(row, { today, siteVisits: row.events, quotes: row.quotes, jobs: row.jobs });
   const lost = row.status === "lost";
   return (
     <tr className="border-t border-gray-200 hover:bg-gray-50/60" data-testid={`lead-row-${row.id}`}>

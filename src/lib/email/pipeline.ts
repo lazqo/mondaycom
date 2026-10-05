@@ -236,6 +236,7 @@ export async function createLeadFromEmail(
         assignedToId: opts.assignedToId ?? null,
         lastContactAt: dateInAppTz(email.receivedAt),
         followUpAt: nextBusinessDay(email.receivedAt),
+        followUpSetAt: new Date(),
         notes: `From email: ${email.subject}`,
         position: (maxPos ?? 0) + 1,
         createdById: opts.actorId,

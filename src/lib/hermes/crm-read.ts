@@ -12,12 +12,14 @@ import { db } from "@/db";
 import { brainCandidates, cctvAssessments, commitments, contacts, emailAttachments, emails, events, facts, inspections, inspectorFeedback, jobs, leads, quotes, recordings, tasks } from "@/db/schema";
 import { getContactTimeline, getLeadTimeline } from "@/queries/timeline";
 import { parseTranscript } from "@/lib/inspector/text";
+import { nextStepForLead } from "@/queries/next-steps";
 
 const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
 
 export async function readLead(leadId: string) {
   const l = await db.query.leads.findFirst({ where: eq(leads.id, leadId), with: { assignedTo: { columns: { name: true } } } });
   if (!l) return null;
+  const step = await nextStepForLead(leadId);
   return {
     id: l.id,
     name: l.name,
@@ -32,6 +34,8 @@ export async function readLead(leadId: string) {
     summary: l.summary,
     followUpAt: l.followUpAt,
     lastContactAt: l.lastContactAt,
+    /** The CRM's one next step for this lead (what, why, when): a task or follow-up Hermes creates replaces it. */
+    nextStep: step ? { what: step.what, why: step.why, due: step.due, overdue: step.overdue, waiting: step.waiting } : null,
     assignedTo: l.assignedTo?.name ?? null,
     customerId: l.contactId,
     createdAt: iso(l.createdAt),

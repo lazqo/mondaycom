@@ -422,6 +422,17 @@ that fires per rule, so a lead can carry several and none of them reacts to what
 - Home shows next steps due today and overdue, one line each; the Reminders page becomes "Next
   steps" with a reason per line. The 41 are recomputed once, with a summary for Chris before
   anything is closed.
+*Delivered.* The step is worked out from the record every time it is read (nothing is stored but
+the inputs), so a reply, a call, a recording, a visit held or a quote approved replaces it by
+changing those inputs. Order of precedence: the earliest-due of a promise we made, a decision waiting on
+Chris (a proposal, a prepared reply or quote; never one of Hermes's questions, which live in the
+Decisions queue), Chris's typed next action, an open task, an appointment, a customer's overdue
+promise to chase, in that order on the same day; then the checklist timings; then "nothing until the customer …"; then the stage
+default. A follow-up date set before the customer's latest contact no longer applies (a new
+`follow_up_set_at` column records when it was set). The old rules create nothing any more; their
+open reminders are listed on Next steps with a count per rule and closed in one go on Chris's
+click ("replaced by the record's next step"). The checklist run also closes tasks on a lost lead
+or a cancelled job. Hermes's pack carries `crm.lead.nextStep`.
 
 ### Run C: an inbox that says what each email is and what to do
 - Each email shows Hermes's reading as a category (customer, existing work, supplier, accounting,

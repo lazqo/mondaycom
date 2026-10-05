@@ -32,7 +32,9 @@ export async function listLeads() {
     orderBy: [asc(leads.position), asc(leads.createdAt)],
   });
 }
-export type LeadRow = Awaited<ReturnType<typeof listLeads>>[number];
+/** The lead's one next step, as the board shows it (worked out server-side; see src/lib/next-step.ts). */
+export type LeadNextStep = { text: string; overdue: boolean; typed: boolean };
+export type LeadRow = Awaited<ReturnType<typeof listLeads>>[number] & { nextStep?: LeadNextStep };
 
 export async function getLead(id: string) {
   return db.query.leads.findFirst({

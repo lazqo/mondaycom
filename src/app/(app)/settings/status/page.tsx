@@ -54,9 +54,9 @@ export default async function StatusPage() {
           </div>
         </Card>
         <Card>
-          <CardHeader title="Reminder rules" action={ok(h.automations.minutesSinceRun !== null && h.automations.minutesSinceRun <= 60)} />
+          <CardHeader title="Next steps checklist" action={ok(h.automations.minutesSinceRun !== null && h.automations.minutesSinceRun <= 60)} />
           <p className="p-4 text-sm text-gray-700">
-            Last run {h.automations.lastRunAt ? `${h.automations.minutesSinceRun} min ago` : "never"} · {h.automations.open ?? 0} open reminders.
+            Last run {h.automations.lastRunAt ? `${h.automations.minutesSinceRun} min ago` : "never"} · {h.automations.open ?? 0} next steps due today or overdue.
           </p>
         </Card>
         <Card>

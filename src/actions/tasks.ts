@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
 import { requireUser, requireAdmin } from "@/lib/auth";
-import { runAutomations } from "@/lib/automations/runner";
+import { replaceLegacyReminders, runAutomations } from "@/lib/automations/runner";
 import { saveAutomationSettings } from "@/lib/settings";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 
@@ -63,11 +63,19 @@ export async function setTaskStatus(id: string, status: "open" | "done" | "dismi
   return ok(undefined);
 }
 
-export async function runAutomationsNow(): Promise<ActionResult<{ created: number; resolved: number; open: number }>> {
+export async function runAutomationsNow(): Promise<ActionResult<{ overdue: number; today: number; waiting: number; closed: number }>> {
   await requireUser();
   const s = await runAutomations();
   revalidateAll();
-  return ok({ created: s.created, resolved: s.resolved, open: s.open });
+  return ok({ overdue: s.overdue, today: s.today, waiting: s.waiting, closed: s.closed + s.resolved });
+}
+
+/** Close the reminders the old rules left open: each record's next step replaces them. */
+export async function replaceLegacyRemindersAction(): Promise<ActionResult<{ count: number }>> {
+  const user = await requireAdmin();
+  const r = await replaceLegacyReminders(user.id);
+  revalidateAll();
+  return ok(r);
 }
 
 const settingsInput = z.object({

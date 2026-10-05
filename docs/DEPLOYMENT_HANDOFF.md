@@ -224,7 +224,7 @@ Open `https://hermes.aucklandsecuritysystems.co.nz/` in a browser. With no users
    2. Add staff — office people and technicians, each with a role
    3. Connect the Titan mailbox (below)
    4. Configure email AI — press **Use offline rules for now**; there is nothing else to set
-   5. Set business hours and reminder thresholds
+   5. Set business hours and the next-step checklist timings
    6. Start using the CRM
 
 **Do step 1 immediately after the first deploy.** Until the first admin exists, the create-admin form
@@ -480,7 +480,7 @@ Test a restore once, before you rely on it.
   5 minutes. This is the single most valuable thing to set up, because it tells you the CRM is down
   before your staff do.
 - **Detailed health**: the same URL with the header `Authorization: Bearer <HEALTH_TOKEN>` adds
-  mailbox sync ages, how many emails are waiting to classify, when reminders last ran and a
+  mailbox sync ages, how many emails are waiting to classify, when the next-steps checklist last ran and a
   `warnings` list.
 - **In the app**: **Settings → System status**, for admins.
 - **Logs**: `docker compose -f docker-compose.prod.yml logs -f web`. `[ingest]` lines are mailbox
@@ -491,7 +491,7 @@ Test a restore once, before you rely on it.
   its own.
 
 Healthy looks like: database up, each mailbox checked within the last 30 minutes, fewer than 20
-emails waiting to classify, reminders run within the last hour.
+emails waiting to classify, the next-steps checklist run within the last hour.
 
 ---
 
@@ -1092,7 +1092,7 @@ names) unless something else agrees, such as the site or the company.
 number ("Great South Road") places a message when exactly one open record is on that street. A
 recording in which Chris states an appointment himself ("we have an install today at 3 pm at
 Great South Road") becomes a booking proposal that can be pencilled with no customer attached.
-Durations come from the work: site visit and service call minutes in Settings → Reminders, an
+Durations come from the work: site visit and service call minutes in Settings → Next steps, an
 install from the Business Brain's labour estimate (or the install hours there).
 
 **Plaud as the command channel.** A recording is Chris's own voice, so instructions in it are
@@ -1413,6 +1413,26 @@ approved kit is ever selected by the Brain. Markup, labour rules and prices are 
 have been removed: Hermes is the only reader, so there is no second interpretation to disagree
 with it. The Inspector's own extraction, analysis and deterministic planner are gone with them.
 
+**One next step per record (Run B).** Every open lead and job carries exactly one next step
+(what, why, when), worked out from its state each time it is read: the earliest-due of a promise
+Chris made on a call, a decision waiting on him (a proposal, a prepared reply or quote; not one of
+Hermes's questions, which never block and live in the Decisions queue), his typed next action, an
+open task (Hermes's or a person's), an appointment on the calendar, or a customer's overdue
+promise to chase, in that order on the same day; then the daily checklist timed from Settings →
+Next steps (a new lead not contacted, a visit held with no quote, a quote sent with no answer, a
+job done and not invoiced, a follow-up date reached); then "nothing until the customer …" while a
+customer's promise stands; then the stage default. Because nothing is stored but the inputs,
+anything that happens on the record replaces the step. A follow-up date set before the
+customer's latest email or call no longer applies (`leads.follow_up_set_at`, migration 0023,
+records when it was set). Home shows the steps overdue, due today and coming up, one line each
+with the reason; Settings → Next steps lists them all with the checklist. The old reminder rules
+no longer create tasks: their open reminders are shown there with a count per rule and are closed
+only when Chris clicks "Replace them with next steps" (each marked "replaced by the record's next
+step"). The checklist run (every five minutes from page loads, as before) closes tasks whose lead
+was lost or archived or whose job was cancelled, and resolves old rule reminders whose condition
+has cleared. Hermes sees the current step as `crm.lead.nextStep` in its context pack and is told
+to give a task or follow-up only when its reading changes what should happen next.
+
 ## 18. Leads: Next action and Lost reason
 
 The Leads table has a **Next action** column beside Status (also shown on Kanban cards and the lead
@@ -1469,7 +1489,7 @@ value in `.env` and restart. Rotating `ENCRYPTION_KEY` means reconnecting the ma
 | First login | `https://hermes.aucklandsecuritysystems.co.nz/` → `/setup` |
 | Connect mailbox | Settings → Email accounts |
 | Hermes: connection, queue, autonomy dial | Settings → Hermes |
-| Reminder thresholds, business hours | Settings → Reminders |
+| Next-step checklist timings, business hours | Settings → Next steps |
 | Staff and roles | Settings → Staff |
 | System status | Settings → System status |
 | Health endpoint | `/api/health` |

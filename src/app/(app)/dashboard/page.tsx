@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { appDay, getDashboard } from "@/queries/dashboard";
+import { getDashboard } from "@/queries/dashboard";
 import { getOutstandingCommitments } from "@/queries/inspector";
 import { getDecisions, getHermesFeed } from "@/queries/decisions";
 import { CommitmentLine } from "@/components/inspector/views";
@@ -12,11 +12,11 @@ import { listActiveUsers } from "@/queries";
 import { runAutomationsIfDue } from "@/lib/automations/runner";
 import { getSetupSteps } from "@/lib/setup";
 import { Badge, Card, CardHeader, LinkButton } from "@/components/ui";
-import { TaskList } from "@/components/dashboard/task-list";
+import { StepLine } from "@/components/next-steps/step-line";
+import { listNextSteps } from "@/queries/next-steps";
 import { NewTaskButton } from "@/components/dashboard/new-task-dialog";
-import { StatusPill } from "@/components/leads/cells";
 import { JOB_STATUS_META, LEAD_URGENCY_META } from "@/lib/constants";
-import { formatDate, formatDateOnly, formatDateTime, formatMoney, formatTime } from "@/lib/utils";
+import { formatDate, formatDateTime, formatMoney, formatTime } from "@/lib/utils";
 import { db } from "@/db";
 import { contacts, jobs, leads } from "@/db/schema";
 import { inArray } from "drizzle-orm";
@@ -64,18 +64,16 @@ export default async function HomePage() {
   const user = await requireUser();
   if (user.role === "field") redirect("/my-day");
   await runAutomationsIfDue(5);
-  const [d, users, setup, commitmentItems, decisions, feed] = await Promise.all([
+  const [d, users, setup, commitmentItems, decisions, feed, steps] = await Promise.all([
     getDashboard(user.id),
     listActiveUsers(),
     user.role === "admin" ? getSetupSteps() : Promise.resolve(null),
     getOutstandingCommitments(),
     getDecisions(),
     getHermesFeed(20),
+    listNextSteps(),
   ]);
   const now = new Date();
-  const endOfToday = appDay(now).end;
-  const ours = commitmentItems.filter((c) => c.commitment.owner !== "customer" && (!c.commitment.dueAt || c.commitment.dueAt <= endOfToday || c.commitment.dueAt < now));
-  const oursOverdue = ours.filter((c) => c.commitment.dueAt && c.commitment.dueAt < now).length;
   const theirs = commitmentItems.filter((c) => c.commitment.owner === "customer");
   const hermesOff = !process.env.HERMES_API_URL || !process.env.HERMES_API_KEY;
   // Names for the feed's subjects.
@@ -98,8 +96,8 @@ export default async function HomePage() {
   const brief = [
     decisions.total ? `${decisions.total} decision${decisions.total === 1 ? "" : "s"} waiting` : "nothing waiting on you",
     `${d.todayEvents.length} on the calendar today`,
-    d.overdueTasks.length ? `${d.overdueTasks.length} overdue reminder${d.overdueTasks.length === 1 ? "" : "s"}` : null,
-    oursOverdue ? `${oursOverdue} promise${oursOverdue === 1 ? "" : "s"} overdue` : null,
+    steps.overdue.length ? `${steps.overdue.length} next step${steps.overdue.length === 1 ? "" : "s"} overdue` : null,
+    steps.dueToday.length ? `${steps.dueToday.length} due today` : null,
     `${d.activeJobCount} active jobs`,
   ].filter(Boolean);
 
@@ -172,11 +170,6 @@ export default async function HomePage() {
               );
             })}
           </Section>
-          <Section title="Our commitments" count={ours.length} tone={oursOverdue ? "alert" : "warn"} empty="Nothing promised for today. When Chris says “I'll send the quote tonight” on a call, it shows up here.">
-            {ours.slice(0, MAX_ROWS).map((c) => (
-              <CommitmentLine key={c.commitment.id} item={c} now={now} />
-            ))}
-          </Section>
           <Section title="Waiting on customers" count={theirs.length} empty="No customer has said they'll send anything.">
             {theirs.slice(0, MAX_ROWS).map((c) => (
               <CommitmentLine key={c.commitment.id} item={c} now={now} />
@@ -185,20 +178,19 @@ export default async function HomePage() {
         </div>
 
         <div className="space-y-4">
-          <Section title="Overdue reminders" count={d.overdueTasks.length} tone="alert" empty="Nothing overdue. Nice.">
-            <TaskList tasks={d.overdueTasks} />
+          <Section title="Next steps: overdue" count={steps.overdue.length} href="/settings/automations" tone="alert" empty="Nothing overdue. Nice.">
+            {steps.overdue.slice(0, MAX_ROWS).map((r) => (
+              <StepLine key={`${r.record.type}-${r.record.id}`} record={r.record} step={r.step} today={steps.today} />
+            ))}
           </Section>
-          <Section title="Reminders for today" count={d.tasksToday.length} tone="warn" empty="No reminders due today.">
-            <TaskList tasks={d.tasksToday} />
+          <Section title="Next steps: today" count={steps.dueToday.length} href="/settings/automations" tone="warn" empty="Nothing due today. Each lead and job carries one next step; the ones due today show here.">
+            {steps.dueToday.slice(0, MAX_ROWS).map((r) => (
+              <StepLine key={`${r.record.type}-${r.record.id}`} record={r.record} step={r.step} today={steps.today} />
+            ))}
           </Section>
-          <Section title="Jobs not yet scheduled" count={d.unassignedJobs.length} href="/calendar?view=week" tone="warn" empty="Every job has a time on the calendar.">
-            {d.unassignedJobs.slice(0, MAX_ROWS).map((j) => (
-              <Link key={j.id} href={`/jobs/${j.id}`} className={row}>
-                <span className="truncate">
-                  <span className="font-medium text-gray-900">J-{j.number}</span> {j.title} · <span className="text-gray-500">{j.contact.name}</span>
-                </span>
-                <span className="shrink-0 whitespace-nowrap text-xs text-gray-500">{formatDate(j.createdAt)}</span>
-              </Link>
+          <Section title="Coming up" count={steps.later.length} href="/settings/automations" empty="Nothing scheduled ahead.">
+            {steps.later.slice(0, MAX_ROWS).map((r) => (
+              <StepLine key={`${r.record.type}-${r.record.id}`} record={r.record} step={r.step} today={steps.today} />
             ))}
           </Section>
         </div>
@@ -217,21 +209,6 @@ export default async function HomePage() {
                   </span>
                 </span>
                 {l.urgency ? <Badge className={`${LEAD_URGENCY_META[l.urgency].bg} ${LEAD_URGENCY_META[l.urgency].text}`}>{LEAD_URGENCY_META[l.urgency].label}</Badge> : null}
-              </Link>
-            ))}
-          </Section>
-          <Section title="Leads needing follow-up" count={d.followUps.length} href="/leads" empty="No follow-ups due. Set a Follow-up date on a lead and it will show up here on the day.">
-            {d.followUps.slice(0, MAX_ROWS).map((l) => (
-              <Link key={l.id} href={`/leads/${l.id}`} className={row}>
-                <span className="min-w-0">
-                  <span className="block truncate font-medium text-gray-900">{l.name}</span>
-                  <span className="block truncate text-xs text-gray-500">
-                    Follow-up {formatDateOnly(l.followUpAt)}
-                    {l.followUpAt && l.followUpAt < d.today ? " (overdue)" : ""}
-                    {l.assignedTo ? ` · ${l.assignedTo.name}` : ""}
-                  </span>
-                </span>
-                <StatusPill value={l.status} />
               </Link>
             ))}
           </Section>

@@ -43,7 +43,7 @@ test.describe("Production polish", () => {
     await expect(page.getByRole("heading", { name: /^Good (morning|afternoon|evening), / })).toBeVisible();
     await expect(page.getByTestId("brief")).toContainText(/decisions? waiting|nothing waiting on you/);
     await expect(page.getByTestId("decisions").or(page.getByTestId("decisions-empty"))).toBeVisible();
-    await expect(page.getByTestId("section-overdue-reminders")).toBeVisible();
+    await expect(page.getByTestId("section-next-steps-overdue")).toBeVisible();
     await expect(page.getByTestId("hermes-feed")).toBeVisible();
   });
 

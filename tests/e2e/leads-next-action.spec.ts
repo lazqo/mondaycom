@@ -27,7 +27,8 @@ test("Next action beside Status: stage defaults, typed actions and the lost reas
 
   const row = page.locator("tr", { hasText: NAME });
   const cell = row.getByTestId("next-action");
-  await expect(cell).toHaveText("Contact the customer");
+  // The lead's one next step (src/lib/next-step.ts): contact them, due today.
+  await expect(cell).toHaveText(/^Contact Next/);
 
   // Won: convert it to a job.
   await row.getByLabel("Status").selectOption("won");

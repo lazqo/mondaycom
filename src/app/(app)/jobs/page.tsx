@@ -4,11 +4,16 @@ import { listJobs } from "@/queries";
 import { Badge, EmptyState, LinkButton } from "@/components/ui";
 import { JOB_STATUS_META } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
+import { nextStepsForJobs } from "@/queries/next-steps";
+import { dueLabel } from "@/lib/next-step";
+import { appDay } from "@/queries/dashboard";
 
 export const metadata: Metadata = { title: "Jobs" };
 
 export default async function JobsPage() {
   const jobs = await listJobs();
+  const today = appDay().today;
+  const steps = await nextStepsForJobs(jobs.map((j) => j.id));
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -31,6 +36,7 @@ export default async function JobsPage() {
                 <th className="px-3 py-2 text-left">Status</th>
                 <th className="px-3 py-2 text-left">Assigned</th>
                 <th className="px-3 py-2 text-left">Scheduled</th>
+                <th className="px-3 py-2 text-left">Next step</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -52,6 +58,19 @@ export default async function JobsPage() {
                   </td>
                   <td className="px-3 py-2 text-gray-700">{j.assignedTo?.name ?? "—"}</td>
                   <td className="px-3 py-2 text-gray-700">{j.events[0] ? formatDateTime(j.events[0].startsAt) : "—"}</td>
+                  <td className="px-3 py-2 text-gray-700" data-testid="job-step">
+                    {(() => {
+                      const s = steps.get(j.id);
+                      if (!s || s.kind === "closed") return "—";
+                      const when = dueLabel(s, today);
+                      return (
+                        <span className={s.overdue ? "font-medium text-red-600" : undefined}>
+                          {s.what}
+                          {when ? <span className="text-gray-500"> · {when}</span> : null}
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -16,7 +16,7 @@ const ITEMS: NavItem[] = [
   { label: "Hermes", href: "/inspector", icon: Sparkles, roles: ["admin", "member"] },
 ];
 const SETTINGS: NavItem[] = [
-  { label: "Reminders", href: "/settings/automations", icon: BellRing, roles: ["admin"] },
+  { label: "Next steps", href: "/settings/automations", icon: BellRing, roles: ["admin"] },
   { label: "Hermes", href: "/settings/hermes", icon: Sparkles, roles: ["admin"] },
   { label: "Email accounts", href: "/settings/mailboxes", icon: Mail, roles: ["admin"] },
   { label: "Calendar sync", href: "/settings/calendar", icon: CalendarSync, roles: ["admin"] },

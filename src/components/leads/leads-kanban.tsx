@@ -103,7 +103,8 @@ function DraggableCard({ row, today }: { row: LeadRow; today: string }) {
 }
 
 function LeadCard({ row, overlay, today }: { row: LeadRow; overlay?: boolean; today: string }) {
-  const action = nextActionFor(row, { today, siteVisits: row.events, quotes: row.quotes, jobs: row.jobs });
+  // The server works out the one next step; after an edit on the board, the stage default fills in until the page refreshes.
+  const action = row.nextStep ? { text: row.nextStep.text, kind: row.nextStep.typed ? ("typed" as const) : ("suggested" as const), overdue: row.nextStep.overdue } : nextActionFor(row, { today, siteVisits: row.events, quotes: row.quotes, jobs: row.jobs });
   return (
     <div
       className={cn(

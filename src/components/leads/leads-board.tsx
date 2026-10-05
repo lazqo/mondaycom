@@ -67,6 +67,8 @@ export function LeadsBoard({
           }
           // As on the server: a typed next action belongs to the stage it was written for.
           if (patch.nextAction !== undefined) next.nextActionFor = patch.nextAction ? next.status : null;
+          // The server's next step no longer fits an edited stage or note: the stage default shows until it refreshes.
+          if (patch.status !== undefined || patch.nextAction !== undefined || patch.lostReason !== undefined || patch.followUpAt !== undefined) next.nextStep = undefined;
           return next;
         }),
       );

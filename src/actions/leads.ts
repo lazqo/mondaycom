@@ -101,6 +101,7 @@ export async function createLead(input: unknown): Promise<ActionResult<{ id: str
     .values({
       ...parsed.data,
       status: parsed.data.status ?? "new",
+      followUpSetAt: parsed.data.followUpAt ? new Date() : null,
       nextActionFor: parsed.data.nextAction ? (parsed.data.status ?? "new") : null,
       source: parsed.data.source ?? "other",
       position: (maxPos ?? 0) + 1,
@@ -134,6 +135,8 @@ export async function updateLead(id: string, input: unknown): Promise<ActionResu
     if (value !== undefined && before !== value) changes[key] = { from: before, to: value };
   }
   if (Object.keys(changes).length === 0) return ok(undefined);
+  // A follow-up date set now applies to what has happened up to now (see src/lib/next-step.ts).
+  if (changes.followUpAt) data.followUpSetAt = new Date();
 
   await db
     .update(leads)

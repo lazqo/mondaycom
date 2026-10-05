@@ -100,7 +100,7 @@ export async function runCommand(c: Command, scope: CommandScope, opts: { actorI
       if (!when) return blocked(`I cannot place “${String(a.when ?? "")}” as a day.`);
       const prev = await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { followUpAt: true } });
       const day = when.toISOString().slice(0, 10);
-      await db.update(leads).set({ followUpAt: day, updatedAt: new Date() }).where(eq(leads.id, leadId));
+      await db.update(leads).set({ followUpAt: day, followUpSetAt: new Date(), updatedAt: new Date() }).where(eq(leads.id, leadId));
       await logActivity({ entity: "lead", entityId: leadId, ...actor, action: "updated", detail: { changes: { followUpAt: { from: prev?.followUpAt ?? null, to: day } }, via: "recording" } });
       return done(`Follow-up set to ${day}.`, { previous: prev?.followUpAt ?? null, undo: `set it back to ${prev?.followUpAt ?? "none"}` });
     }

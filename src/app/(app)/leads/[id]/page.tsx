@@ -9,7 +9,8 @@ import { getThreadForLead } from "@/queries/email";
 import { InspectorPanel } from "@/components/inspector/panel";
 import { LeadEmailCard } from "@/components/leads/lead-email-card";
 import { SiteVisitCard } from "@/components/leads/site-visit-card";
-import { nextActionFor } from "@/lib/leads/next-action";
+import { nextStepForLead } from "@/queries/next-steps";
+import { StepSummary } from "@/components/next-steps/step-line";
 import { appDay } from "@/queries/dashboard";
 import { JourneyBar } from "@/components/journey/journey-bar";
 import { buildJourney } from "@/lib/journey";
@@ -28,8 +29,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const [lead, users] = await Promise.all([getLead(id), listActiveUsers()]);
   if (!lead) notFound();
-  const [timeline, thread] = await Promise.all([getLeadTimeline(id), getThreadForLead(id)]);
-  const next = nextActionFor(lead, { today: appDay().today, siteVisits: lead.events.filter((e) => e.kind === "site_visit"), quotes: lead.quotes, jobs: lead.jobs });
+  const [timeline, thread, step] = await Promise.all([getLeadTimeline(id), getThreadForLead(id), nextStepForLead(id)]);
+  const today = appDay().today;
   const journey = buildJourney(
     {
       lead: { id: lead.id, status: lead.status, contactId: lead.contactId },
@@ -93,10 +94,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         <div className="space-y-4 lg:col-span-2">
           <Card className="p-4 text-sm" data-testid="lead-next-action">
             {lead.summary ? <p className="mb-1 text-gray-900">{lead.summary}</p> : null}
-            <p className={next.overdue ? "text-xs font-medium text-red-600" : "text-xs text-gray-600"}>
-              {lead.status === "lost" ? "Lost reason" : "Next action"}: <span className={next.kind === "typed" ? "text-gray-900" : undefined}>{next.text}</span>
-              {next.kind === "suggested" ? <span className="text-gray-400"> (suggested)</span> : null}
-            </p>
+            {step ? lead.status === "lost" ? <p className="text-xs text-gray-600">Lost reason: {step.what}</p> : <StepSummary step={step} today={today} /> : null}
           </Card>
           <LeadEmailCard thread={thread} />
           <Timeline
@@ -113,7 +111,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           <Card>
             <CardHeader title="Details" />
             <div className="p-4">
-              <LeadForm lead={lead} users={users} suggestion={next.kind === "suggested" ? next.text : null} />
+              <LeadForm lead={lead} users={users} suggestion={step && step.kind !== "typed" && step.kind !== "closed" ? step.what : null} />
             </div>
           </Card>
           <Card>

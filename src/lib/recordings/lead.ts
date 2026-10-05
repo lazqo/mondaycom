@@ -35,6 +35,7 @@ export async function createLeadFromRecording(recordingId: string, opts: { actor
         assignedToId: opts.assignedToId ?? null,
         lastContactAt: dateInAppTz(at),
         followUpAt: nextBusinessDay(at),
+        followUpSetAt: new Date(),
         notes: `From recorded conversation: ${r.title}`,
         position: (maxPos ?? 0) + 1,
         createdById: opts.actorId,
