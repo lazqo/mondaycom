@@ -371,6 +371,82 @@ confirmed by Hermes; an indicative quote always carries its wording; a price fro
 never approved by an agent above the threshold), the secret scan, and the restricted Inspector
 profile.
 
+## 6a. Revised plan after the first live week (6 October)
+
+What the live readings showed: Hermes reads well; the CRM's rules after the reading are too strict
+in three general ways; reminders are noise; the site shows everything everywhere. Five runs, each
+shippable and tested, in this order.
+
+### Run A: file it right, book it right, take commands (this week)
+1. **Recordings create leads.** A new enquirer on a call becomes a lead from Hermes's reading
+   (name, phone, service, site), the same path as an email; the Brain runs.
+2. **Unknown work is new work.** "Existing work" with no matching record anywhere in the CRM
+   becomes a lead (company, site, contact from the reading) and the work continues there.
+3. **Stated times and streets.** A time the customer or Chris states is the first slot; free slots
+   are offered only when no time was given. A street without a number places a message when only
+   one open record is on that street. A note of Chris's own appointment ("install today at 3 pm at
+   Great South Road") is a booking proposal that can be pencilled with no customer attached and
+   filed later.
+4. **Calendar-aware proposals.** Every proposed or stated time is checked against the calendar;
+   a clash is said plainly and the next free time offered. Durations come from what the work is:
+   site visit 60 min, service call 90 min, install from the Business Brain's labour estimate
+   (hours per camera / package), all editable in Settings → Schedule.
+5. **Plaud as the command channel.** A recording is Chris's own voice, so it is the one source the
+   CRM treats as an operator, not a correspondent. Hermes reads commands from it ("move Tim's
+   visit to Thursday 3 pm", "mark Campbell's job done", "add a note to Rowena: two extra cameras",
+   "remove the follow-up for Denis", "price the Nympha quote at $1,850") and carries them out
+   through the same actions and guardrails: reversible changes are done and shown in the feed
+   (undo on the timeline); anything irreversible or customer-facing (cancelling a job, deleting a
+   record, sending anything, a price) is a one-click proposal. Commands about money go through the
+   pricing path as Chris's own entry. A command Hermes cannot place becomes a question card.
+6. **The Hermes page back in the menu** (it was folded into Home's "Every reading →" link; it
+   belongs in the nav).
+
+### Run B: one next step per record (reminders that mean something)
+Today reminders come from a rules engine ("no contact in N days", "quote sent, not followed up")
+that fires per rule, so a lead can carry several and none of them reacts to what happened since:
+41 overdue is the symptom.
+- Every lead and job carries exactly **one next step** (what, who, when) derived from its state and
+  Hermes's latest reading: "Call Denis before Friday 2 pm", "Approve Q-1006", "Site visit Thu 3
+  pm", "Nothing until the customer sends photos".
+- **Anything that happens on the record supersedes it.** A reply, a call, a recording, a visit
+  held, a quote approved: the next step is recomputed and the old reminder disappears or is
+  replaced. Commitments (ours and theirs) are the inputs, not separate reminders.
+- The automations rules become Hermes's daily checklist (quotes unanswered, leads untouched,
+  visits without an outcome, jobs done but not invoiced), producing next steps, never duplicates.
+- Home shows next steps due today and overdue, one line each; the Reminders page becomes "Next
+  steps" with a reason per line. The 41 are recomputed once, with a summary for Chris before
+  anything is closed.
+
+### Run C: an inbox that says what each email is and what to do
+- Each email shows Hermes's reading as a category (customer, existing work, supplier, accounting,
+  marketing, provider, internal) and its **suggested next action** with one click to do it; the
+  filing labels ("Not a lead", "Known customer") stop being the headline.
+- Filters by category; "Needs attention" only when Hermes says so, with the reason.
+- Accounting mail (statements, invoices, remittances) gets its own list that feeds Money (Phase 4).
+
+### Run D: a dial Chris can reason about
+Three positions, **Careful / Normal / Autonomous**, with presets for every class; the per-class
+table moves under "Advanced". Normal is the default and what the readings above assume (internal
+work goes ahead; quotes and replies wait for a click; bookings ask first). Hermes's confidence
+is shown as a plain word on each card ("sure", "fairly sure", "guessing") and a reading below the
+position's bar says why it waited.
+
+### Run E: the site (Phase 5, pulled forward)
+- Menu: **Home · Work · Customers · Schedule · Inbox · Money · Hermes · Settings**. Work holds the
+  pipeline and jobs as one board (lead → quote → job → done); Schedule is the calendar with
+  dispatch and My day; Hermes holds every reading, questions, lessons and the dial.
+- A record page is three tabs: **Now** (next step, open decisions, what Hermes did), **History**
+  (the timeline), **Details** (fields, facts, documents, quotes). Nothing is repeated across tabs.
+- Home is the brief and the Decisions queue only; today's calendar and next steps in one strip;
+  everything else is a link. Technicians see Schedule and My day only.
+
+### Order and dependencies
+A is independent and first. B needs A's booking/command actions. C needs nothing from B but is
+better after it (next steps show in the inbox row). D is small and can ride with C. E last, so it
+is built on the final data model. Each run ends with unit, integration and e2e tests, the hermes
+invariants extended, the handoff updated, and CI green.
+
 ## 7. What I need from Chris before Phase 2
 
 1. **Clear Digital**: a trade login exists? It will be entered once in Settings → Knowledge →
