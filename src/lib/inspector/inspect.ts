@@ -18,7 +18,7 @@ import { createLeadFromEmail, markEmailNotLead } from "@/lib/email/pipeline";
 import { type Actor, assertApprover, GuardrailError } from "@/lib/guard/actor";
 import { NON_CUSTOMER_CONTEXTS, type HermesResult } from "@/lib/hermes/contract";
 import { decideFact, diffFacts, storeFacts } from "./facts";
-import { decideIdentity, mergeCandidates } from "./identity";
+import { decideIdentity, maybeKnown as maybeKnownPerson, mergeCandidates } from "./identity";
 import { recordFeedback } from "./feedback";
 import { HERMES_ACTION_LABELS } from "./labels";
 import { alreadyInHand, routeActions, type RoutedAction } from "./router";
@@ -38,7 +38,7 @@ import { bookEvent } from "@/lib/calendar/book";
 import { TZ } from "./dates";
 import { createTask } from "./work";
 import { createLeadFromRecording } from "@/lib/recordings/lead";
-import { INSPECTOR_VERSION, type IdentityCandidate, type IdentityResult, type InspectorInput, type PlannedAction, type SourceType, type Understanding } from "./types";
+import { INSPECTOR_VERSION, type IdentityResult, type InspectorInput, type PlannedAction, type SourceType, type Understanding } from "./types";
 
 export type InspectOutcome = {
   inspectionId: string;
@@ -607,11 +607,8 @@ async function applyLeadDecision(h: HermesResult, input: InspectorInput, u: Unde
   const reachable = !!(draft.phone || draft.email || draft.site_address);
   const substantial = unknownWork ? named && reachable : input.sourceType === "recording" ? named || !!draft.phone : true;
   // Someone in the CRM may already be this person: creating another lead would duplicate them, so
-  // Chris chooses between the candidate and a new lead. On a call the name is often all there is,
-  // so a name alone counts; an email comes from an address the CRM does not know, so a name alone
-  // is a coincidence (common names) until something else agrees: the site, the company, a job.
-  const knownBy = (c: IdentityCandidate) => input.sourceType === "recording" || c.signals.some((s) => s.kind !== "name");
-  const maybeKnown = identity.status !== "matched" && identity.candidates.some(knownBy);
+  // Chris chooses between the candidate and a new lead (the one rule in identity.ts).
+  const maybeKnown = maybeKnownPerson(input.sourceType, identity);
   if (input.sourceType === "recording") {
     const r = await db.query.recordings.findFirst({ where: eq(recordings.id, input.sourceId), columns: { id: true, leadId: true, contactId: true } });
     if (!r || r.leadId || r.contactId || decision !== "lead") return null;

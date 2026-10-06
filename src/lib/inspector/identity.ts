@@ -63,6 +63,18 @@ export function mergeCandidates(raw: { leadId: string | null; contactId: string 
   return out.sort((a, b) => b.score - a.score);
 }
 
+/**
+ * Someone the CRM already has may be this person, so a lead from this reading would be a
+ * duplicate: Chris chooses between the candidate and a new lead. On a call the name is often all
+ * there is, so a name alone counts; an email comes from an address the CRM does not know, so a
+ * name alone is a coincidence (common names) until something else agrees: the site, the company,
+ * a job, a number that fits.
+ */
+export function maybeKnown(sourceType: "email" | "recording", identity: IdentityResult): boolean {
+  if (identity.status === "matched") return false;
+  return identity.candidates.some((c) => sourceType === "recording" || c.signals.some((s) => s.kind !== "name"));
+}
+
 export function decideIdentity(candidates: IdentityCandidate[], opts: { allowNew: boolean }): IdentityResult {
   const [top, second] = candidates;
   if (!top) {

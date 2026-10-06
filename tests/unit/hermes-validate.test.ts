@@ -83,6 +83,19 @@ describe("hard guardrails", () => {
     expect(v.decisions.filter((d) => !d.allowed).map((d) => d.rule)).toEqual(["needs_record", "needs_record"]);
   });
 
+  it("a name-only candidate on a call: the lead is only proposed, so the Business Brain waits with the who-is-this question (the hermes:check situation)", () => {
+    const i = input("Speaker 1: Hi it's Chris from Get Secure.\nSpeaker 2: Hi, Hemi Walker here. We want 4 cameras for the house, single storey.", { sourceType: "recording", direction: "conversation", from: { name: null, email: null, phone: null }, linked: { leadId: null, contactId: null, jobId: null, how: null } });
+    const nameOnly: IdentityResult = { status: "needs_review", chosen: null, candidates: [{ leadId: "L9", contactId: null, jobId: null, label: "Hemi Walker", score: 0.2, signals: [{ kind: "name", detail: "name Hemi Walker", weight: 0.2 }] }], confidence: 0.2, reason: "Only name evidence." };
+    const h = H({ lead_decision: "lead", recommended_action: "RUN_BUSINESS_BRAIN", run_business_brain: true, confidence: 0.93, facts: [{ key: "camera_count", value: 4, evidence: "4 cameras", confidence: 0.9 }, { key: "storeys", value: 1, evidence: "single storey", confidence: 0.9 }] });
+    const v = validateHermes(h, ctx(i, { identity: nameOnly, crm: { leadId: null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null } }));
+    expect(types(v)).not.toContain("RUN_BUSINESS_BRAIN");
+    expect(v.reviewKind).toBe("identity");
+    expect(v.decisions.find((d) => d.action === "RUN_BUSINESS_BRAIN")).toMatchObject({ allowed: false, rule: "needs_record" });
+    // The same name on an email is a coincidence: the lead is created and the Brain runs against it.
+    const byEmail = validateHermes(h, ctx(input("Hemi Walker here. 4 cameras for the house, single storey.", { linked: { leadId: null, contactId: null, jobId: null, how: null } }), { identity: nameOnly, crm: { leadId: null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null } }));
+    expect(types(byEmail)).toContain("RUN_BUSINESS_BRAIN");
+  });
+
   it("an enquiry closed without CRM evidence goes to Chris with the question to decide", () => {
     const v = validateHermes(H({ recommended_action: "NO_ACTION" }), ctx(input("Interested in cameras")));
     expect(v.reviewKind).toBe("hermes_flagged");

@@ -31,6 +31,7 @@ import { AUTONOMY_DEFAULTS, dialFor, type AutonomySettings } from "@/lib/hermes/
 import { BUSINESS_CONTEXT_LABELS } from "./labels";
 import { resolveDue, clockTime } from "./dates";
 import { applySpelling, normalisePhone, spelledWordsIn, toNumber } from "./text";
+import { maybeKnown } from "./identity";
 import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, Known, MissingInfo, PlannedAction, Understanding } from "./types";
 
 export type ValidateContext = {
@@ -580,7 +581,10 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   }
 
   // ---- GUARDRAIL: identity. Only actions that need a record wait for it; the rest goes ahead ----
-  const willHaveLead = h.lead_decision === "lead" && h.confidence >= leadThreshold;
+  // A lead Hermes is sure about is created from this reading and the work runs against it, unless
+  // someone the CRM has may already be this person: then the lead is only proposed to Chris, so
+  // what needs a record waits with the "who is this?" question.
+  const willHaveLead = h.lead_decision === "lead" && h.confidence >= leadThreshold && !maybeKnown(input.sourceType, identity);
   const need = { lead: records.lead || willHaveLead, work: records.work || willHaveLead };
   const needsRecord = (p: PlannedAction) => lacksRecord(p.type, need) && !p.payload.standalone;
   const waiting = planned.filter(needsRecord);
