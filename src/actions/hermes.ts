@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
-import { AUTONOMY_LEVELS, DIAL_CLASSES, saveHermesAutonomy, type AutonomySettings } from "@/lib/hermes/autonomy";
+import { AUTONOMY_LEVELS, DIAL_CLASSES, DIAL_POSITIONS, PRESETS, saveHermesAutonomy, type AutonomySettings } from "@/lib/hermes/autonomy";
 
 const input = z.object({
   levels: z.partialRecord(z.enum(DIAL_CLASSES), z.enum(AUTONOMY_LEVELS)).default({}),
@@ -18,6 +18,20 @@ export async function saveHermesAutonomyAction(raw: unknown): Promise<ActionResu
   if (!parsed.success) return fail(`${parsed.error.issues[0]?.path.join(".")}: ${parsed.error.issues[0]?.message}`);
   try {
     const next = await saveHermesAutonomy(parsed.data as Partial<AutonomySettings>);
+    revalidatePath("/settings/hermes");
+    return ok(next);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** Chris picks a position (Careful / Normal / Autonomous): its preset is saved for every class. */
+export async function applyHermesPresetAction(raw: unknown): Promise<ActionResult<AutonomySettings>> {
+  await requireAdmin();
+  const parsed = z.enum(DIAL_POSITIONS).safeParse(raw);
+  if (!parsed.success) return fail("Choose Careful, Normal or Autonomous");
+  try {
+    const next = await saveHermesAutonomy(PRESETS[parsed.data]);
     revalidatePath("/settings/hermes");
     return ok(next);
   } catch (err) {

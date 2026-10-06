@@ -456,6 +456,14 @@ table moves under "Advanced". Normal is the default and what the readings above 
 work goes ahead; quotes and replies wait for a click; bookings ask first). Hermes's confidence
 is shown as a plain word on each card ("sure", "fairly sure", "guessing") and a reading below the
 position's bar says why it waited.
+*Delivered.* Settings → Hermes opens with the three positions as cards (one click applies the
+preset for every class and saves it); the per-class table sits under "Advanced", and a change
+there makes the position "Custom". Careful raises every confidence bar (leads 80%, facts 85%,
+quotes and replies 80%, bookings 85%); Normal is the defaults; Autonomous lowers them (internal
+work 30%, leads 50%, quotes and replies 50%, bookings 60% as "do, then ask"). No position ever
+lets Hermes send or confirm anything. Every awaiting card and question shows Hermes's confidence
+as a word (sure / fairly sure / guessing). Under the dial, "Why Hermes waited this week" counts
+the readings the dial held in the last 7 days, by class, with the last five and their reason.
 
 ### Run E: the site (Phase 5, pulled forward)
 - Menu: **Home · Work · Customers · Schedule · Inbox · Money · Hermes · Settings**. Work holds the

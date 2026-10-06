@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { count, desc, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { inspectorQueue, inspectorRuns } from "@/db/schema";
+import { inspections, inspectorQueue, inspectorRuns } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
-import { hermesAutonomy } from "@/lib/hermes/autonomy";
+import { hermesAutonomy, DIAL_LABELS, type DialClass } from "@/lib/hermes/autonomy";
+import { AUTHORITY } from "@/lib/hermes/authority";
+import type { ActionType } from "@/lib/inspector/types";
 import { HARD_GUARDRAILS } from "@/lib/hermes/authority";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { HermesAutonomyForm } from "@/components/settings/hermes-autonomy";
@@ -26,6 +28,24 @@ export default async function HermesSettingsPage() {
     db.select({ waiting: count(), retrying: sql<number>`count(*) filter (where ${inspectorQueue.attempts} > 0)` }).from(inspectorQueue),
   ]);
   const research = !!process.env.HERMES_RESEARCH_API_URL && !!process.env.HERMES_RESEARCH_API_KEY;
+  // Why Hermes waited this week: readings the dial held (below the confidence needed) or refused.
+  const recent = await db.query.inspections.findMany({ where: gte(inspections.createdAt, since), columns: { id: true, summary: true, validation: true, createdAt: true, sourceType: true }, orderBy: [desc(inspections.createdAt)], limit: 300 });
+  const held = { count: 0, byClass: new Map<string, number>(), refused: 0, examples: [] as { at: Date; summary: string; message: string }[] };
+  for (const r of recent) {
+    const v = r.validation as { hard?: { rule: string; message: string }[]; decisions?: { action: string; allowed: boolean; rule: string }[] } | null;
+    if (!v) continue;
+    const low = v.hard?.find((h) => h.rule === "low_confidence");
+    if (low) {
+      held.count++;
+      for (const d of v.decisions ?? []) if (d.rule === "low_confidence") {
+        const cls = AUTHORITY[d.action as ActionType]?.class;
+        const label = cls && cls in DIAL_LABELS ? DIAL_LABELS[cls as DialClass].label : null;
+        if (label) held.byClass.set(label, (held.byClass.get(label) ?? 0) + 1);
+      }
+      if (held.examples.length < 5) held.examples.push({ at: r.createdAt, summary: r.summary, message: low.message });
+    }
+    if (v.hard?.some((h) => h.rule === "autonomy_never")) held.refused++;
+  }
   return (
     <div className="space-y-4">
       <div>
@@ -65,9 +85,30 @@ export default async function HermesSettingsPage() {
       <Card>
         <CardHeader title="How far Hermes goes on its own" />
         <p className="px-4 pt-3 text-xs text-gray-600">
-          “Do it”: Hermes does it and it shows on Home; you can undo it. “Do it, then ask me”: the work is done and the result waits for your click (a quote, a reply). “Ask me first”: nothing happens until you say so. Below the confidence, the action waits for you with Hermes’s plan attached.
+          Pick a position. Careful waits for you more; Normal is what the CRM assumes; Autonomous lets Hermes act on less certainty. Whatever the position, a quote, a reply or a booking is never sent or confirmed by Hermes. Under Advanced, each class has its own level (“Do it”, “Do it, then ask me”, “Ask me first”, “Never”) and the confidence it needs; below that confidence the action waits for you with Hermes’s plan attached.
         </p>
         <HermesAutonomyForm initial={autonomy} />
+        <div className="border-t border-gray-100 px-4 py-3 text-sm" data-testid="why-waited">
+          <p className="font-medium text-gray-900">Why Hermes waited this week</p>
+          {held.count === 0 && held.refused === 0 ? (
+            <p className="text-xs text-gray-600">Nothing was held back by the dial in the last 7 days{Number(stats.runs) ? "" : " (no readings yet)"}.</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-600">
+                {held.count} reading{held.count === 1 ? "" : "s"} waited for you because Hermes was below the confidence the dial needs
+                {held.byClass.size ? ` (${[...held.byClass.entries()].map(([k, n]) => `${k} ×${n}`).join(", ")})` : ""}
+                {held.refused ? `; ${held.refused} had work switched off` : ""}. A lower bar on the class, or the Autonomous position, would let these through.
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs text-gray-600">
+                {held.examples.map((e, i) => (
+                  <li key={i}>
+                    {formatDateTime(e.at)} · {e.summary || "(no summary)"} · <span className="text-gray-500">{e.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </Card>
     </div>
   );

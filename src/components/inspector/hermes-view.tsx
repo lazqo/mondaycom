@@ -1,3 +1,4 @@
+import { confidenceWord } from "@/lib/hermes/dial";
 import Link from "next/link";
 import { Badge } from "@/components/ui";
 import type { Inspection, InspectorActionRow } from "@/db/schema";
@@ -76,7 +77,7 @@ export function HermesView({ inspection, actions, compact = false }: { inspectio
             <span className="text-gray-500">Recommended next action: </span>
             <span className="font-semibold text-gray-900">{HERMES_ACTION_LABELS[h.recommended_action] ?? h.recommended_action}</span>
             <span className="text-gray-500"> · Confidence: </span>
-            <span className="font-medium text-gray-900">{pct(h.confidence)}</span>
+            <span className="font-medium text-gray-900">{confidenceWord(h.confidence) ?? "unknown"} ({pct(h.confidence)})</span>
           </p>
           <p className="text-gray-700">
             <span className="text-gray-500">Reason: </span>

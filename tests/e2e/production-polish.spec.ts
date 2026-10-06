@@ -47,6 +47,27 @@ test.describe("Production polish", () => {
     await expect(page.getByTestId("hermes-feed")).toBeVisible();
   });
 
+  test("Settings → Hermes: the dial has three positions; a hand-set table is Custom", async ({ page }) => {
+    await login(page);
+    await page.goto("/settings/hermes");
+    const dial = page.getByTestId("hermes-autonomy");
+    await expect(dial).toBeVisible();
+    await dial.getByTestId("position-careful").click();
+    await expect(page.getByTestId("position-now")).toContainText("Careful");
+    await expect(dial).toHaveAttribute("data-position", "careful");
+    await page.reload();
+    await expect(page.getByTestId("hermes-autonomy")).toHaveAttribute("data-position", "careful");
+    // Advanced: a change by hand makes it Custom; back to Normal with one click.
+    await page.getByTestId("toggle-advanced").click();
+    await page.getByLabel("Internal work level").selectOption("ask_first");
+    await expect(page.getByTestId("position-now")).toContainText("Custom");
+    await page.getByTestId("save-autonomy").click();
+    await expect(page.getByText(/^Saved\./)).toBeVisible();
+    await page.getByTestId("position-normal").click();
+    await expect(page.getByTestId("position-now")).toContainText("Normal");
+    await expect(page.getByTestId("why-waited")).toBeVisible();
+  });
+
   test("global search finds a customer by name, phone digits, email and address", async ({ page }) => {
     await login(page);
     await page.goto("/contacts");

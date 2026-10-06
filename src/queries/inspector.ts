@@ -64,7 +64,7 @@ export type ReviewItem = {
   /** The review's own action (NEEDS_REVIEW), with Hermes's recommendation in its payload. */
   reviewAction: InspectorActionRow | null;
 };
-export type AwaitingItem = { action: InspectorActionRow; source: SourceRef | null; subject: Subject };
+export type AwaitingItem = { action: InspectorActionRow; source: SourceRef | null; subject: Subject; /** Hermes's confidence in the reading this came from. */ confidence: number | null };
 export type ConflictItem = { fact: Fact; source: SourceRef | null; subject: Subject };
 export type CommitmentItem = { commitment: CommitmentRow; source: SourceRef | null; subject: Subject };
 
@@ -83,7 +83,7 @@ export async function getInspectorQueue() {
   const reviewActions = review.length
     ? await db.query.inspectorActions.findMany({ where: and(inArray(inspectorActions.inspectionId, ids(review.map((r) => r.id))), eq(inspectorActions.type, "NEEDS_REVIEW"), eq(inspectorActions.status, "awaiting_approval")) })
     : [];
-  const actionInspections = awaiting.length ? await db.select({ id: inspections.id, sourceType: inspections.sourceType, sourceId: inspections.sourceId }).from(inspections).where(inArray(inspections.id, ids(awaiting.map((a) => a.inspectionId)))) : [];
+  const actionInspections = awaiting.length ? await db.select({ id: inspections.id, sourceType: inspections.sourceType, sourceId: inspections.sourceId, confidence: sql<string | null>`${inspections.hermes}->>'confidence'` }).from(inspections).where(inArray(inspections.id, ids(awaiting.map((a) => a.inspectionId)))) : [];
   const insById = new Map(actionInspections.map((i) => [i.id, i]));
   const src = await sourcesFor([...review, ...conflicts.map((f) => ({ sourceType: f.sourceType, sourceId: f.sourceId })), ...actionInspections]);
   const candidateLists = review.map((r) => ((r.identity as unknown as IdentityResult).candidates ?? []).slice(0, 5));
@@ -113,7 +113,7 @@ export async function getInspectorQueue() {
     ),
     awaiting: awaiting.map((a): AwaitingItem => {
       const ins = insById.get(a.inspectionId);
-      return { action: a, source: ins ? (src.get(ins.sourceId) ?? null) : null, subject: subjectOf(n, a) };
+      return { action: a, source: ins ? (src.get(ins.sourceId) ?? null) : null, subject: subjectOf(n, a), confidence: ins?.confidence != null ? Number(ins.confidence) : null };
     }),
     conflicts: conflicts.map((f): ConflictItem => ({ fact: f, source: src.get(f.sourceId) ?? null, subject: subjectOf(n, f) })),
   };
@@ -199,7 +199,7 @@ export async function getInspectorPanel(scope: { leadId?: string | null; jobId?:
   const latestActions = latest ? await db.query.inspectorActions.findMany({ where: eq(inspectorActions.inspectionId, latest.id), orderBy: [asc(inspectorActions.createdAt)] }) : [];
   return {
     latest: latest ? { inspection: latest, source: src.get(latest.sourceId) ?? null, understanding: latest.understanding as unknown as Understanding, actions: latestActions } : null,
-    awaiting: awaiting.map((a): AwaitingItem => ({ action: a, source: null, subject: null })),
+    awaiting: awaiting.map((a): AwaitingItem => ({ action: a, source: null, subject: null, confidence: latest?.hermes && a.inspectionId === latest.id ? Number((latest.hermes as { confidence?: number }).confidence ?? 0) || null : null })),
     conflicts: conflicts.map((f): ConflictItem => ({ fact: f, source: src.get(f.sourceId) ?? null, subject: null })),
     commitments: commitmentItems,
   };

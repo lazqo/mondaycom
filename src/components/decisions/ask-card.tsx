@@ -7,6 +7,7 @@ import { answerQuestionAction, dismissInspectorAction } from "@/actions/inspecto
 import { Badge, Button, Input } from "@/components/ui";
 import { sourceLabel } from "@/components/inspector/views";
 import { ACTION_LABELS } from "@/lib/inspector/labels";
+import { confidenceWord } from "@/lib/hermes/dial";
 import type { ActionType } from "@/lib/inspector/types";
 import type { AwaitingItem } from "@/queries/inspector";
 
@@ -74,6 +75,7 @@ export function AskCard({ item, canApprove }: { item: AwaitingItem; canApprove: 
     <div className="space-y-2 px-4 py-3 text-sm" data-testid="hermes-question">
       <p className="font-medium text-gray-900">{p.question ?? a.reason}</p>
       <p className="text-xs text-gray-600">
+        {confidenceWord(item.confidence) ? <span data-testid="confidence-word">Hermes is {confidenceWord(item.confidence)} about the rest. </span> : null}
         {p.why || (a.reason !== p.question ? a.reason : null)}
         {unblocks.length ? ` Unblocks: ${unblocks.join(", ")}.` : ""}
         {p.learn ? " Your answer will be remembered for every future reading." : ""}

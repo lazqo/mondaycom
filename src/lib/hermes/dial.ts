@@ -62,3 +62,55 @@ export function normaliseAutonomy(raw: Partial<AutonomySettings> | null | undefi
 export function dialFor(settings: AutonomySettings, cls: CapabilityClass): { level: AutonomyLevel; threshold: number } | null {
   return (DIAL_CLASSES as readonly string[]).includes(cls) ? { level: settings.levels[cls as DialClass], threshold: settings.thresholds[cls as DialClass] } : null;
 }
+
+// ---------------- the three positions ----------------
+
+/** The dial as Chris reasons about it: three positions with a preset for every class. */
+export const DIAL_POSITIONS = ["careful", "normal", "autonomous"] as const;
+export type DialPosition = (typeof DIAL_POSITIONS)[number];
+
+export const POSITION_LABELS: Record<DialPosition, { label: string; summary: string; detail: string }> = {
+  careful: {
+    label: "Careful",
+    summary: "Hermes does the internal work only when it is sure; everything else waits for you.",
+    detail: "Tasks and notes still happen, but leads, facts, quotes and bookings all need a higher confidence or your click. Most readings will wait for you.",
+  },
+  normal: {
+    label: "Normal",
+    summary: "Internal work goes ahead; quotes and replies wait for a click; bookings ask first.",
+    detail: "What the CRM assumes. Hermes files, makes tasks and runs the Brain on its own, prepares quotes and replies for your click, and proposes visits and bookings for you to pencil in.",
+  },
+  autonomous: {
+    label: "Autonomous",
+    summary: "Hermes does everything it may, with less certainty, and shows you the result.",
+    detail: "Lower confidence bars across the board. Quotes, replies and bookings are still never sent or confirmed by Hermes: those stay your click, whatever the position.",
+  },
+};
+
+export const PRESETS: Record<DialPosition, AutonomySettings> = {
+  careful: {
+    levels: { internal_record: "do", internal_work: "do", operational_state: "do", record_data: "do", business_brain: "do", research: "do", prepare_customer_facing: "do_and_ask", proposal: "ask_first" },
+    thresholds: { internal_record: 0.3, internal_work: 0.6, operational_state: 0.8, record_data: 0.85, business_brain: 0.7, research: 0.7, prepare_customer_facing: 0.8, proposal: 0.85 },
+  },
+  normal: AUTONOMY_DEFAULTS,
+  autonomous: {
+    levels: { internal_record: "do", internal_work: "do", operational_state: "do", record_data: "do", business_brain: "do", research: "do", prepare_customer_facing: "do_and_ask", proposal: "do_and_ask" },
+    thresholds: { internal_record: 0.3, internal_work: 0.3, operational_state: 0.5, record_data: 0.6, business_brain: 0.5, research: 0.4, prepare_customer_facing: 0.5, proposal: 0.6 },
+  },
+};
+
+/** Which position the saved dial is on, or "custom" when the per-class table was changed by hand. */
+export function positionOf(settings: AutonomySettings): DialPosition | "custom" {
+  for (const p of DIAL_POSITIONS) {
+    const preset = PRESETS[p];
+    if (DIAL_CLASSES.every((c) => settings.levels[c] === preset.levels[c] && Math.abs(settings.thresholds[c] - preset.thresholds[c]) < 0.005)) return p;
+  }
+  return "custom";
+}
+
+/** Hermes's confidence as a plain word for a card. */
+export function confidenceWord(c: number | string | null | undefined): "sure" | "fairly sure" | "guessing" | null {
+  const n = Number(c);
+  if (!(n > 0)) return null;
+  return n >= 0.85 ? "sure" : n >= 0.6 ? "fairly sure" : "guessing";
+}

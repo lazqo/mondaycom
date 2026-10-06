@@ -6,6 +6,7 @@ import { formatDateTime } from "@/lib/utils";
 import type { CommitmentItem, ConflictItem, AwaitingItem } from "@/queries/inspector";
 import type { ActionType, FactKey, Understanding } from "@/lib/inspector/types";
 import { ACCEPT_LABELS, ACTION_LABELS, FACT_LABELS } from "@/lib/inspector/labels";
+import { confidenceWord } from "@/lib/hermes/dial";
 
 export { ACCEPT_LABELS, ACTION_LABELS, FACT_LABELS };
 import { ActionDecision, CommitmentButtons, FactDecision } from "./controls";
@@ -106,6 +107,11 @@ export function AwaitingLine({ item, canApprove, showSubject = true }: { item: A
         {a.reason}
       </p>
       <p className="text-xs text-gray-500">
+        {confidenceWord(item.confidence) ? (
+          <span data-testid="confidence-word" title={`Hermes's confidence: ${Math.round((item.confidence ?? 0) * 100)}%`}>
+            Hermes is {confidenceWord(item.confidence)} ·{" "}
+          </span>
+        ) : null}
         Rule: {a.rule.replace(/_/g, " ")}
         {showSubject && item.subject ? (
           <>

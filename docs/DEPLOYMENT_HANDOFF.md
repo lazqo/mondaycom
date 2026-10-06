@@ -1444,6 +1444,16 @@ its card on Home. The filing labels (lead, not a lead, existing) still drive the
 shown under the headline on the thread page. The Accounting tab is the list Money (Phase 4) will
 read.
 
+**The dial has three positions (Run D).** Settings → Hermes opens with Careful, Normal and
+Autonomous as cards; one click applies that preset to every class and saves it. Normal is the
+defaults the CRM assumes. Careful raises every confidence bar so more readings wait for Chris;
+Autonomous lowers them and lets bookings be pencilled "do, then ask". No position lets Hermes
+send a quote or reply, confirm a visit or booking, price, discount or accept terms: those floors
+are in code. The per-class table (level and confidence per class) is under Advanced; a change
+there makes the position Custom. Each awaiting card and question shows Hermes's confidence as a
+word (sure / fairly sure / guessing), and "Why Hermes waited this week" under the dial lists the
+readings the dial held in the last 7 days, by class, with their reason.
+
 ## 18. Leads: Next action and Lost reason
 
 The Leads table has a **Next action** column beside Status (also shown on Kanban cards and the lead

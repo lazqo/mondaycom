@@ -142,7 +142,7 @@ test.describe("Lead + Conversation Inspector", () => {
     await expect(row).toContainText("Prepare quote");
     await row.locator("summary").click();
     await expect(row.getByTestId("hermes-recommendation")).toContainText("Recommended next action: Prepare quote");
-    await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: 92%");
+    await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: sure (92%)");
     await expect(row).toContainText("Cameras: 4");
     await row.getByRole("link", { name: NAME }).click();
     await page.waitForURL(/\/leads\/[0-9a-f-]{36}$/);
@@ -260,7 +260,7 @@ test.describe("Lead + Conversation Inspector", () => {
     await expect(row).not.toContainText("No action");
     await row.locator("summary").click();
     await expect(row.getByTestId("hermes-recommendation")).toContainText("Recommended next action: Prepare quote");
-    await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: 94%");
+    await expect(row.getByTestId("hermes-recommendation")).toContainText("Confidence: sure (94%)");
   });
 
   test("8. Hermes asks on Home; the answer is used; a visit is pencilled from a proposed slot", async ({ page }) => {
