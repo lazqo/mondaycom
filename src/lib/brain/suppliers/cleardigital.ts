@@ -14,7 +14,7 @@
  * - Login failures are reported as fixed reasons; the site's own message is never passed on.
  */
 import { ConnectorError, type WebResponse, type WebSession } from "./web-session";
-import { allByClass, amountOf, basisOf, CAPTCHA_RE, decodeEntities, elementByClass, MFA_RE, textOf, type CatalogueEntry, type ParsedProductPage, type PriceBasis } from "./html";
+import { allByClass, amountsIn, basisOf, CAPTCHA_RE, decodeEntities, elementByClass, MFA_RE, pageSketch, priceBlocks, textOf, type CatalogueEntry, type ParsedProductPage, type PriceBasis } from "./html";
 import type { SupplierSite } from "./site";
 
 export const CLEARDIGITAL_CONNECTOR = "cleardigital";
@@ -137,6 +137,15 @@ export function siteBasisOf(html: string): PriceBasis | null {
   return bases.length === 1 ? bases[0] : null;
 }
 
+/** The cells of each row of the first table in a fragment, as text. */
+function tableRows(html: string): string[][] {
+  const table = html.match(/<table\b[\s\S]*?<\/table>/i)?.[0];
+  if (!table) return [];
+  return [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((r) => [...r[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((c) => textOf(c[1])));
+}
+
+const BRANCH = (h: string) => h.replace(/\b(north|south)\s+island\b/gi, "").replace(/\s+/g, " ").trim();
+
 export function parseProductPage(html: string): ParsedProductPage {
   const out: ParsedProductPage = { loggedIn: loggedInState(html), title: null, sku: null, stock: null, priceText: null, amount: null, wasAmount: null, suffixBasis: null, siteBasis: siteBasisOf(html), reason: null };
   // The product's own block: from its heading to the description tabs; related-product tiles sit after that.
@@ -145,25 +154,62 @@ export function parseProductPage(html: string): ParsedProductPage {
   const main = h1 >= 0 ? html.slice(h1, tabsAt > h1 ? tabsAt : undefined) : html;
   out.title = textOf(main.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? "") || null;
   out.sku = textOf(main.match(/Code:\s*([^<]+)</i)?.[1] ?? "").trim() || null;
-  const stockTab = html.match(/id="description-tab-stock"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i)?.[1];
-  const stockText = stockTab ? textOf(stockTab) : "";
-  out.stock = stockText && !/login/i.test(stockText) ? stockText.slice(0, 80) : null;
+  // The stock tab: a sentence for guests, a branch table (Product Code | AKL | WLG | CHCH …) when signed in.
+  const stockStart = html.search(/id="description-tab-stock"/i);
+  const stockEnd = stockStart >= 0 ? html.indexOf('id="description-tab-', stockStart + 10) : -1;
+  const stockRegion = stockStart >= 0 ? html.slice(stockStart, stockEnd > stockStart ? stockEnd : stockStart + 20_000) : "";
+  const stockEl = elementByClass(stockRegion, "div", "product-stock");
+  const stockTab = stockEl ? stockEl.inner : stockRegion.replace(/<div class="footer"[\s\S]*$/i, "").replace(/<\/body>[\s\S]*$/i, "");
+  const rows = tableRows(stockTab);
+  const tablePrice: { text: string; amount: number }[] = [];
+  if (rows.length >= 2) {
+    const head = rows[0];
+    const row = rows.slice(1).find((r) => out.sku && r[0]?.toLowerCase() === out.sku.toLowerCase()) ?? (rows.length === 2 ? rows[1] : null);
+    if (row) {
+      const stockCells: string[] = [];
+      head.forEach((h, n) => {
+        const v = row[n] ?? "";
+        if (/price|cost/i.test(h)) {
+          for (const a of amountsIn(v)) tablePrice.push({ text: `${h} ${v}`, amount: a.amount });
+        } else if (!/product\s*code|^code$|model|description/i.test(h) && v) stockCells.push(`${BRANCH(h)} ${v}`);
+      });
+      out.stock = stockCells.join(" · ").slice(0, 120) || null;
+    }
+  } else {
+    const stockText = stockTab ? textOf(stockTab.replace(/^[^>]*>/, "")) : "";
+    out.stock = stockText && !/login/i.test(stockText) ? stockText.slice(0, 80) : null;
+  }
 
   if (/Login for pricing/i.test(main)) return { ...out, loggedIn: false, reason: "The price is hidden: the page was not served to a signed-in account." };
-  const block = elementByClass(main, "div", "options-price") ?? elementByClass(main, "div", "product-price") ?? elementByClass(main, "span", "product-price") ?? elementByClass(main, "div", "price") ?? elementByClass(main, "span", "price") ?? elementByClass(main, "p", "price");
-  if (!block) return { ...out, reason: "No price is shown on the product page." };
-  const text = textOf(block.inner);
+  const region = main + stockTab;
+  const sketch = () => pageSketch(region);
+  // Where the price may be: a price-classed element in the product block, the stock table's price
+  // column, or, failing those, the one and only dollar amount in the product region.
+  const blocks = priceBlocks(main).map((b) => ({ text: textOf(b.inner), amounts: amountsIn(textOf(b.inner)) })).filter((b) => b.amounts.length);
+  let text: string;
+  let amounts: number[];
+  if (blocks.length) {
+    text = blocks[0].text;
+    amounts = [...new Set(blocks.flatMap((b) => b.amounts.map((a) => a.amount)))];
+  } else if (tablePrice.length) {
+    text = tablePrice.map((t) => t.text).join(" ");
+    amounts = [...new Set(tablePrice.map((t) => t.amount))];
+  } else {
+    const all = amountsIn(textOf(region));
+    if (!all.length) return { ...out, reason: "No price is shown on the product page.", sketch: sketch() };
+    text = all.map((a) => a.around).join(" ");
+    amounts = [...new Set(all.map((a) => a.amount))];
+  }
   out.priceText = text.slice(0, 160) || null;
-  if (/\b(rrp|retail|msrp|recommended)\b/i.test(text)) return { ...out, reason: `The price is labelled as retail/RRP ("${out.priceText}"); not used as trade cost.` };
-  if (/<del\b|<s\b|<strike\b|\b(was|now|save|previously)\b/i.test(block.inner)) return { ...out, reason: `The price shows a "was/now" or struck-through amount ("${out.priceText}"); not recorded.` };
-  if (/\bfrom\b|\bup to\b|–|—/i.test(text.replace(/\s*\+\s*gst.*$/i, ""))) return { ...out, reason: `The price is a range or "from" price ("${out.priceText}"); not recorded.` };
-  const amounts = [...text.matchAll(/\$\s?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(\.[0-9]{1,2})?/g)].map((m) => amountOf(m[0]));
-  if (amounts.length === 0) return { ...out, reason: `No amount could be read from the price ("${out.priceText ?? ""}").` };
-  if (amounts.length > 1) return { ...out, reason: `More than one price is shown ("${out.priceText}"); not recorded.` };
+  if (/\b(rrp|retail|msrp|recommended)\b/i.test(text)) return { ...out, reason: `The price is labelled as retail/RRP ("${out.priceText}"); not used as trade cost.`, sketch: sketch() };
+  if (/<del\b|<s\b|<strike\b/i.test(main) || /\b(was|now|save|previously)\b/i.test(text)) return { ...out, reason: `The price shows a "was/now" or struck-through amount ("${out.priceText}"); not recorded.`, sketch: sketch() };
+  if (/\bfrom\b|\bup to\b|–|—/i.test(text.replace(/\s*\+\s*gst.*$/i, ""))) return { ...out, reason: `The price is a range or "from" price ("${out.priceText}"); not recorded.`, sketch: sketch() };
+  if (amounts.length > 1) return { ...out, reason: `More than one price is shown ("${out.priceText}"); not recorded.`, sketch: sketch() };
   const amount = amounts[0];
-  if (amount == null || !(amount > 0) || amount >= 100_000) return { ...out, reason: `The price could not be read as an amount ("${out.priceText}").` };
+  if (amount == null || !(amount > 0) || amount >= 100_000) return { ...out, reason: `The price could not be read as an amount ("${out.priceText}").`, sketch: sketch() };
   out.suffixBasis = basisOf(text);
   out.amount = amount;
+  if (!out.suffixBasis && !out.siteBasis) out.sketch = sketch();
   return out;
 }
 

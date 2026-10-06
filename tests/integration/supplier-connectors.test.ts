@@ -22,7 +22,7 @@ const { db } = await import("@/db");
 const { productPriceHistory, products, supplierConnectors, supplierCredentials, supplierProducts, supplierSyncRuns, suppliers, users } = await import("@/db/schema");
 const { encryptSecret } = await import("@/lib/crypto");
 const { applyReferenceCatalogue, resetReferenceMarker } = await import("@/lib/brain/reference/apply");
-const { runSupplierConnector, liveSupplierLookup, baseUrlFor } = await import("@/lib/brain/suppliers/connector");
+const { runSupplierConnector, liveSupplierLookup, baseUrlFor, mapSupplierListing, unlinkSupplierListing } = await import("@/lib/brain/suppliers/connector");
 const { SITES } = await import("@/lib/brain/suppliers/sites");
 const { GuardrailError } = await import("@/lib/guard/actor");
 
@@ -288,6 +288,20 @@ describe("SWL (WebNinja, CSRF login, POA for guests)", () => {
     const o = (await offer(sid(), ids.nvr1004))!;
     expect(o.sourceUrl).toBe(`${swlMock.url}/product/4360-tp-link-vigi-nvr1004h-4p-4-channel-poe-nvr`);
     await expectNoSecrets(sid(), r);
+  });
+
+  it("a wrong listing choice is undone with Change listing: the approval goes, the next refresh offers the choices again", async () => {
+    await storeLogin(sid(), EMAIL, PASS);
+    // Chris points the 1008 recorder at the wrong SWL listing (the 1004) and it reads that price.
+    await mapSupplierListing(sid(), ids.nvr1008, { sku: "47970", url: `${swlMock.url}/product/4360-tp-link-vigi-nvr1004h-4p-4-channel-poe-nvr` }, chris);
+    const wrong = await runSupplierConnector(sid(), { kind: "product", productId: ids.nvr1008 }, chris);
+    expect(wrong.items[0]).toMatchObject({ outcome: "recorded", sku: "47970", costExGst: 158 });
+    await expect(unlinkSupplierListing(sid(), ids.nvr1008, { kind: "agent", agent: "hermes" })).rejects.toBeInstanceOf(GuardrailError);
+    await unlinkSupplierListing(sid(), ids.nvr1008, chris);
+    const o = (await offer(sid(), ids.nvr1008))!;
+    expect(o).toMatchObject({ supplierSku: null, sourceUrl: null, priceApproved: false });
+    const again = await runSupplierConnector(sid(), { kind: "product", productId: ids.nvr1008 }, chris);
+    expect(again.items[0]).toMatchObject({ outcome: "not_read", sku: "47971" }); // its own listing again (POA)
   });
 
   it("a wrong login is reported without the email; a challenge page stops the run", async () => {

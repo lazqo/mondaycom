@@ -14,7 +14,7 @@
  * - Login failures are reported as fixed reasons; the site's own message is never passed on.
  */
 import { ConnectorError, type WebResponse, type WebSession } from "./web-session";
-import { allByClass, amountOf, basisOf, CAPTCHA_RE, decodeEntities, elementByClass, MFA_RE, textOf, type CatalogueEntry, type ParsedProductPage, type PriceBasis } from "./html";
+import { allByClass, amountsIn, basisOf, CAPTCHA_RE, decodeEntities, elementByClass, MFA_RE, pageSketch, priceBlocks, textOf, type CatalogueEntry, type ParsedProductPage, type PriceBasis } from "./html";
 import type { SupplierSite } from "./site";
 
 export type WebNinjaShop = { key: string; name: string; baseUrl: string; envVar: string };
@@ -150,27 +150,54 @@ export function parseProductPage(html: string): ParsedProductPage {
     const valueEl = elementByClass(modelEl.inner, "div", "value");
     out.sku = textOf(valueEl ? valueEl.inner : modelEl.inner).replace(/^stock code:\s*/i, "").trim() || null;
   }
-  const stockEl = elementByClass(main, "div", "stock") ?? elementByClass(main, "div", "availability") ?? elementByClass(main, "span", "stock");
-  out.stock = stockEl ? textOf(stockEl.inner).replace(/^(stock|availability):\s*/i, "").slice(0, 80) || null : null;
+  const stockEl = elementByClass(main, "div", "stock") ?? elementByClass(main, "div", "availability") ?? elementByClass(main, "span", "stock") ?? elementByClass(main, "div", "stock-level");
+  out.stock = stockEl ? textOf(stockEl.inner).replace(/^(stock|availability)(\s+level)?:\s*/i, "").slice(0, 80) || null : null;
+  const sketch = () => pageSketch(main);
 
-  const block = elementByClass(main, "div", "price") ?? elementByClass(main, "span", "price");
-  if (!block) return { ...out, reason: "No price is shown on the product page." };
-  const text = textOf(block.inner);
+  const exact = elementByClass(main, "div", "price") ?? elementByClass(main, "span", "price");
+  const blocks = exact ? [{ cls: "price", inner: exact.inner }] : priceBlocks(main);
+  if (!blocks.length) {
+    const all = amountsIn(textOf(main));
+    if (all.length === 1) {
+      out.priceText = all[0].around.slice(0, 160);
+      out.suffixBasis = basisOf(all[0].around);
+      out.amount = all[0].amount;
+      if (!out.suffixBasis && !out.siteBasis) out.sketch = sketch();
+      return out;
+    }
+    return { ...out, reason: all.length ? `More than one price is shown ("${all.map((a) => a.around).join(" | ").slice(0, 160)}"); not recorded.` : "No price is shown on the product page.", sketch: sketch() };
+  }
+  const text = blocks.map((b) => textOf(b.inner)).join(" ");
   out.priceText = text.slice(0, 160) || null;
-  if (/^\s*poa\b|price on application|login/i.test(text)) {
+  if (/^\s*poa\b|price on application|\blogin\b/i.test(text)) {
     if (out.loggedIn === false) return { ...out, loggedIn: false, reason: "The price is hidden (POA): the page was not served to a signed-in account." };
     return { ...out, reason: `The price is on application ("${out.priceText}"); nothing to record.` };
   }
-  if (/\b(rrp|retail|msrp|recommended)\b/i.test(text)) return { ...out, reason: `The price is labelled as retail/RRP ("${out.priceText}"); not used as trade cost.` };
-  if (/<del\b|<s\b|<strike\b|\b(was|now|save|previously)\b/i.test(block.inner)) return { ...out, reason: `The price shows a "was/now" or struck-through amount ("${out.priceText}"); not recorded.` };
-  if (/\bfrom\b|\bup to\b|–|—/i.test(text.replace(/\s*\+\s*gst.*$/i, ""))) return { ...out, reason: `The price is a range or "from" price ("${out.priceText}"); not recorded.` };
-  const amounts = [...text.matchAll(/\$\s?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(\.[0-9]{1,2})?/g)].map((m) => amountOf(m[0]));
-  if (amounts.length === 0) return { ...out, reason: `No amount could be read from the price ("${out.priceText ?? ""}").` };
-  if (amounts.length > 1) return { ...out, reason: `More than one price is shown ("${out.priceText}"); not recorded.` };
-  const amount = amounts[0];
-  if (amount == null || !(amount > 0) || amount >= 100_000) return { ...out, reason: `The price could not be read as an amount ("${out.priceText}").` };
-  out.suffixBasis = basisOf(text);
+  if (/\b(rrp|retail|msrp|recommended)\b/i.test(text)) return { ...out, reason: `The price is labelled as retail/RRP ("${out.priceText}"); not used as trade cost.`, sketch: sketch() };
+  if (blocks.some((b) => /<del\b|<s\b|<strike\b/i.test(b.inner)) || /\b(was|now|save|previously)\b/i.test(text)) return { ...out, reason: `The price shows a "was/now" or struck-through amount ("${out.priceText}"); not recorded.`, sketch: sketch() };
+  if (/\bfrom\b|\bup to\b|–|—/i.test(text.replace(/\s*\+\s*gst.*$/i, ""))) return { ...out, reason: `The price is a range or "from" price ("${out.priceText}"); not recorded.`, sketch: sketch() };
+  const found = amountsIn(text);
+  const distinct = [...new Set(found.map((a) => a.amount))];
+  if (!distinct.length) return { ...out, reason: `No amount could be read from the price ("${out.priceText ?? ""}").`, sketch: sketch() };
+  let amount: number;
+  let basis: PriceBasis | null;
+  if (distinct.length === 1) {
+    amount = distinct[0];
+    basis = basisOf(text);
+  } else if (distinct.length === 2) {
+    // The common trade layout: the ex-GST and inc-GST figures side by side, each labelled. They
+    // must agree with each other (15% GST) or neither is trusted.
+    const labelOf = (a: (typeof found)[number]) => basisOf(a.after) ?? basisOf(a.before);
+    const ex = found.find((a) => labelOf(a) === "ex");
+    const inc = found.find((a) => labelOf(a) === "inc");
+    if (!ex || !inc || ex.amount === inc.amount || Math.abs(ex.amount * 1.15 - inc.amount) > 0.011 * Math.max(1, inc.amount)) return { ...out, reason: `More than one price is shown ("${out.priceText}"); not recorded.`, sketch: sketch() };
+    amount = ex.amount;
+    basis = "ex";
+  } else return { ...out, reason: `More than one price is shown ("${out.priceText}"); not recorded.`, sketch: sketch() };
+  if (!(amount > 0) || amount >= 100_000) return { ...out, reason: `The price could not be read as an amount ("${out.priceText}").`, sketch: sketch() };
+  out.suffixBasis = basis;
   out.amount = amount;
+  if (!out.suffixBasis && !out.siteBasis) out.sketch = sketch();
   return out;
 }
 

@@ -22,6 +22,8 @@ export type ParsedProductPage = {
   siteBasis: PriceBasis | null;
   /** Why no amount could be read. */
   reason: string | null;
+  /** When no price could be read: the page's class names and the text around any dollar amounts, for the developer. Never secrets. */
+  sketch?: string | null;
 };
 
 export type CatalogueEntry = {
@@ -142,6 +144,8 @@ const BRAND_WORDS: Record<string, string[]> = {
   Uniview: ["uniview", "unv"],
   "Western Digital": ["western digital", "wd purple"],
   Seagate: ["seagate", "skyhawk"],
+  "Ajax Systems": ["ajax systems", "ajax"],
+  Ajax: ["ajax"],
 };
 
 export function brandWordsFor(manufacturer: string, family: string | null): string[] {
@@ -183,8 +187,73 @@ export function matchListing(model: string, brandWords: string[], entries: Catal
   const byName = keyed.filter((x) => x.k.name.includes(key)).map((x) => x.e);
   if (byName.length === 1) return { match: byName[0], candidates: [] };
   if (byName.length > 1) return { match: null, candidates: byName.slice(0, 8) };
-  const near = keyed
-    .filter((x) => [...x.k.exact, ...x.k.name].some((k) => k.length >= 4 && (k.startsWith(key) || key.startsWith(k))))
-    .map((x) => x.e);
+  // Close, not exact: a key that begins the other, and long enough to mean something ("Dome" is
+  // not close to "DomeCam Mini"). The listing's own codes count from 4 characters; a word of the
+  // name only from 6, and in both cases it must cover most of the model asked for.
+  const closeEnough = (k: string, min: number) => k.length >= min && k.length >= Math.ceil(key.length * 0.6) && (k.startsWith(key) || key.startsWith(k));
+  const near = keyed.filter((x) => x.k.exact.some((k) => closeEnough(k, 4)) || x.k.name.some((k) => closeEnough(k, 6))).map((x) => x.e);
   return { match: null, candidates: near.slice(0, 8) };
+}
+
+// ---------- price blocks and diagnostics shared by the custom-shop connectors ----------
+
+/** Elements whose class mentions "price" (any tag), outermost first; label-only classes are skipped. */
+export function priceBlocks(html: string): { cls: string; inner: string }[] {
+  const out: { cls: string; inner: string }[] = [];
+  const re = /<(div|span|p|td|th|strong|b|li|dd)\b[^>]*\bclass\s*=\s*(["'])([^"']*price[^"']*)\2[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const cls = m[3];
+    if (/price-?(label|title|heading|note|caption)|no-?price|price-?(wrapper|box|container|block)$/i.test(cls) && !/\$/.test(html.slice(m.index, m.index + 400))) continue;
+    const tag = m[1];
+    const tagRe = new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
+    tagRe.lastIndex = m.index + m[0].length;
+    let depth = 1;
+    let t: RegExpExecArray | null;
+    let end = html.length;
+    while ((t = tagRe.exec(html))) {
+      depth += t[1] ? -1 : 1;
+      if (depth === 0) {
+        end = t.index;
+        break;
+      }
+    }
+    out.push({ cls, inner: html.slice(m.index + m[0].length, end) });
+  }
+  return out;
+}
+
+/**
+ * Every dollar amount in a piece of text, with the words around it (for labels and diagnostics),
+ * split into what comes after it up to the next amount (where a label usually sits: "$158.00 ex
+ * GST") and what comes before it back to the previous amount, so a label between two amounts is
+ * read with the right one.
+ */
+export function amountsIn(text: string): { amount: number; around: string; before: string; after: string }[] {
+  const matches = [...text.matchAll(/(?:NZ)?\$\s?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(\.[0-9]{1,2})?/gi)];
+  const out: { amount: number; around: string; before: string; after: string }[] = [];
+  matches.forEach((m, n) => {
+    const amount = amountOf(m[0].replace(/^NZ/i, ""));
+    if (amount == null) return;
+    const start = m.index!;
+    const end = start + m[0].length;
+    const prevEnd = n > 0 ? matches[n - 1].index! + matches[n - 1][0].length : Math.max(0, start - 40);
+    const nextStart = n + 1 < matches.length ? matches[n + 1].index! : end + 60;
+    out.push({ amount, around: text.slice(Math.max(0, start - 40), end + 40).trim(), before: text.slice(Math.max(prevEnd, start - 40), start).trim(), after: text.slice(end, Math.min(nextStart, end + 60)).trim() });
+  });
+  return out;
+}
+
+/**
+ * A sketch of a product page for the developer when no price could be read: the class names
+ * used in the product region, table headings, and the text around each dollar amount. Text is
+ * limited to those fragments, so nothing from the account header or a form ever appears.
+ */
+export function pageSketch(regionHtml: string): string {
+  const classes = [...new Set([...regionHtml.matchAll(/\bclass\s*=\s*["']([^"']+)["']/gi)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean))].slice(0, 80);
+  const headings = [...regionHtml.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map((m) => textOf(m[1])).filter(Boolean).slice(0, 12);
+  const text = textOf(regionHtml);
+  const money = amountsIn(text).map((a) => `…${a.around}…`).slice(0, 8);
+  const labels = [...new Set([...text.matchAll(/\b(?:your|trade|dealer|nett?|wholesale|rrp|retail|list|ex|inc|excl|incl)\.?\s*(?:price|gst)\b[^$]{0,20}/gi)].map((m) => m[0].trim()))].slice(0, 8);
+  return [`classes: ${classes.join(" ") || "none"}`, headings.length ? `table headings: ${headings.join(" | ")}` : null, money.length ? `amounts: ${money.join(" ")}` : "amounts: none in the product region", labels.length ? `labels: ${labels.join(" | ")}` : null].filter(Boolean).join("\n");
 }

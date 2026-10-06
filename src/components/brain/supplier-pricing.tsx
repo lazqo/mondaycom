@@ -10,6 +10,7 @@ import {
   refreshSupplierSelectedAction,
   saveSupplierPricingSettingsAction,
   testSupplierConnectionAction,
+  unlinkSupplierListingAction,
 } from "@/actions/supplier-connector";
 import { Badge, Button, Card, CardHeader, FormError, Select } from "@/components/ui";
 import type { PriceFreshness } from "@/lib/brain/types";
@@ -107,6 +108,12 @@ function RunResult({ supplierId, result, canMap }: { supplierId: string; result:
                   <td className="py-1 pr-2">
                     <Badge className={OUTCOME[i.outcome]?.[1]}>{OUTCOME[i.outcome]?.[0] ?? i.outcome}</Badge>
                     {i.reason ? <p className="mt-0.5 max-w-md text-gray-600">{i.reason}</p> : null}
+                    {i.sketch ? (
+                      <details className="mt-0.5 max-w-md text-gray-500" data-testid="page-sketch">
+                        <summary className="cursor-pointer">What the page showed (for the developer)</summary>
+                        <pre className="whitespace-pre-wrap break-words text-[11px]">{i.sketch}</pre>
+                      </details>
+                    ) : null}
                     {i.candidates?.length && canMap ? (
                       <div className="mt-1 space-y-1" data-testid="listing-choices">
                         {i.candidates.map((c) => (
@@ -325,6 +332,11 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
                           <Button size="sm" variant="ghost" onClick={() => setOpenHistory((x) => (x === l.offerId ? null : l.offerId))}>
                             History ({l.history.length})
                           </Button>
+                          {l.sku ? (
+                            <Button size="sm" variant="ghost" disabled={pending} title="Forget this listing so the next refresh searches again and offers the choices" onClick={() => go(`u-${l.productId}`, async () => { const r = await unlinkSupplierListingAction(c.supplierId, l.productId); return r.ok ? { ok: true as const, data: { runId: "", status: "ok" as const, error: null, summary: {}, items: [], message: `Forgot the ${l.sku} listing for ${l.product}. Refresh the product to choose again.` } } : r; })} data-testid="change-listing">
+                              {busy === `u-${l.productId}` ? "…" : "Change listing"}
+                            </Button>
+                          ) : null}
                         </td>
                       </tr>
                       {openHistory === l.offerId ? (

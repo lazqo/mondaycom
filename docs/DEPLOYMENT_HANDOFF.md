@@ -733,7 +733,12 @@ it says whether the sign-in worked and, once a product is mapped, what the sampl
 text was and how it was read. If a price is reported as "does not say whether the price is ex or
 inc GST", the site shows prices without a label and without a site-wide note: tell the developer
 the exact price text shown on the card and the connector is taught that site's wording. Nothing is
-recorded until a price is read with confidence.
+recorded until a price is read with confidence. A "Not recorded" result row carries **What the
+page showed (for the developer)**: the class names in the product region, any table headings, and
+the words around each dollar amount, so the connector can be taught a new layout without anyone
+sharing a login; nothing from the account header or a form is in it. A wrong listing choice is
+undone with **Change listing** on the product's row: the next refresh searches again and offers
+the choices (the old cost stays in history, no longer approved).
 
 **How prices are approved (Run F).** The top of the Supplier pricing tab is Chris's choice for
 every connected supplier. With "Approve logged-in supplier prices automatically" on, a price read

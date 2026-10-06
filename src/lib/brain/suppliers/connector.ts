@@ -43,6 +43,8 @@ export type SyncItem = {
   wasAmount?: number | null;
   /** Close listings for a person to choose between (never chosen automatically). */
   candidates?: { sku: string; name: string; url: string; summary?: string | null; notes?: string | null; stock?: string | null }[];
+  /** When a price could not be read: what the page showed (class names, table headings, text around amounts), for the developer. */
+  sketch?: string | null;
 };
 
 export type SyncResult = { runId: string; status: "ok" | "partial" | "failed"; error: string | null; summary: Record<string, number>; items: SyncItem[]; message: string };
@@ -163,7 +165,8 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
   let session: WebSession | null = null;
   const finish = async (status: SyncResult["status"], error: string | null, message: string): Promise<SyncResult> => {
     const safeError = error ? redact(error, [...secrets, ...(session?.secrets() ?? [])]) : null;
-    const safeItems = items.map((i) => (i.reason ? { ...i, reason: redact(i.reason, [...secrets, ...(session?.secrets() ?? [])]) } : i));
+    const hide = (t: string) => redact(t, [...secrets, ...(session?.secrets() ?? [])]);
+    const safeItems = items.map((i) => ({ ...i, ...(i.reason ? { reason: hide(i.reason) } : {}), ...(i.sketch ? { sketch: hide(i.sketch) } : {}) }));
     const summary = summarise(safeItems);
     await db
       .update(supplierSyncRuns)
@@ -249,12 +252,12 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
     for (const { t, entry, page } of pages) {
       const base = { productId: t.productId, product: t.label, sku: entry.sku, url: entry.url, stock: page.stock, priceText: page.priceText };
       if (page.amount == null) {
-        items.push({ ...base, outcome: "not_read", reason: page.reason });
+        items.push({ ...base, outcome: "not_read", reason: page.reason, sketch: page.sketch ?? null });
         continue;
       }
       const basis = resolveBasis(page, runBasis);
       if (!basis.basis) {
-        items.push({ ...base, outcome: "not_read", reason: basis.reason });
+        items.push({ ...base, outcome: "not_read", reason: basis.reason, sketch: page.sketch ?? null });
         continue;
       }
       try {
@@ -332,7 +335,7 @@ async function resolveListings(site: SupplierSite, session: WebSession, targets:
         candidates: m.candidates,
         reason: m.candidates.length
           ? `${site.name} has ${m.candidates.length} listing(s) close to ${t.model} but none exactly (${m.candidates.map((c) => c.sku).join(", ")}). Nothing is chosen automatically: choose the listing Get Secure buys.`
-          : `${site.name} does not list ${t.model} (searched "${term}").`,
+          : `${site.name} does not list ${t.model} (searched "${term}"; the search returned ${found.length} listing(s)${found.length ? `: ${found.slice(0, 5).map((f) => f.sku).join(", ")}${found.length > 5 ? "…" : ""}` : ""}).`,
       });
   }
   return out;
@@ -361,6 +364,18 @@ export async function mapSupplierListing(supplierId: string, productId: string, 
     .update(supplierProducts)
     .set({ supplierSku: sku, sourceUrl: url.toString(), updatedAt: new Date(), ...(changed && offer.costExGst != null ? { priceApproved: false, pendingCostExGst: null } : {}) })
     .where(eq(supplierProducts.id, offer.id));
+}
+
+/**
+ * Forget which listing a product is at this supplier, so the next refresh searches again and
+ * offers the choices. The old cost stays in history; it is no longer approved, since it belonged
+ * to the listing being dropped.
+ */
+export async function unlinkSupplierListing(supplierId: string, productId: string, actor: Actor): Promise<void> {
+  assertPerson(actor);
+  const offer = await db.query.supplierProducts.findFirst({ where: and(eq(supplierProducts.productId, productId), eq(supplierProducts.supplierId, supplierId)) });
+  if (!offer) return;
+  await db.update(supplierProducts).set({ supplierSku: null, sourceUrl: null, priceApproved: false, pendingCostExGst: null, updatedAt: new Date() }).where(eq(supplierProducts.id, offer.id));
 }
 
 /** Recent runs for the status panel (newest first). */

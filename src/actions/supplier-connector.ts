@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { humanFromUser } from "@/lib/guard/actor";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
-import { mapSupplierListing, runSupplierConnector, type SyncResult, type SyncScope } from "@/lib/brain/suppliers/connector";
+import { mapSupplierListing, runSupplierConnector, unlinkSupplierListing, type SyncResult, type SyncScope } from "@/lib/brain/suppliers/connector";
 import { getSupplierPricingSettings, saveSupplierPricingSettings, type SupplierPricingSettings } from "@/lib/brain/supplier-settings";
 import { logActivity } from "@/lib/activity";
 
@@ -46,6 +46,18 @@ export async function mapSupplierListingAction(supplierId: string, productId: st
   try {
     const user = await requireAdmin();
     await mapSupplierListing(uuid.parse(supplierId), uuid.parse(productId), { sku, url }, humanFromUser(user));
+    revalidatePath("/settings/brain");
+    return ok(undefined);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** Forget a product's listing at a supplier so the next refresh searches again (to fix a wrong choice). */
+export async function unlinkSupplierListingAction(supplierId: string, productId: string): Promise<ActionResult<undefined>> {
+  try {
+    const user = await requireAdmin();
+    await unlinkSupplierListing(uuid.parse(supplierId), uuid.parse(productId), humanFromUser(user));
     revalidatePath("/settings/brain");
     return ok(undefined);
   } catch (err) {
