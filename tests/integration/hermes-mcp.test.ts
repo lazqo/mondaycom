@@ -144,6 +144,27 @@ describe("the endpoint's lock", () => {
       else process.env.HERMES_MCP_TOKEN = before;
     }
   });
+
+  it("is off while the inspector and research tokens are the same value (the research profile must never pass as the inspector)", async () => {
+    const { POST } = await import("@/app/api/mcp/route");
+    const { mcpTokensMisconfigured } = await import("@/lib/hermes/mcp-tokens");
+    const req = (auth: string) => new Request("http://localhost/api/mcp", { method: "POST", headers: { "content-type": "application/json", authorization: auth }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }) });
+    const before = { a: process.env.HERMES_MCP_TOKEN, b: process.env.HERMES_RESEARCH_MCP_TOKEN };
+    try {
+      process.env.HERMES_MCP_TOKEN = "same-token-not-a-secret-0123456789";
+      process.env.HERMES_RESEARCH_MCP_TOKEN = "same-token-not-a-secret-0123456789";
+      expect(mcpTokensMisconfigured()).toBe(true);
+      expect((await POST(req("Bearer same-token-not-a-secret-0123456789"))).status).toBe(404);
+      process.env.HERMES_RESEARCH_MCP_TOKEN = "other-token-not-a-secret-0123456789";
+      expect(mcpTokensMisconfigured()).toBe(false);
+      expect((await POST(req("Bearer same-token-not-a-secret-0123456789"))).status).toBe(200);
+    } finally {
+      for (const [k, v] of [["HERMES_MCP_TOKEN", before.a], ["HERMES_RESEARCH_MCP_TOKEN", before.b]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
 });
 
 describe("research and candidate Business Brain updates (stage 2)", () => {

@@ -10,6 +10,7 @@ import { HARD_GUARDRAILS } from "@/lib/hermes/authority";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { HermesAutonomyForm } from "@/components/settings/hermes-autonomy";
 import { formatDateTime } from "@/lib/utils";
+import { mcpTokensMisconfigured } from "@/lib/hermes/mcp-tokens";
 
 export const metadata: Metadata = { title: "Hermes" };
 
@@ -59,7 +60,7 @@ export default async function HermesSettingsPage() {
           <div className="space-y-1 p-4 text-sm text-gray-700">
             <p>{connected ? `Inspector profile at ${process.env.HERMES_API_URL}${process.env.HERMES_MODEL ? ` (${process.env.HERMES_MODEL})` : ""}.` : "Set HERMES_API_URL and HERMES_API_KEY on the server (docs/DEPLOYMENT_HANDOFF.md section 17). Until then every new email waits for you on Home."}</p>
             <p>Research profile: {research ? "connected" : "not connected (research requests become tasks)"}.</p>
-            <p>CRM tools: {process.env.HERMES_MCP_TOKEN ? "on" : "off (HERMES_MCP_TOKEN not set)"}.</p>
+            <p>CRM tools: {mcpTokensMisconfigured() ? "OFF: HERMES_MCP_TOKEN and HERMES_RESEARCH_MCP_TOKEN are the same value. Give the research profile its own token." : process.env.HERMES_MCP_TOKEN ? "on" : "off (HERMES_MCP_TOKEN not set)"}.</p>
           </div>
         </Card>
         <Card>
