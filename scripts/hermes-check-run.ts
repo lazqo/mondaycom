@@ -1,12 +1,12 @@
 /**
  * Runs scripts/hermes-check.ts outside Next.js. The CRM's server modules start with
- * `import "server-only"`, a guard Next resolves itself; here it is pointed at the same no-op
- * the test suites use, and nothing else changes.
+ * `import "server-only"`, a guard Next resolves itself; here it is pointed at a no-op stub
+ * (scripts/server-only-stub.ts, shipped in the image), and nothing else changes.
  */
 import Module from "node:module";
 import path from "node:path";
 
-const stub = path.resolve(__dirname, "../tests/support/server-only.ts");
+const stub = path.resolve(__dirname, "server-only-stub.ts");
 const m = Module as unknown as { _resolveFilename: (request: string, ...rest: unknown[]) => string };
 const original = m._resolveFilename;
 m._resolveFilename = function (request: string, ...rest: unknown[]) {
