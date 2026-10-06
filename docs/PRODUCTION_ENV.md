@@ -63,7 +63,7 @@ Not needed once the first admin exists. Either open `/setup` after deploying (re
 
 ## Local development / tests only
 
-`IMAP_TLS_REJECT_UNAUTHORIZED`, `SMTP_TLS_REJECT_UNAUTHORIZED` (`false` for self-signed test servers), `DOVECOT_TEST_PORT`, `E2E_*`. Never set these in production.
+`IMAP_TLS_REJECT_UNAUTHORIZED`, `SMTP_TLS_REJECT_UNAUTHORIZED` (`false` for self-signed test servers), `DOVECOT_TEST_PORT`, `E2E_*`, and the supplier-connector overrides `ITPLUS_BASE_URL`, `CLEARDIGITAL_BASE_URL`, `SWL_BASE_URL`, `VESTA_BASE_URL` (each may only point at that supplier's own host or a local stand-in; anything else is refused, so a stored login can never be sent elsewhere by configuration). `SUPPLIER_SYNC_DELAY_MS` (default 800) is the pause between requests to a supplier site. Never set these in production.
 
 ## Go-live checklist
 

@@ -169,6 +169,13 @@
       "when": 1791242745456,
       "tag": "0023_follow_up_set_at",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791267777878,
+      "tag": "0024_supplier_connectors_more",
+      "breakpoints": true
     }
   ]
 }

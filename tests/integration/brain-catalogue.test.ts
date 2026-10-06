@@ -247,8 +247,8 @@ describe("supplier credentials", () => {
     expect((await getSupplierCredential(atlas.id, { kind: "system", process: SUPPLIER_SYNC_PROCESS }))?.secret).toBe(`trade-${RUN}`);
     await db.delete(supplierCredentials).where(eq(supplierCredentials.supplierId, atlas.id));
   });
-  it("a supplier without an automated connector says so instead of scraping", async () => {
-    await expect(syncSupplierPrices((await supplier("IT Plus")).id)).rejects.toThrow(/trade-login connector/);
-    await expect(syncSupplierPrices((await supplier("Clear Digital")).id)).rejects.toThrow(/no automated connector yet/);
+  it("a supplier without an automated connector says so instead of scraping; one with a trade-login connector points at it", async () => {
+    for (const name of ["IT Plus", "Clear Digital", "SWL / Security Wholesale", "Vesta Electrical"]) await expect(syncSupplierPrices((await supplier(name)).id)).rejects.toThrow(/trade-login connector/);
+    await expect(syncSupplierPrices((await supplier("Atlas Gentech")).id)).rejects.toThrow(/no automated connector yet/);
   });
 });

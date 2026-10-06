@@ -1,5 +1,6 @@
 /**
- * Runs a supplier's automated price connector (today: IT Plus) and keeps its status.
+ * Runs a supplier's automated price connector (IT Plus, Clear Digital, SWL, Vesta Electrical: one
+ * site module each, see sites.ts) and keeps its status.
  *
  * Flow per run: stored encrypted login → authenticated session → for each product, the supplier's
  * logged-in product page → trade price (normalised to ex GST), SKU, stock → recordSupplierPrice,
@@ -16,21 +17,8 @@ import { type Actor, GuardrailError } from "@/lib/guard/actor";
 import { recordSupplierPrice } from "../store";
 import { getSupplierPricingSettings } from "@/lib/brain/supplier-settings";
 import { getSupplierCredential, SUPPLIER_SYNC_PROCESS } from "./credentials";
-import {
-  brandWordsFor,
-  findInCatalogue,
-  ITPLUS_BASE_URL,
-  ITPLUS_CONNECTOR,
-  login,
-  matchListing,
-  parseProductPage,
-  type CatalogueEntry,
-  type ParsedProductPage,
-  type PriceBasis,
-  resolveBasis,
-  searchTermFor,
-  blockOf,
-} from "./itplus";
+import { brandWordsFor, matchListing, resolveBasis, searchTermFor, type CatalogueEntry, type ParsedProductPage, type PriceBasis } from "./html";
+import { siteFor, type SupplierSite } from "./sites";
 import { ConnectorError, redact, WebSession } from "./web-session";
 
 export type SyncScope = { kind: "test" } | { kind: "product"; productId: string } | { kind: "selected"; productIds: string[] } | { kind: "catalogue" };
@@ -60,7 +48,6 @@ export type SyncItem = {
 export type SyncResult = { runId: string; status: "ok" | "partial" | "failed"; error: string | null; summary: Record<string, number>; items: SyncItem[]; message: string };
 
 const SYSTEM: Actor = { kind: "system", process: SUPPLIER_SYNC_PROCESS };
-const SOURCE_LABEL = "IT Plus trade login sync";
 const AUTH_CODES = new Set(["auth_failed", "locked", "account_inactive"]);
 const BLOCK_CODES = new Set(["captcha", "mfa", "blocked", "rate_limited"]);
 const MAX_PRODUCTS = 60;
@@ -68,17 +55,17 @@ const MAX_PRODUCTS = 60;
 const num = (v: string | null | undefined) => (v != null ? Number(v) : null);
 
 /**
- * Where the connector logs in. ITPLUS_BASE_URL exists only so tests can point it at a local
- * stand-in; anything other than IT Plus itself or this machine is refused, so the stored login can
- * never be sent to another site by configuration.
+ * Where the connector logs in. Each site's environment override exists only so tests can point it
+ * at a local stand-in; anything other than the supplier's own host or this machine is refused, so
+ * the stored login can never be sent to another site by configuration.
  */
 export function baseUrlFor(connector: string): string {
-  if (connector !== ITPLUS_CONNECTOR) throw new Error(`No connector called ${connector}.`);
-  const override = process.env.ITPLUS_BASE_URL;
-  if (!override) return ITPLUS_BASE_URL;
+  const site = siteFor(connector);
+  const override = process.env[site.envVar];
+  if (!override) return site.baseUrl;
   const u = new URL(override);
-  const ok = (u.protocol === "https:" && u.hostname === new URL(ITPLUS_BASE_URL).hostname) || ["127.0.0.1", "localhost", "::1"].includes(u.hostname);
-  if (!ok) throw new ConnectorError("config", "ITPLUS_BASE_URL may only point at www.itplus.co.nz or a local test server.");
+  const ok = (u.protocol === "https:" && u.hostname === new URL(site.baseUrl).hostname) || ["127.0.0.1", "localhost", "::1"].includes(u.hostname);
+  if (!ok) throw new ConnectorError("config", `${site.envVar} may only point at ${new URL(site.baseUrl).hostname} or a local test server.`);
   return u.origin;
 }
 
@@ -157,7 +144,7 @@ function summarise(items: SyncItem[]): Record<string, number> {
 
 /**
  * Test the stored login (and, when a mapped product exists, that a logged-in product page shows a
- * price) or refresh prices for one product, a selection, or every product with an IT Plus listing.
+ * price) or refresh prices for one product, a selection, or every product with a listing at the supplier.
  */
 export async function runSupplierConnector(supplierId: string, scope: SyncScope, actor: Actor): Promise<SyncResult> {
   assertPerson(actor);
@@ -165,6 +152,7 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
   if (!supplier) throw new Error("Supplier not found");
   const conn = await connectorFor(supplierId);
   if (!conn) throw new Error(`${supplier.name} has no automated price connector yet. Enter or import prices instead.`);
+  const site = siteFor(conn.connector);
   if (scope.kind !== "test") {
     const why = await loginBlockedReason(supplierId, conn);
     if (why) throw new ConnectorError("not_retried", why);
@@ -188,16 +176,16 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
     const credential = await getSupplierCredential(supplierId, SYSTEM);
     if (!credential) {
       await setStatus(supplierId, { status: "not_tested", statusDetail: "No trade login stored." });
-      return await finish("failed", "No IT Plus trade login is stored. Store it under Suppliers first.", "No login stored.");
+      return await finish("failed", `No ${site.name} trade login is stored. Store it under Suppliers first.`, "No login stored.");
     }
     secrets = [credential.username ?? "", credential.secret];
     session = new WebSession(baseUrlFor(conn.connector), { delayMs: Number(process.env.SUPPLIER_SYNC_DELAY_MS ?? 800) });
 
     // 1. Log in.
     try {
-      await login(session, credential);
+      await site.login(session, credential);
     } catch (e) {
-      const err = e instanceof ConnectorError ? e : new ConnectorError("error", "The IT Plus login could not be completed.");
+      const err = e instanceof ConnectorError ? e : new ConnectorError("error", `The ${site.name} login could not be completed.`);
       const reason = redact(err.message, [...secrets, ...session.secrets()]);
       await setStatus(supplierId, {
         status: BLOCK_CODES.has(err.code) ? "blocked" : AUTH_CODES.has(err.code) ? "auth_failed" : "error",
@@ -209,13 +197,13 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
       });
       return await finish("failed", reason, `Login failed: ${reason}`);
     }
-    await setStatus(supplierId, { status: "connected", statusDetail: "Logged in to the IT Plus trade account.", lastLoginOkAt: new Date(), lastLoginFailureCode: null });
+    await setStatus(supplierId, { status: "connected", statusDetail: `Logged in to the ${site.name} trade account.`, lastLoginOkAt: new Date(), lastLoginFailureCode: null });
 
     // 2. Work out which supplier pages to read.
     const targets = await targetsFor(supplierId, scope.kind === "test" ? { kind: "catalogue" } : scope);
     const work = scope.kind === "test" ? targets.filter((t) => t.sku || t.url).slice(0, 1) : targets;
-    if (scope.kind !== "test" && !work.length) return await finish("ok", null, "Logged in. No products to refresh: none has an IT Plus listing yet. Refresh a product to find its listing.");
-    const resolved = await resolveListings(session, work);
+    if (scope.kind !== "test" && !work.length) return await finish("ok", null, `Logged in. No products to refresh: none has a ${site.name} listing yet. Refresh a product to find its listing.`);
+    const resolved = await resolveListings(site, session, work);
 
     // 3. Read each logged-in product page.
     const pages: { t: Target; entry: CatalogueEntry; page: ParsedProductPage }[] = [];
@@ -225,12 +213,12 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
         continue;
       }
       const res = await session.request(new URL(r.entry.url).pathname + new URL(r.entry.url).search);
-      const blocked = blockOf(res);
+      const blocked = site.blockOf(res);
       if (blocked) throw blocked;
-      const page = parseProductPage(res.html);
-      if (page.loggedIn === false) throw new ConnectorError("session_lost", "IT Plus stopped treating the session as logged in part-way through (prices hidden again). Stopped; nothing more recorded.");
+      const page = site.parseProductPage(res.html);
+      if (page.loggedIn === false) throw new ConnectorError("session_lost", `${site.name} stopped treating the session as logged in part-way through (prices hidden again). Stopped; nothing more recorded.`);
       if (res.status !== 200) {
-        items.push({ productId: r.t.productId, product: r.t.label, sku: r.entry.sku, url: r.entry.url, outcome: "not_read", reason: `IT Plus returned HTTP ${res.status} for the product page.` });
+        items.push({ productId: r.t.productId, product: r.t.label, sku: r.entry.sku, url: r.entry.url, outcome: "not_read", reason: `${site.name} returned HTTP ${res.status} for the product page.` });
         continue;
       }
       if (!page.sku || page.sku.trim().toLowerCase() !== r.entry.sku.trim().toLowerCase()) {
@@ -252,8 +240,8 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
         ? sample.page.amount != null && basis?.basis
           ? ` Prices are visible: ${sample.t.label} shows ${sample.page.priceText} (read as $${sample.page.amount.toFixed(2)} ${basis.basis} GST). Nothing was recorded.`
           : ` Logged in, but the sample product's price could not be read (${sample.page.reason ?? (basis && !basis.basis ? basis.reason : "unknown")}).`
-        : " No product is mapped to IT Plus yet, so no price page was checked.";
-      return await finish("ok", null, `Connection OK: logged in to the IT Plus trade account.${priceNote}`);
+        : ` No product is mapped to ${site.name} yet, so no price page was checked.`;
+      return await finish("ok", null, `Connection OK: logged in to the ${site.name} trade account.${priceNote}`);
     }
 
     // 4. Record what could be read with confidence.
@@ -279,7 +267,7 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
             supplierSku: entry.sku,
             sourceUrl: entry.url,
             stock: page.stock,
-            source: SOURCE_LABEL,
+            source: `${site.name} trade login sync`,
             priceSource: "authenticated_web",
             syncRunId: runId,
           },
@@ -310,7 +298,7 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
     return await finish(failed ? (ok ? "partial" : "failed") : "ok", null, `Logged in and checked ${items.length} product(s): ${ok} priced, ${failed} need attention. New and changed prices wait for Chris's approval.`);
   } catch (e) {
     const err = e instanceof ConnectorError ? e : null;
-    const reason = err ? err.message : `Unexpected error in the IT Plus connector${e instanceof Error ? `: ${e.message}` : ""}.`;
+    const reason = err ? err.message : `Unexpected error in the ${conn ? siteFor(conn.connector).name : "supplier"} connector${e instanceof Error ? `: ${e.message}` : ""}.`;
     const safe = redact(reason, [...secrets, ...(session?.secrets() ?? [])]);
     await setStatus(supplierId, {
       ...(err && BLOCK_CODES.has(err.code) ? { status: "blocked", statusDetail: safe } : { status: "error", statusDetail: safe }),
@@ -320,21 +308,21 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
   }
 }
 
-/** Find each target's IT Plus listing: by its stored SKU, else by an exact model match in the catalogue. */
-async function resolveListings(session: WebSession, targets: Target[]): Promise<{ t: Target; entry: CatalogueEntry | null; candidates: CatalogueEntry[]; reason: string | null }[]> {
+/** Find each target's listing at the supplier: by its stored SKU, else by an exact model match in the catalogue. */
+async function resolveListings(site: SupplierSite, session: WebSession, targets: Target[]): Promise<{ t: Target; entry: CatalogueEntry | null; candidates: CatalogueEntry[]; reason: string | null }[]> {
   const known = targets.filter((t) => t.sku).map((t) => t.sku!);
-  const bySku = known.length ? await findInCatalogue(session, { skus: known }) : [];
+  const bySku = known.length ? await site.findInCatalogue(session, { skus: known }) : [];
   const out: { t: Target; entry: CatalogueEntry | null; candidates: CatalogueEntry[]; reason: string | null }[] = [];
   for (const t of targets) {
     if (t.sku) {
       const entry = bySku.find((e) => e.sku.toLowerCase() === t.sku!.toLowerCase()) ?? null;
       if (entry) out.push({ t, entry, candidates: [], reason: null });
-      else out.push({ t, entry: null, candidates: [], reason: `IT Plus no longer lists SKU ${t.sku}.` });
+      else out.push({ t, entry: null, candidates: [], reason: `${site.name} no longer lists SKU ${t.sku}.` });
       continue;
     }
     const words = brandWordsFor(t.manufacturer, t.family);
     const term = searchTermFor(t.model, words);
-    const found = term ? await findInCatalogue(session, { search: term }) : [];
+    const found = term ? await site.findInCatalogue(session, { search: term }) : [];
     const m = matchListing(t.model, words, found);
     if (m.match) out.push({ t, entry: m.match, candidates: [], reason: null });
     else
@@ -343,15 +331,15 @@ async function resolveListings(session: WebSession, targets: Target[]): Promise<
         entry: null,
         candidates: m.candidates,
         reason: m.candidates.length
-          ? `IT Plus has ${m.candidates.length} listing(s) close to ${t.model} but none exactly (${m.candidates.map((c) => c.sku).join(", ")}). Nothing is chosen automatically: choose the listing Get Secure buys.`
-          : `IT Plus does not list ${t.model} (searched "${term}").`,
+          ? `${site.name} has ${m.candidates.length} listing(s) close to ${t.model} but none exactly (${m.candidates.map((c) => c.sku).join(", ")}). Nothing is chosen automatically: choose the listing Get Secure buys.`
+          : `${site.name} does not list ${t.model} (searched "${term}").`,
       });
   }
   return out;
 }
 
 /**
- * Point a product at a specific IT Plus listing (when the match was ambiguous). Changing an
+ * Point a product at a specific supplier listing (when the match was ambiguous). Changing an
  * existing listing's SKU withdraws the approval of its old cost, which belonged to the old listing.
  */
 export async function mapSupplierListing(supplierId: string, productId: string, listing: { sku: string; url: string }, actor: Actor): Promise<void> {
@@ -413,24 +401,25 @@ export async function liveSupplierLookup(supplierId: string, q: { search?: strin
     const credential = await getSupplierCredential(supplierId, SYSTEM);
     if (!credential) return { ok: false, supplier: supplier.name, stopped: false, reason: "No trade login is stored for this supplier." };
     secrets = [credential.username ?? "", credential.secret];
+    const site = siteFor(conn.connector);
     session = new WebSession(baseUrlFor(conn.connector), { delayMs: Number(process.env.SUPPLIER_SYNC_DELAY_MS ?? 800) });
     try {
-      await login(session, credential);
+      await site.login(session, credential);
     } catch (e) {
       const err = e instanceof ConnectorError ? e : new ConnectorError("error", "The login could not be completed.");
       const reason = redact(err.message, [...secrets, ...session.secrets()]);
       await setStatus(supplierId, { status: BLOCK_CODES.has(err.code) ? "blocked" : AUTH_CODES.has(err.code) ? "auth_failed" : "error", statusDetail: reason, lastLoginFailedAt: new Date(), lastLoginFailure: reason, lastLoginFailureCode: err.code });
       return { ok: false, supplier: supplier.name, stopped: BLOCK_CODES.has(err.code), reason };
     }
-    const entries = await findInCatalogue(session, q.sku ? { skus: [q.sku] } : { search: q.search ?? "" });
+    const entries = await site.findInCatalogue(session, q.sku ? { skus: [q.sku] } : { search: q.search ?? "" });
     const list = entries.slice(0, 15).map((e) => ({ sku: e.sku, name: e.name, url: e.url, summary: e.summary ?? null, stock: e.stock ?? null }));
     if (!q.sku) return { ok: true, supplier: supplier.name, entries: list, note: "Live search of the logged-in catalogue. Nothing was recorded." };
     const entry = entries.find((e) => e.sku.toLowerCase() === q.sku!.toLowerCase());
     if (!entry) return { ok: true, supplier: supplier.name, entries: list, page: null, note: `No listing with SKU ${q.sku}.` };
     const res = await session.request(new URL(entry.url).pathname + new URL(entry.url).search);
-    const blocked = blockOf(res);
+    const blocked = site.blockOf(res);
     if (blocked) throw blocked;
-    const page = parseProductPage(res.html);
+    const page = site.parseProductPage(res.html);
     const basis = resolveBasis(page, null);
     return {
       ok: true,

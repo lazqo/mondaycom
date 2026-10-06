@@ -61,7 +61,7 @@ test.describe("Supplier pricing: IT Plus trade login", () => {
 
     // The connector logs in with it.
     await page.goto("/settings/brain?tab=pricing");
-    const card = page.getByTestId("supplier-connector");
+    const card = page.locator('[data-testid="supplier-connector"][data-connector="itplus"]');
     await expect(card.getByTestId("connector-status")).toHaveText("Not tested");
     await card.getByTestId("test-connection").click();
     await expect(card.getByTestId("sync-result")).toContainText("Connection OK: logged in to the IT Plus trade account.");

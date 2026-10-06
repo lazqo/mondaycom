@@ -92,7 +92,7 @@ function RunResult({ supplierId, result, canMap }: { supplierId: string; result:
             <thead className="text-gray-500">
               <tr>
                 <th className="py-1 pr-2">Product</th>
-                <th className="py-1 pr-2">IT Plus SKU</th>
+                <th className="py-1 pr-2">Supplier SKU</th>
                 <th className="py-1 pr-2">Result</th>
                 <th className="py-1 pr-2">Shown (logged in)</th>
                 <th className="py-1 pr-2 text-right">Cost ex GST</th>
@@ -208,7 +208,7 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
   const last = c.runs[0];
 
   return (
-    <Card data-testid="supplier-connector">
+    <Card data-testid="supplier-connector" data-connector={c.connector}>
       <CardHeader title={`${c.supplier} · trade login connector`} action={<Badge className={cls} data-testid="connector-status">{st}</Badge>} />
       <div className="space-y-4 p-4 text-sm">
         {c.statusDetail ? <p className="text-gray-700">{c.statusDetail}</p> : null}

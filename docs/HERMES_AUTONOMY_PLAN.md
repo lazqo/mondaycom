@@ -514,6 +514,15 @@ price by hand when the CRM holds the trade logins. *Delivered:*
   stocks it (Tapo, say). A retail price is recorded as a retail price with the retailer, the link
   and the picture, never as a trade cost, and only ever enters a quote as a line Chris approves.
 
+### Run G: the other suppliers connect
+Chris's order: Clear Digital, SWL, Vesta Electrical. *Delivered.* The IT Plus runner became a
+runner for any site, with one module per supplier website (Clear Digital's custom shop; SWL and
+Vesta Electrical on the WebNinja B2B platform). Same rules everywhere: encrypted login used
+server-side only, one unambiguous logged-in price with a known GST basis, public figures and
+guest "POA" pages never used, CAPTCHA / two-factor stops, credential-free failure text, exact
+matching only. The auto-approval switch and threshold from Run F apply to all four. Chris enters
+each trade login once under Suppliers & routing and presses Test connection.
+
 ### Order and dependencies
 A is independent and first. B needs A's booking/command actions. C needs nothing from B but is
 better after it (next steps show in the inbox row). D is small and can ride with C. F came from

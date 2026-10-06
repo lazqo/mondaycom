@@ -694,19 +694,46 @@ profile system. A site visit is still required.
   cabling can be reused.
 - Preferred suppliers for AAP / Arrowhead: Vesta Electrical and IT Plus.
 
-## 15. IT Plus authenticated pricing
+## 15. Supplier trade-login connectors (IT Plus, Clear Digital, SWL, Vesta Electrical)
 
-IT Plus (www.itplus.co.nz) is a WooCommerce shop that hides prices until a trade account logs in.
-The connector logs in with the IT Plus login stored under **Settings → Business Brain → Suppliers &
-routing** and reads Get Secure's trade price from the logged-in product page. Everything is on
-**Settings → Business Brain → Supplier pricing**:
+Four suppliers price from their own websites behind Get Secure's trade login. One runner
+(`src/lib/brain/suppliers/connector.ts`) drives a site module each:
+
+| Supplier | Website | Platform | Sign-in | Where the code lives |
+| --- | --- | --- | --- | --- |
+| IT Plus | www.itplus.co.nz | WooCommerce ("Login to see prices") | `/my-account/` form with nonce | `itplus.ts` |
+| Clear Digital | www.cleardigital.co.nz | custom shop ("Login for pricing", stock hidden) | `/members/login.php`, email + password | `cleardigital.ts` |
+| SWL / Security Wholesale | www.swl.co.nz | WebNinja B2B ("POA" for guests) | `/login`, CSRF token + email + password | `webninja.ts` |
+| Vesta Electrical | www.vestaelectrical.co.nz | WebNinja B2B ("POA" for guests) | `/login`, CSRF token + email + password | `webninja.ts` |
+
+Each connector logs in with the login stored under **Settings → Business Brain → Suppliers &
+routing** (encrypted; entered once by Chris, never pasted anywhere else) and reads Get Secure's
+trade price from the logged-in product page. The same rules hold for all four: the only cost ever
+read is an unambiguous price on a verified logged-in page with a known GST basis (a "+ GST" /
+"ex GST" / "inc GST" label by the price, or the page's own "All prices exclude GST" note, or the
+basis seen on that supplier's earlier logged-in pages); the page's code must be the listing asked
+for; "POA", RRP, "was/now", ranges and two prices are reported, not recorded; a public figure
+(IT Plus's product API, Clear Digital's Open Graph meta, a guest "POA" page) is never used;
+CAPTCHA, two-factor and challenge pages stop the run; failure reasons are fixed text that never
+carries the username, password or a cookie. Matching: an exact model/SKU match on the listing's
+code, its model field, or the model written as one word of its name (SWL's own codes are stock
+numbers, so its listings match on the name); anything closer than that is offered for Chris to
+choose. Everything is run from **Settings → Business Brain → Supplier pricing**, one card per
+supplier:
 
 - **Test connection** — logs in and checks one mapped product page shows a price. Records nothing.
-- **Refresh one product** (pick any catalogue product; the connector finds its IT Plus listing),
-  **Refresh selected**, and **Refresh IT Plus priced catalogue** (every product with an IT Plus listing).
+- **Refresh one product** (pick any catalogue product; the connector finds its listing),
+  **Refresh selected**, and **Refresh … priced catalogue** (every product with a listing there).
 - Status: connector state, last successful / failed login (with the reason), last successful /
-  failed price sync, whether IT Plus shows prices ex or inc GST, recent runs and their results,
-  and each listing's price history.
+  failed price sync, whether the supplier shows prices ex or inc GST, recent runs and their
+  results, and each listing's price history.
+
+**First run on a new connector.** Store the login, press **Test connection**, and read the message:
+it says whether the sign-in worked and, once a product is mapped, what the sample page's price
+text was and how it was read. If a price is reported as "does not say whether the price is ex or
+inc GST", the site shows prices without a label and without a site-wide note: tell the developer
+the exact price text shown on the card and the connector is taught that site's wording. Nothing is
+recorded until a price is read with confidence.
 
 **How prices are approved (Run F).** The top of the Supplier pricing tab is Chris's choice for
 every connected supplier. With "Approve logged-in supplier prices automatically" on, a price read
@@ -717,11 +744,11 @@ retail price still wait for Chris. A refresh never changes a quote already prepa
 picks the new cost up). The switch is off by default, and every change to it is logged. The same
 card lists the retailers Get Secure buys from when no supplier stocks an item (PB Tech, Noel
 Leeming, Harvey Norman and Bunnings by default): the research profile may quote their retail
-price, picture and availability as a retail price, never as a trade cost. Each further supplier
-needs its own connector (IT Plus is the only one built); the approval rule above then applies to
-it without more work.
+price, picture and availability as a retail price, never as a trade cost. The approval rule
+applies to every connected supplier (IT Plus, Clear Digital, SWL, Vesta Electrical) alike.
 
-What it will and won't do:
+What the IT Plus connector in particular will and won't do (the others follow the same rules
+with their own page markup):
 
 - **When a price is recorded**: the session is verified as logged in, the page's SKU is the listing
   asked for, the price is read from that logged-in page, its GST basis is clear, and there is no

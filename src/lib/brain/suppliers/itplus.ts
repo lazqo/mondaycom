@@ -19,110 +19,15 @@
  *   username) is never passed on.
  */
 import { ConnectorError, type WebResponse, type WebSession } from "./web-session";
+import { allByClass, amountOf, basisOf, CAPTCHA_RE, decodeEntities, elementByClass, MFA_RE, textOf, type CatalogueEntry, type ParsedProductPage, type PriceBasis } from "./html";
+import type { SupplierSite } from "./site";
+
+// The shared pieces keep their old import path for the tests and the runner.
+export { basisOf, brandWordsFor, decodeEntities, elementByClass, matchListing, modelKey, resolveBasis, searchTermFor, textOf } from "./html";
+export type { CatalogueEntry, ParsedProductPage, PriceBasis } from "./html";
 
 export const ITPLUS_CONNECTOR = "itplus";
 export const ITPLUS_BASE_URL = "https://www.itplus.co.nz";
-
-export type PriceBasis = "ex" | "inc";
-
-export type ParsedProductPage = {
-  loggedIn: boolean | null;
-  title: string | null;
-  sku: string | null;
-  stock: string | null;
-  /** The visible text of the price, for the run report (e.g. "$173.20 + GST"). */
-  priceText: string | null;
-  amount: number | null;
-  /** A struck-through earlier price (WooCommerce sale markup), shown so a person can see it was a sale. */
-  wasAmount: number | null;
-  /** Basis shown next to the price on this page, if any. */
-  suffixBasis: PriceBasis | null;
-  /** The shop's tax display setting, where the page carries it. */
-  siteBasis: PriceBasis | null;
-  /** Why no amount could be read. */
-  reason: string | null;
-};
-
-export type CatalogueEntry = {
-  id: number;
-  sku: string;
-  name: string;
-  url: string;
-  type: string;
-  /** The supplier's own short description (e.g. "Supply Only", "Price Including Installation In a Recorder"). */
-  summary?: string | null;
-  /** The "Notes*" section of the supplier's description, where it has one. */
-  notes?: string | null;
-  /** Public stock wording. */
-  stock?: string | null;
-};
-
-// ---------- small HTML helpers (WooCommerce markup is regular enough for these) ----------
-
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—", hellip: "…" };
-
-export function decodeEntities(s: string): string {
-  return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, code: string) => {
-    if (code[0] === "#") {
-      const n = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
-    }
-    return ENTITIES[code.toLowerCase()] ?? m;
-  });
-}
-
-export function textOf(html: string): string {
-  return decodeEntities(html.replace(/<(script|style|svg)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " "))
-    .replace(/\s+/g, " ")
-    .replace(/\$ (?=\d)/g, "$")
-    .trim();
-}
-
-/** The inner HTML of the first <tag> whose class list has `cls`, from `from`, with nesting of the same tag balanced. */
-export function elementByClass(html: string, tag: string, cls: string, from = 0): { inner: string; start: number; end: number } | null {
-  // `cls` must be a whole class name ("price" does not match "price-wrapper").
-  const open = new RegExp(`<${tag}\\b[^>]*\\bclass\\s*=\\s*(["'])(?:[^"']*\\s)?${cls.replace(/[-]/g, "\\-")}(?:\\s[^"']*)?\\1[^>]*>`, "gi");
-  open.lastIndex = from;
-  const m = open.exec(html);
-  if (!m) return null;
-  const tagRe = new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
-  tagRe.lastIndex = m.index + m[0].length;
-  let depth = 1;
-  let t: RegExpExecArray | null;
-  while ((t = tagRe.exec(html))) {
-    depth += t[1] ? -1 : 1;
-    if (depth === 0) return { inner: html.slice(m.index + m[0].length, t.index), start: m.index, end: t.index + t[0].length };
-  }
-  return { inner: html.slice(m.index + m[0].length), start: m.index, end: html.length };
-}
-
-function allByClass(html: string, tag: string, cls: string): string[] {
-  const out: string[] = [];
-  let from = 0;
-  for (;;) {
-    const e = elementByClass(html, tag, cls, from);
-    if (!e) return out;
-    out.push(e.inner);
-    from = e.end;
-  }
-}
-
-function amountOf(fragment: string): number | null {
-  const t = textOf(fragment).replace(/[$\s]/g, "");
-  const m = t.match(/^(?:NZ)?\$?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)(\.[0-9]{1,2})?$/i);
-  if (!m) return null;
-  const n = Number(m[1].replace(/,/g, "") + (m[2] ?? ""));
-  return Number.isFinite(n) ? n : null;
-}
-
-export function basisOf(text: string | null | undefined): PriceBasis | null {
-  if (!text) return null;
-  const t = text.toLowerCase();
-  const ex = /\+\s*gst|\bex\.?\s*gst|\bexcl?\.?(uding)?\s*gst|\bexcluding\b|\bplus\s+gst/.test(t);
-  const inc = /\binc\.?\s*gst|\bincl?\.?(uding)?\s*gst|\bincluding\b|\bgst\s+incl/.test(t);
-  if (ex === inc) return null;
-  return ex ? "ex" : "inc";
-}
 
 /** Whether the page belongs to a logged-in account (true), clearly does not (false), or can't tell (null). */
 export function loggedInState(html: string): boolean | null {
@@ -151,9 +56,6 @@ export function blockOf(res: WebResponse): ConnectorError | null {
   if (res.status === 429) return new ConnectorError("rate_limited", "IT Plus asked us to slow down (too many requests). The connector stopped; try again later.");
   return null;
 }
-
-const CAPTCHA_RE = /g-recaptcha|h-captcha|cf-turnstile|data-sitekey|grecaptcha|hcaptcha|name="[^"]*captcha[^"]*"/i;
-const MFA_RE = /two[- ]factor|2fa\b|authentication code|verification code|one[- ]time (pass)?code|authenticator app|security code|name="[^"]*(otp|totp|2fa|mfa|authcode)[^"]*"/i;
 
 export type LoginForm = { nonce: string; referer: string; extra: Record<string, string> };
 
@@ -271,18 +173,6 @@ export function parseProductPage(html: string): ParsedProductPage {
   return out;
 }
 
-/**
- * Decide the GST basis of a page's price: its own suffix first, then the shop's setting seen on this
- * page or on another logged-in page in the same run. A disagreement or no evidence means no price.
- */
-export function resolveBasis(page: ParsedProductPage, runBasis: PriceBasis | null): { basis: PriceBasis; from: string } | { basis: null; reason: string } {
-  const site = page.siteBasis ?? runBasis;
-  if (page.suffixBasis && site && page.suffixBasis !== site) return { basis: null, reason: `The page's GST label (${page.suffixBasis} GST) disagrees with the shop's tax setting (${site} GST); not recorded.` };
-  if (page.suffixBasis) return { basis: page.suffixBasis, from: "price label" };
-  if (site) return { basis: site, from: "shop tax setting" };
-  return { basis: null, reason: "The page does not say whether the price is ex or inc GST; not recorded." };
-}
-
 // ---------- catalogue lookup (public metadata only) ----------
 
 /** Parse WooCommerce Store API product JSON down to catalogue metadata. Price fields are discarded here. */
@@ -327,47 +217,14 @@ export async function findInCatalogue(session: WebSession, q: { skus?: string[];
   return parseCatalogueJson(res.html, session.url("/"));
 }
 
-/** A comparable key for a model or SKU: no brand words, no "mm", no punctuation. */
-export function modelKey(s: string, brandWords: string[] = []): string {
-  let t = s.toLowerCase();
-  for (const w of brandWords) t = t.replace(new RegExp(`\\b${w.toLowerCase().replace(/[^a-z0-9]+/g, "[^a-z0-9]*")}\\b`, "g"), " ");
-  return t.replace(/(\d)\s*mm\b/g, "$1").replace(/[^a-z0-9]/g, "");
-}
-
-const BRAND_WORDS: Record<string, string[]> = {
-  "TP-Link": ["tp-link", "tp link", "vigi", "insight"],
-  "TP-Link VIGI": ["tp-link", "tp link", "vigi", "insight"],
-  HiLook: ["hilook"],
-  Hikvision: ["hikvision"],
-  "Western Digital": ["western digital", "wd purple"],
-  Seagate: ["seagate", "skyhawk"],
+/** IT Plus as a connector site. */
+export const ITPLUS_SITE: SupplierSite = {
+  key: ITPLUS_CONNECTOR,
+  name: "IT Plus",
+  baseUrl: ITPLUS_BASE_URL,
+  envVar: "ITPLUS_BASE_URL",
+  login,
+  findInCatalogue,
+  parseProductPage,
+  blockOf,
 };
-
-export function brandWordsFor(manufacturer: string, family: string | null): string[] {
-  return [...(BRAND_WORDS[manufacturer] ?? []), ...(family ? (BRAND_WORDS[family] ?? []) : []), manufacturer, ...(family ? [family] : [])];
-}
-
-/** A search term for the supplier catalogue: the model without brand words or lens suffix. */
-export function searchTermFor(model: string, brandWords: string[]): string {
-  let t = model;
-  for (const w of brandWords) t = t.replace(new RegExp(`\\b${w.replace(/[^a-z0-9]+/gi, "[^a-z0-9]*")}\\b`, "gi"), " ");
-  return t.replace(/\(.*?\)/g, " ").replace(/\s+/g, " ").trim();
-}
-
-/**
- * Match a canonical product to supplier listings. Only an exact model/SKU key is a match; listings
- * that merely start with the model (e.g. WD43PURZ-SUP and WD43PURZ-Inst for WD43PURZ) are returned
- * as candidates for a person to choose between.
- */
-export function matchListing(model: string, brandWords: string[], entries: CatalogueEntry[]): { match: CatalogueEntry | null; candidates: CatalogueEntry[] } {
-  const key = modelKey(model, brandWords);
-  if (!key) return { match: null, candidates: [] };
-  const exact = entries.filter((e) => modelKey(e.sku, brandWords) === key);
-  if (exact.length === 1) return { match: exact[0], candidates: [] };
-  if (exact.length > 1) return { match: null, candidates: exact };
-  const near = entries.filter((e) => {
-    const k = modelKey(e.sku, brandWords);
-    return k.length >= 4 && (k.startsWith(key) || key.startsWith(k));
-  });
-  return { match: null, candidates: near.slice(0, 8) };
-}

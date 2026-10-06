@@ -4,8 +4,9 @@
  * all of them. Imports and syncs never approve a price themselves and never touch a prepared
  * quote (quotes keep their own price snapshot).
  *
- * Available now: manual entry, CSV import, price on application, and the IT Plus trade-login
- * connector (./connector.ts, run from Settings → Business Brain → Supplier pricing). Other
+ * Available now: manual entry, CSV import, price on application, and the trade-login connectors
+ * (./connector.ts, run from Settings → Business Brain → Supplier pricing: IT Plus, Clear Digital,
+ * SWL, Vesta Electrical). Other
  * authenticated catalogues and supplier APIs have their place here for later connectors; until one
  * is written for a supplier, a sync says so instead of scraping.
  */
@@ -46,7 +47,7 @@ export const ADAPTERS: Record<PriceSourceType, SupplierAdapter> = {
   authenticated_web: {
     type: "authenticated_web",
     label: "Authenticated web catalogue",
-    description: "Trade prices behind a supplier login. Connector written for IT Plus only.",
+    description: "Trade prices behind a supplier login. Connectors: IT Plus, Clear Digital, SWL, Vesta Electrical.",
     needsCredential: true,
   },
   public_plus_trade: {
