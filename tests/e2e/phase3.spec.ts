@@ -64,7 +64,9 @@ test.describe("Calendar, dispatch, My Day and Today", () => {
     await page.getByRole("button", { name: "Add reminder" }).click();
     await page.getByLabel("Title *").fill(`Ring supplier ${RUN}`);
     await page.getByRole("button", { name: "Add reminder" }).last().click();
-    const task = page.locator("[data-testid^=task-]", { hasText: `Ring supplier ${RUN}` });
+    // A reminder with no date is for today. Home shows the first few; the Next steps page shows them all.
+    await page.goto("/settings/automations");
+    const task = page.getByTestId("steps-today").locator("[data-testid^=task-]", { hasText: `Ring supplier ${RUN}` });
     await expect(task).toBeVisible();
     await task.getByRole("button", { name: /Mark done/ }).click();
     await expect(task).toHaveCount(0);

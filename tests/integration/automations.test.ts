@@ -84,10 +84,14 @@ describe("one next step per record", () => {
     // The quote is on the "follow-up due" lead but that lead is Contacted: the follow-up date is the step.
     expect(await stepOf(leadIds[2])).toMatchObject({ what: "Follow up Follow-up", kind: "checklist", overdue: true });
     expect((await nextStepForJob(jobId))!).toMatchObject({ what: expect.stringMatching(/^Invoice J-/), overdue: true });
+    const [loose] = await db.insert(tasks).values({ title: `Order more cable ${RUN}`, createdById: userId }).returning({ id: tasks.id });
     const all = await listNextSteps();
     const ids = [...all.overdue, ...all.dueToday, ...all.later, ...all.waiting].map((r) => r.record.id);
     for (const id of [...leadIds, jobId]) expect(ids).toContain(id);
     expect(all.overdue.map((r) => r.record.id)).toContain(jobId);
+    // A reminder on no record, with no date, is for today.
+    expect(all.dueToday.find((r) => r.record.type === "task" && r.record.id === loose.id)?.step).toMatchObject({ what: `Order more cable ${RUN}`, kind: "task" });
+    await db.delete(tasks).where(eq(tasks.id, loose.id));
   });
 
   it("a follow-up set before the customer's latest email no longer applies", async () => {

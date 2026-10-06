@@ -232,9 +232,12 @@ export async function listNextSteps(ctx?: StepContext): Promise<NextStepsList> {
   const KIND_ORDER: Record<string, number> = { commitment: 0, decision: 1, chase: 2, task: 3, typed: 4, appointment: 5, checklist: 6, stage: 7, waiting: 8 };
   const byKind = (a: StepRow, b: StepRow) => (KIND_ORDER[a.step.kind] ?? 9) - (KIND_ORDER[b.step.kind] ?? 9);
   const byDue = (a: StepRow, b: StepRow) => (a.step.due ?? "9999").localeCompare(b.step.due ?? "9999") || (a.step.at ?? "").localeCompare(b.step.at ?? "") || byKind(a, b) || a.record.label.localeCompare(b.record.label);
+  // Work someone wrote down with no date (a task, a typed note) is for today; a stage default with no
+  // date ("Book the site visit") waits in Coming up until something dates it.
+  const today = (r: StepRow) => !r.step.overdue && !r.step.waiting && (r.step.due === c.today || (!r.step.due && (r.step.kind === "task" || r.step.kind === "typed")));
   const overdue = rows.filter((r) => r.step.overdue).sort(byDue);
-  const dueToday = rows.filter((r) => !r.step.overdue && !r.step.waiting && r.step.due === c.today).sort((a, b) => byKind(a, b) || (a.step.at ?? "").localeCompare(b.step.at ?? "") || a.record.label.localeCompare(b.record.label));
-  const later = rows.filter((r) => !r.step.overdue && !r.step.waiting && r.step.due !== c.today).sort(byDue);
+  const dueToday = rows.filter(today).sort((a, b) => byKind(a, b) || (a.step.at ?? "").localeCompare(b.step.at ?? "") || a.record.label.localeCompare(b.record.label));
+  const later = rows.filter((r) => !r.step.overdue && !r.step.waiting && !today(r)).sort(byDue);
   const waiting = rows.filter((r) => r.step.waiting).sort(byDue);
   return { today: c.today, overdue, dueToday, later, waiting, quiet };
 }
