@@ -39,8 +39,11 @@ test("Next action beside Status: stage defaults, typed actions and the lost reas
   await cell.getByLabel("Next action").fill("Ring Tuesday to book the install");
   await cell.getByLabel("Next action").press("Enter");
   await expect(cell).toHaveText("Ring Tuesday to book the install");
-  await page.reload();
-  await expect(page.locator("tr", { hasText: NAME }).getByTestId("next-action")).toHaveText("Ring Tuesday to book the install");
+  // Saved in the background: reload once it is on the server.
+  await expect(async () => {
+    await page.reload();
+    await expect(page.locator("tr", { hasText: NAME }).getByTestId("next-action")).toHaveText("Ring Tuesday to book the install", { timeout: 1500 });
+  }).toPass({ timeout: 15_000 });
 
   // Moved to Quote Sent: the Won note no longer applies, the stage default shows.
   await page.locator("tr", { hasText: NAME }).getByLabel("Status").selectOption("quote_sent");

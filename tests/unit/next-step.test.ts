@@ -87,6 +87,8 @@ describe("what supersedes what", () => {
   it("Chris's typed next action for this stage is the step, with the follow-up date as its date", () => {
     const l = lead({ status: "quote_sent", nextAction: "Ring Tuesday after 3", nextActionFor: "quote_sent", followUpAt: "2026-10-07", followUpSetAt: hoursAgo(5) });
     expect(nextStepFor(l, ctx)).toMatchObject({ what: "Ring Tuesday after 3", kind: "typed", due: "2026-10-07" });
+    // Hermes's recommended-action label on a lead it created (no stage recorded) is not Chris's note.
+    expect(nextStepFor(lead({ status: "new", nextAction: "Prepare quote", nextActionFor: null }), ctx)).toMatchObject({ what: "Contact Dean", kind: "checklist" });
     // Written for an earlier stage: not shown any more.
     expect(nextStepFor(lead({ status: "quote_sent", nextAction: "Ring Tuesday after 3", nextActionFor: "new" }), ctx).kind).not.toBe("typed");
   });
@@ -111,9 +113,14 @@ describe("what supersedes what", () => {
     const theirs = { id: "c2", owner: "customer", ownerName: "Dean", action: "send the photos of the eaves", dueAt: at("2026-10-08T12:00:00+13:00"), dueText: "tomorrow" };
     const s = nextStepFor(lead({ status: "contacted", commitments: [theirs] }), ctx);
     expect(s).toMatchObject({ what: "Nothing until Dean send the photos of the eaves", kind: "waiting", waiting: true, due: "2026-10-08", overdue: false });
+    // Waiting replaces the checklist: a brand-new lead whose customer promised photos is not "Contact them".
+    expect(nextStepFor(lead({ status: "new", commitments: [theirs] }), ctx).kind).toBe("waiting");
     // Specific work with no date still comes before waiting; a stage default does not.
     expect(nextStepFor(lead({ status: "contacted", commitments: [theirs], tasks: [{ id: "t", title: "Order the cable", dueAt: null, assignedToId: null, kind: "task", detail: null }] }), ctx).what).toBe("Order the cable");
     expect(dueLabel(s, ctx.today, TZ)).toBe("by Thu 8 Oct");
+    // Hermes's check-in task on that promise is the wait itself, not a second step.
+    const check = { id: "t2", title: "Check: customer said they'd send the photos of the eaves", dueAt: "2026-10-10", assignedToId: null, kind: "follow_up", detail: null };
+    expect(nextStepFor(lead({ status: "contacted", commitments: [theirs], tasks: [check] }), ctx)).toMatchObject({ kind: "waiting", why: "they said tomorrow; check in 2026-10-10" });
     const late = nextStepFor(lead({ status: "contacted", commitments: [{ ...theirs, dueAt: at("2026-10-02T12:00:00+13:00") }] }), ctx);
     expect(late).toMatchObject({ what: "Chase Dean: send the photos of the eaves", kind: "chase", due: "2026-10-06", overdue: false });
   });

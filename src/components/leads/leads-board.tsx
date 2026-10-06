@@ -50,6 +50,9 @@ export function LeadsBoard({
   const [error, setError] = React.useState<string | null>(null);
   const [newOpen, setNewOpen] = React.useState(false);
   const [, startTransition] = React.useTransition();
+  // Edits to the board are saved one after another: a quick second edit (a note typed right after a
+  // status change) must see the first one already on the server, or it is written against old state.
+  const queue = React.useRef<Promise<unknown>>(Promise.resolve());
 
   React.useEffect(() => setRows(leads), [leads]);
 
@@ -73,7 +76,9 @@ export function LeadsBoard({
         }),
       );
       startTransition(async () => {
-        const res = await updateLead(id, patch);
+        const next = queue.current.catch(() => undefined).then(() => updateLead(id, patch));
+        queue.current = next;
+        const res = await next;
         if (!res.ok) {
           setError(res.error);
           if (previous) setRows((rs) => rs.map((r) => (r.id === id ? previous! : r)));

@@ -62,7 +62,7 @@ export function StepLine({ record, step, today, showRecord = true }: { record: S
         <button type="button" onClick={() => set(task, "dismissed")} disabled={pending} title="Dismiss" aria-label={`Dismiss: ${step.what}`} className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
           <X className="h-3.5 w-3.5" />
         </button>
-      ) : step.source?.type === "commitment" && !step.waiting ? (
+      ) : step.source?.type === "commitment" ? (
         <CommitmentButtons id={step.source.id} />
       ) : null}
     </div>

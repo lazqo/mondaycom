@@ -111,8 +111,7 @@ describe("one next step per record", () => {
 
   it("waiting on the customer holds the record; past their date the step is to chase them", async () => {
     const [c] = await db.insert(commitments).values({ owner: "customer", ownerName: "Fresh", action: "send the photos", actionKey: "send_photos", dueAt: new Date(Date.now() + 2 * DAY), dueText: "Thursday", confidence: "0.9", leadId: leadIds[1], sourceType: "recording", sourceId: leadIds[1] }).returning({ id: commitments.id });
-    // "Contact Fresh" is due today, so it still comes first; once contacted, the wait shows.
-    await db.update(leads).set({ status: "contacted" }).where(eq(leads.id, leadIds[1]));
+    // The wait replaces the checklist's "Contact Fresh": nothing to do until the photos come.
     expect(await stepOf(leadIds[1])).toMatchObject({ what: "Nothing until Fresh send the photos", kind: "waiting", waiting: true });
     expect((await listNextSteps()).waiting.map((r) => r.record.id)).toContain(leadIds[1]);
     await db.update(commitments).set({ dueAt: new Date(Date.now() - DAY) }).where(eq(commitments.id, c.id));

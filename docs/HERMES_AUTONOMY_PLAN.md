@@ -427,8 +427,8 @@ the inputs), so a reply, a call, a recording, a visit held or a quote approved r
 changing those inputs. Order of precedence: the earliest-due of a promise we made, a decision waiting on
 Chris (a proposal, a prepared reply or quote; never one of Hermes's questions, which live in the
 Decisions queue), Chris's typed next action, an open task, an appointment, a customer's overdue
-promise to chase, in that order on the same day; then the checklist timings; then "nothing until the customer …"; then the stage
-default. A follow-up date set before the customer's latest contact no longer applies (a new
+promise to chase, in that order on the same day; then "nothing until the customer …" while their
+promise stands (the checklist is quiet meanwhile); then the checklist timings; then the stage default. A follow-up date set before the customer's latest contact no longer applies (a new
 `follow_up_set_at` column records when it was set). The old rules create nothing any more; their
 open reminders are listed on Next steps with a count per rule and closed in one go on Chris's
 click ("replaced by the record's next step"). The checklist run also closes tasks on a lost lead

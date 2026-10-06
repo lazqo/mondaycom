@@ -196,9 +196,6 @@ test.describe("Lead + Conversation Inspector", () => {
     await eventually(page, "/dashboard", async () => expect(ours).toBeVisible({ timeout: 1000 }));
     await expect(ours).toContainText("tonight");
     await expect(ours).toContainText(/send the quote/i);
-    const theirs = page.getByTestId("section-waiting-on-customers").getByTestId("commitment").filter({ hasText: NAME });
-    await expect(theirs).toContainText(/photos/i);
-    await expect(theirs).toContainText("tomorrow");
 
     await page.goto(leadUrl);
     await expect(page.getByTestId("inspector-panel")).toContainText(/send the quote/i);
@@ -207,7 +204,11 @@ test.describe("Lead + Conversation Inspector", () => {
 
     await page.goto("/dashboard");
     await ours.getByRole("button", { name: "Done" }).click();
-    await expect(ours).toHaveCount(0); // kept: the lead's next step is no longer the promise
+    await expect(ours).toHaveCount(0); // the lead's one next step is no longer the promise
+    // Now the customer's promise is what the lead waits on: photos tomorrow.
+    const theirs = page.getByTestId("section-waiting-on-customers").locator("[data-step=waiting]", { hasText: NAME });
+    await expect(theirs).toContainText(/photos/i);
+    await expect(theirs).toContainText("tomorrow");
   });
 
   test("4. a name alone waits in “Who is this?” until Chris chooses", async ({ page }) => {

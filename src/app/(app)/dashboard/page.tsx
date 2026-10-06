@@ -3,9 +3,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getDashboard } from "@/queries/dashboard";
-import { getOutstandingCommitments } from "@/queries/inspector";
 import { getDecisions, getHermesFeed } from "@/queries/decisions";
-import { CommitmentLine } from "@/components/inspector/views";
 import { DecisionsQueue } from "@/components/decisions/queue";
 import { HermesFeed } from "@/components/decisions/feed";
 import { listActiveUsers } from "@/queries";
@@ -64,17 +62,14 @@ export default async function HomePage() {
   const user = await requireUser();
   if (user.role === "field") redirect("/my-day");
   await runAutomationsIfDue(5);
-  const [d, users, setup, commitmentItems, decisions, feed, steps] = await Promise.all([
+  const [d, users, setup, decisions, feed, steps] = await Promise.all([
     getDashboard(user.id),
     listActiveUsers(),
     user.role === "admin" ? getSetupSteps() : Promise.resolve(null),
-    getOutstandingCommitments(),
     getDecisions(),
     getHermesFeed(20),
     listNextSteps(),
   ]);
-  const now = new Date();
-  const theirs = commitmentItems.filter((c) => c.commitment.owner === "customer");
   const hermesOff = !process.env.HERMES_API_URL || !process.env.HERMES_API_KEY;
   // Names for the feed's subjects.
   const leadIds = [...new Set(feed.map((f) => f.leadId).filter((x): x is string => !!x))];
@@ -170,9 +165,9 @@ export default async function HomePage() {
               );
             })}
           </Section>
-          <Section title="Waiting on customers" count={theirs.length} empty="No customer has said they'll send anything.">
-            {theirs.slice(0, MAX_ROWS).map((c) => (
-              <CommitmentLine key={c.commitment.id} item={c} now={now} />
+          <Section title="Waiting on customers" count={steps.waiting.length} href="/settings/automations" empty="No customer has said they'll send anything.">
+            {steps.waiting.slice(0, MAX_ROWS).map((r) => (
+              <StepLine key={`${r.record.type}-${r.record.id}`} record={r.record} step={r.step} today={steps.today} />
             ))}
           </Section>
         </div>

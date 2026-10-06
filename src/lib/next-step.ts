@@ -8,9 +8,9 @@
  *      an open task (Hermes's or a person's), an appointment on the calendar, or a customer's
  *      overdue promise to chase; on the same day, in that order;
  *   2. (a question Hermes asked never blocks and lives in the Decisions queue, so it is not here);
- *   3. otherwise the daily checklist, timed from Settings → Next steps (a new lead not contacted,
- *      a visit held with no quote, a quote sent with no answer, a job done and not invoiced, a
- *      follow-up date reached), or "nothing until the customer …" while we wait on them;
+ *   3. otherwise "nothing until the customer …" while a promise of theirs stands, or the daily
+ *      checklist, timed from Settings → Next steps (a new lead not contacted, a visit held with no
+ *      quote, a quote sent with no answer, a job done and not invoiced, a follow-up date reached);
  *   4. otherwise the stage default ("Book the site visit", "Prepare the quote").
  *
  * A follow-up date set before the customer's latest email or call no longer applies: what Hermes
@@ -168,7 +168,15 @@ function sharedCandidates(r: RecordState, ctx: StepContext, who: string): { cand
       cands.push(candidate("commitment", c.action.replace(/^./, (ch) => ch.toUpperCase()), `you promised${c.dueText ? ` ${c.dueText}` : ""}`, { due: due ?? ctx.today, source: { type: "commitment", id: c.id }, assignedToId: assignee, today: ctx.today }));
     }
   }
-  for (const t of r.tasks) cands.push(candidate("task", t.title, t.kind === "call" ? "a call to make" : t.kind === "follow_up" ? "a follow-up" : t.kind === "service_case" ? "a service case" : t.kind === "quote" ? "the quote needs this" : t.detail ? t.detail.slice(0, 80) : null, { due: t.dueAt, source: { type: "task", id: t.id }, assignedToId: t.assignedToId ?? assignee, today: ctx.today }));
+  for (const t of r.tasks) {
+    // Hermes's check-in on a customer's promise ("Check: customer said they'd send the photos") is
+    // the waiting state itself, not a second step; the wait carries its date.
+    if (waitingOn && /^check: customer said/i.test(t.title)) {
+      if (t.dueAt) waitingOn.why = `${waitingOn.why ?? "their move"}; check in ${t.dueAt === ctx.today ? "today" : t.dueAt}`;
+      continue;
+    }
+    cands.push(candidate("task", t.title, t.kind === "call" ? "a call to make" : t.kind === "follow_up" ? "a follow-up" : t.kind === "service_case" ? "a service case" : t.kind === "quote" ? "the quote needs this" : t.detail ? t.detail.slice(0, 80) : null, { due: t.dueAt, source: { type: "task", id: t.id }, assignedToId: t.assignedToId ?? assignee, today: ctx.today }));
+  }
   const upcoming = r.events.filter((e) => new Date(e.endsAt).getTime() >= ctx.now.getTime()).sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0];
   if (upcoming) {
     const label = upcoming.kind === "site_visit" ? "Site visit" : upcoming.kind === "job" ? (r.kind === "job" ? `J-${r.number} on site` : "Job") : upcoming.title;
@@ -184,7 +192,10 @@ function leadStep(l: LeadState, ctx: StepContext): NextStep {
   if (l.status === "lost") return { what: l.lostReason?.trim() || "Lost", why: null, due: null, at: null, overdue: false, waiting: false, kind: "closed", source: null, assignedToId: null };
   const who = firstName(l.name);
   const { cands, specific, waitingOn } = sharedCandidates(l, ctx, who);
-  const typed = typedNextAction(l);
+  // Only a note a person typed counts (its stage is recorded then). A lead Hermes or the email
+  // pipeline created carries its recommended-action label with no stage: that is a reading, and the
+  // step is worked out from the record instead.
+  const typed = l.nextActionFor ? typedNextAction(l) : null;
   const lastIn = toDate(l.lastInboundAt);
   const setAt = toDate(l.followUpSetAt);
   // A follow-up set before the customer's latest contact no longer applies.
@@ -196,8 +207,9 @@ function leadStep(l: LeadState, ctx: StepContext): NextStep {
     const j = l.jobs[0];
     return j ? { what: `Job J-${j.number} in hand`, why: null, due: null, at: null, overdue: false, waiting: false, kind: "closed", source: null, assignedToId: null } : finish(candidate("stage", "Convert to a job", "won, no job yet", { assignedToId: l.assignedToId, today: ctx.today }));
   }
-  if (!specific && !typed) {
-    // The daily checklist: generic steps, timed from Settings; a specific plan on the record replaces them.
+  if (!specific && !typed && !waitingOn) {
+    // The daily checklist: generic steps, timed from Settings; a specific plan on the record, or a
+    // customer's promise we are waiting on, replaces them.
     const quote = (statuses: QuoteStatus[]) => l.quotes.find((q) => statuses.includes(q.status));
     const sent = quote(["sent"]);
     const heldVisit = l.events.filter((e) => e.kind === "site_visit" && new Date(e.endsAt).getTime() < ctx.now.getTime()).sort((a, b) => new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime())[0];
@@ -238,7 +250,7 @@ function jobStep(j: JobState, ctx: StepContext): NextStep {
   const tz = ctx.tz ?? DEFAULT_TZ;
   if (j.status === "cancelled" || j.status === "invoiced") return { what: j.status === "invoiced" ? "Invoiced" : "Cancelled", why: null, due: null, at: null, overdue: false, waiting: false, kind: "closed", source: null, assignedToId: null };
   const { cands, specific, waitingOn } = sharedCandidates(j, ctx, "the customer");
-  if (!specific) {
+  if (!specific && !waitingOn) {
     const ref = `J-${j.number}`;
     const scheduled = cands.find((c) => c.kind === "appointment");
     const past = j.events.filter((e) => new Date(e.endsAt).getTime() < ctx.now.getTime()).sort((a, b) => new Date(b.endsAt).getTime() - new Date(a.endsAt).getTime())[0];
