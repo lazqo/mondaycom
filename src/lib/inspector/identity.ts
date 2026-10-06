@@ -17,6 +17,10 @@ export const SIGNAL_WEIGHTS: Record<IdentitySignal["kind"], number> = {
   address: 0.5,
   company: 0.35,
   name: 0.2,
+  /** A number said with digits missing that fits inside a stored one: a candidate to confirm, never a match. */
+  partial_phone: 0.55,
+  /** A first name said on a call that matches a lead from the last fortnight: a candidate to confirm. */
+  recent_lead: 0.35,
 };
 // A job number names the work, not the person writing about it (a supplier, a property manager, the
 // customer's accounts team): it places the message in that work, never files the sender as the customer.

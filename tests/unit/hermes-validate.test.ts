@@ -398,3 +398,44 @@ describe("Hermes's internal work and research", () => {
     expect(v.plan.find((p) => p.type === "NEEDS_REVIEW")!.payload.question).toMatch(/Wiri contract/);
   });
 });
+
+describe("Run F: what Chris says on a recording, and rental work", () => {
+  const call = (text: string) => input(text, { sourceType: "recording", direction: "conversation", utterances: text.split("\n").map((t, i) => ({ speaker: "Speaker 1", at: `0:${String(i).padStart(2, "0")}`, text: t.replace(/^Speaker \d: /, "") })), from: { name: null, email: null, phone: null }, linked: { leadId: null, contactId: null, jobId: null, how: null } });
+  const unknown: IdentityResult = { status: "new", chosen: null, candidates: [], confidence: 0, reason: "nobody" };
+
+  it("prices Chris states after the call become one card he confirms; never from an email", () => {
+    const i = call("Speaker 1: This is notes. For the $500 install we're gonna use the Tapo C615G. Rental is four hundred per month including data.");
+    const h = H({ conversation_type: "new_enquiry", intent: "quote_request", lead_decision: "lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Send Gina the options", due: "today", detail: null }, stated_pricing: [{ description: "Tapo C615G installed", model: "Tapo C615G", amount: 500, unit: "each", kind: "install", evidence: "For the $500 install we're gonna use the Tapo C615G" }, { description: "Camera rental, data included", amount: 400, unit: "per_month", kind: "rental", evidence: "four hundred per month including data" }, { description: "Made up", amount: 999, unit: "each", kind: "other", evidence: "nine ninety nine special" }] });
+    const v = validateHermes(h, ctx(i, { identity: unknown, crm: { leadId: null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null } }));
+    const card = v.plan.find((p) => p.rule === "stated_pricing")!;
+    expect(card).toMatchObject({ type: "ASK_CHRIS", mode: "approval" });
+    expect((card.payload.items as unknown[]).length).toBe(2); // the line not in the transcript is left out
+    expect(v.advisories.map((a) => a.rule)).toContain("stated_pricing_evidence");
+    const byEmail = validateHermes(h, ctx(input("For the $500 install we use the Tapo. Rental four hundred per month including data.")));
+    expect(byEmail.plan.some((p) => p.rule === "stated_pricing")).toBe(false);
+    expect(byEmail.advisories.map((a) => a.rule)).toContain("stated_pricing_ignored");
+  });
+
+  it("rental work skips the Business Brain: Chris's stated prices price it, or Hermes asks for the rental rule (learnt)", () => {
+    const i = call("Speaker 2: We want to rent a camera for two months on the site. Speaker 1: Sure.");
+    const h = H({ conversation_type: "new_enquiry", intent: "quote_request", lead_decision: "lead", recommended_action: "RUN_BUSINESS_BRAIN", run_business_brain: true, facts: [{ key: "job_type", value: "rental", evidence: "rent a camera for two months", confidence: 0.9 }] });
+    const v = validateHermes(h, ctx(i, { identity: unknown, crm: { leadId: null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null } }));
+    expect(types(v)).not.toContain("RUN_BUSINESS_BRAIN");
+    expect(v.advisories.map((a) => a.rule)).toContain("rental_not_brain");
+    const ask = v.plan.find((p) => p.rule === "rental_pricing")!;
+    expect(ask).toMatchObject({ type: "ASK_CHRIS", mode: "approval" });
+    expect(ask.payload.learn).toBe(true);
+    // Once the rule is known (answered earlier), no question.
+    const again = validateHermes(h, ctx(i, { identity: unknown, answers: [{ key: "rental_pricing", question: "q", answer: "$400 a month incl data" }], crm: { leadId: null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null } }));
+    expect(again.plan.some((p) => p.rule === "rental_pricing")).toBe(false);
+  });
+
+  it("a street spelled out letter by letter corrects the transcriber's word; a short mobile is flagged", () => {
+    const i = call("Speaker 2: It's Houston. Houston E U S T O N. Speaker 1: Houston Road. Speaker 1: It was Gina, oh two one two eight three four oh six.");
+    const h = H({ conversation_type: "new_enquiry", intent: "quote_request", lead_decision: "lead", recommended_action: "CREATE_INTERNAL_TASK", task: { title: "Ring Gina", due: "today", detail: null }, facts: [{ key: "site_address", value: "Houston Road", evidence: "Houston Road", confidence: 0.9 }, { key: "phone", value: "021283406", evidence: "oh two one two eight three four oh six", confidence: 0.9 }] });
+    const v = validateHermes(h, ctx(i, { identity: unknown, crm: { leadId: null, contactId: null, hasOpenBrainQuote: false, hasSentQuote: false, recordingLinked: false, customerEmail: null, customerPhone: null } }));
+    const site = v.understanding.facts.find((f) => f.key === "site_address")!;
+    expect(site.value).toBe("Euston Road");
+    expect(v.advisories.map((a) => a.rule)).toEqual(expect.arrayContaining(["spelled_out", "short_phone"]));
+  });
+});

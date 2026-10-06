@@ -19,6 +19,7 @@ const S = await import("@/db/schema");
 const { processEmail } = await import("@/lib/email/pipeline");
 const { inspect, confirmIdentity, acceptAction, resolveFact, setCommitmentStatus, closeReviews, resolveReview, acceptProposedLead, answerQuestion } = await import("@/lib/inspector/inspect");
 const { settleInspectorQueue, enqueueInspection } = await import("@/lib/inspector/queue");
+const { mergeLeads } = await import("@/lib/leads/merge");
 const { setHermes, HermesApiRuntime, HermesUnavailableError } = await import("@/lib/hermes/runtime");
 const { encryptSecret } = await import("@/lib/crypto");
 const { sendDraft } = await import("@/lib/drafts/workflow");
@@ -84,6 +85,8 @@ const R = ({ facts, commitments, ...over }: Loose): HermesResult => ({
   research: [],
   questions: [],
   commands: [],
+  stated_pricing: [],
+  playbook: null,
   review_question: null,
   ...over,
   facts: (facts ?? []).map((f: NonNullable<Loose["facts"]>[number]) => ({ evidence: "", evidence_ref: null, ...f })),
@@ -1427,5 +1430,179 @@ describe("business context first: route by what kind of business it is; 'Who is 
     const t = (await db.query.tasks.findFirst({ where: eq(S.tasks.title, `Keypad still beeping at ${street}`) }))!;
     expect(t).toMatchObject({ jobId: j.id, contactId: c.id });
     expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.contactId).toBeNull();
+  });
+});
+
+// =====================================================================================
+// Run F: a real case. Gina rings about a temporary camera on a build site, spells the street,
+// reads her number with a digit missing; Chris states the prices on the call. Her website form
+// arrives afterwards with the full number and an email address.
+// =====================================================================================
+
+describe("Run F: a rental call with stated prices, then the same person's website form", () => {
+  const first = `Gina${RUN}`;
+  const full = `021${String(Date.now()).slice(-7)}`; // what the form carries
+  const said = full.slice(0, 6) + full.slice(7); // read out on the call with one digit missing
+  let callLeadId: string;
+  let recId: string;
+  const playbookTitle = `Temporary camera rental on a building site ${RUN}`;
+  cleanups.push(async () => {
+    await db.delete(S.brainCandidates).where(eq(S.brainCandidates.title, `Playbook: ${playbookTitle}`));
+  });
+
+  const callReading = (): Loose => ({
+    conversation_type: "new_enquiry",
+    intent: "quote_request",
+    business_context: "customer_prospect",
+    lead_decision: "lead",
+    service: "cctv",
+    property_type: "commercial",
+    summary: `${first} wants a temporary camera on a build site for a couple of months.`,
+    facts: [
+      { key: "contact_name", value: first, evidence: `it's ${first}`, confidence: 0.9 },
+      { key: "phone", value: said, evidence: said, confidence: 0.85 },
+      { key: "site_address", value: "12 Houston Road, Mount Eden", evidence: "Twelve Houston Road, Mount Eden", confidence: 0.85 },
+      { key: "job_type", value: "rental", evidence: "a temporary camera on the site for a couple of months", confidence: 0.9 },
+    ],
+    stated_pricing: [
+      { description: "Camera rental including data", model: null, amount: 150, unit: "per_month", quantity: 1, kind: "rental", evidence: "$150 a month including data" },
+      { description: "Installation", model: null, amount: 250, unit: "per_job", quantity: 1, kind: "install", evidence: "the install is $250" },
+      { description: "Buy the camera outright", model: "Tapo", amount: 180, unit: "each", quantity: 1, kind: "product", evidence: "buy the Tapo camera outright for $180" },
+    ],
+    playbook: { title: playbookTitle, applies_when: "A caller wants a camera for a few months on a site under construction.", steps: ["Ask where the site is and how long for.", "Offer rental with data, or buying the camera outright."], options: ["Rent", "Buy"], pricing_rule: "As Chris states on the call." },
+    recommended_action: "PREPARE_QUOTE",
+    run_business_brain: true, // wrong for a rental: the rules drop it
+    confidence: 0.9,
+    reason: "A new rental enquiry with a name and number.",
+  });
+
+  it("the call: a lead with the street as spelled, the short number flagged, no Business Brain, the stated prices on a card, and a playbook candidate", async () => {
+    script = () => callReading();
+    const r = await recording(
+      "Incoming call",
+      [
+        "Speaker 1: Get Secure, Chris speaking.",
+        `Speaker 2: Hi Chris, it's ${first}. We've got a build going on and we want a temporary camera on the site for a couple of months.`,
+        "Speaker 1: Sure, we rent them out. Where's the site?",
+        "Speaker 2: Twelve Houston Road, Mount Eden. That's E U S T O N.",
+        "Speaker 1: Got it. The rental is $150 a month including data, the install is $250, or you can buy the Tapo camera outright for $180.",
+        "Speaker 2: Can you email me the options?",
+        "Speaker 1: Yes. And the best number for you?",
+        `Speaker 2: It's ${said}.`,
+      ].join("\n"),
+    );
+    recId = r.id;
+    const out = (await inspect("recording", r.id))!;
+    expect(out).toMatchObject({ engine: "hermes", status: "analysed" });
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.name, first) }))!;
+    expect(lead).toBeTruthy();
+    callLeadId = lead.id;
+    leadIds.push(lead.id);
+    expect(lead).toMatchObject({ site: "12 Euston Road, Mount Eden", phone: said, email: null, source: "phone" });
+    expect((await db.query.recordings.findFirst({ where: eq(S.recordings.id, r.id) }))!).toMatchObject({ status: "attached", leadId: lead.id });
+    const run = (await runFor(out.inspectionId))!;
+    const rules = ((run.validation as { advisories: { rule: string }[] }).advisories ?? []).map((a) => a.rule);
+    expect(rules).toEqual(expect.arrayContaining(["spelled_out", "short_phone", "rental_not_brain"]));
+    const acts = await actionsOf(out.inspectionId);
+    expect(acts.map((a) => a.type)).not.toContain("RUN_BUSINESS_BRAIN");
+    expect(acts.map((a) => a.type)).not.toContain("PREPARE_QUOTE");
+    const ask = acts.find((a) => a.type === "ASK_CHRIS" && (a.payload as { kind?: string }).kind === "stated_pricing")!;
+    expect(ask).toMatchObject({ status: "awaiting_approval", leadId: lead.id });
+    expect((ask.payload as { items: { amount: number }[] }).items.map((i) => i.amount)).toEqual([150, 250, 180]);
+    expect(acts.find((a) => a.type === "ASK_CHRIS" && (a.payload as { key?: string }).key === "rental_pricing")).toBeUndefined(); // the stated prices answer it
+    const pb = (await db.query.brainCandidates.findFirst({ where: eq(S.brainCandidates.title, `Playbook: ${playbookTitle}`) }))!;
+    expect(pb).toMatchObject({ kind: "workflow", status: "proposed", proposedBy: "agent:hermes" });
+    expect(pb.detail).toMatch(/Offer rental with data/);
+  });
+
+  it("the form afterwards: the full number contains the short one on file, so it is filed on the call's lead (never a second lead) and fills in her email and number", async () => {
+    script = () => ({
+      conversation_type: "existing_lead",
+      intent: "follow_up",
+      lead_decision: "lead",
+      service: "cctv",
+      summary: `${first} Hooper asks for the rental options by email.`,
+      facts: [{ key: "job_type", value: "rental", evidence: "temporary camera", confidence: 0.9 }],
+      recommended_action: "CREATE_INTERNAL_TASK",
+      task: { title: `Email ${first} the rental options`, due: "today", detail: null },
+      confidence: 0.9,
+      reason: "The same enquiry, now with her email.",
+    });
+    const e = await email({
+      from: "noreply@updates.getsecure.co.nz",
+      name: "Get Secure Website",
+      subject: "New Lead · Contact form",
+      text: [`${first.toUpperCase()} HOOPER`, "", `Phone ${full} tel:${full} Email gina+${RUN}@example.com Service Temporary camera`, "", "MESSAGE", "", "Hi, we spoke on the phone about a temporary camera for the build at 12 Euston Road, Mount Eden. Could you email the options?", "", `Sent from the Get Secure website. Reply to this email to respond directly to ${first} Hooper.`].join("\n"),
+    });
+    const out = await processEmail(e.id);
+    expect(out).toMatchObject({ classification: "lead", leadId: callLeadId });
+    expect(out.detail).toMatch(/filed on the open lead/);
+    await settleInspectorQueue();
+    expect((await latestFor(e.id))!).toMatchObject({ status: "analysed", leadId: callLeadId });
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!).toMatchObject({ classification: "lead", leadId: callLeadId });
+    const lead = (await db.query.leads.findFirst({ where: eq(S.leads.id, callLeadId) }))!;
+    expect(lead).toMatchObject({ email: `gina+${RUN}@example.com`, phone: full, emailThreadId: e.threadId, site: "12 Euston Road, Mount Eden" });
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, callLeadId), eq(S.activityLog.action, "lead_filled_from_email")) })).toBeTruthy();
+    expect(await db.query.leads.findMany({ where: like(S.leads.name, `${first}%`) })).toHaveLength(1);
+    // A form from someone else with a number that merely shares the prefix still makes its own lead.
+    const other = `${full.slice(0, 3)}9${full.slice(4)}`;
+    const e2 = await email({ from: "noreply@updates.getsecure.co.nz", name: "Get Secure Website", subject: "New Lead · Contact form", text: [`OTHER PERSON ${RUN}`, "", `Phone ${other} Email other+${RUN}@example.com Service CCTV`, "", "MESSAGE", "", "Four cameras please.", "", "Sent from the Get Secure website."].join("\n") });
+    const out2 = await processEmail(e2.id);
+    expect(out2.leadId).not.toBe(callLeadId);
+    leadIds.push(out2.leadId!);
+  });
+
+  it("Chris confirms the stated prices: the quote (ex GST) waits for his approval, the options email is drafted to her, nothing is sent, and the card is not asked again", async () => {
+    const ins = (await latestFor(recId))!;
+    const ask = (await db.query.inspectorActions.findMany({ where: and(eq(S.inspectorActions.inspectionId, ins.id), eq(S.inspectorActions.type, "ASK_CHRIS"), eq(S.inspectorActions.status, "awaiting_approval")) })).find((a) => (a.payload as { kind?: string }).kind === "stated_pricing")!;
+    expect(ask).toBeTruthy();
+    const answer = JSON.stringify({
+      gstIncluded: true,
+      items: [
+        { description: "Camera rental including data", quantity: 1, unitPrice: 150, unit: "per_month", kind: "rental" },
+        { description: "Installation", quantity: 1, unitPrice: 250, unit: "per_job", kind: "install" },
+        { description: "Buy the camera outright (Tapo)", quantity: 1, unitPrice: 180, unit: "each", kind: "product" },
+      ],
+    });
+    await expect(answerQuestion(ask.id, answer, { kind: "agent", agent: "hermes" } as unknown as Parameters<typeof answerQuestion>[2])).rejects.toThrow(/Only a person/);
+    const out = (await answerQuestion(ask.id, answer, chris))!;
+    expect(out).toMatchObject({ engine: "hermes", status: "analysed" });
+    const q = (await db.query.quotes.findFirst({ where: eq(S.quotes.leadId, callLeadId), orderBy: [desc(S.quotes.createdAt)] }))!;
+    expect(q).toMatchObject({ status: "needs_review", origin: "manual", title: `Camera rental for ${first}` });
+    const lines = q.lineItems as { description: string; unitPrice: number }[];
+    expect(lines.map((l) => l.description)).toEqual(["Camera rental including data (per month)", "Installation", "Buy the camera outright (Tapo)"]);
+    expect(lines.map((l) => l.unitPrice)).toEqual([130.43, 217.39, 156.52]); // ex GST at 15%
+    const d = (await db.query.drafts.findFirst({ where: eq(S.drafts.leadId, callLeadId), orderBy: [desc(S.drafts.createdAt)] }))!;
+    expect(d).toMatchObject({ status: "ready_for_review", toAddresses: [`gina+${RUN}@example.com`] });
+    expect(d.body).toMatch(/here are the options/);
+    expect(d.body).toMatch(new RegExp(`Q-${q.number}`));
+    expect(d.body).not.toMatch(/\$/); // the prices are on the quote, not promised in the email
+    expect(d.sentAt ?? null).toBeNull();
+    expect((await db.query.inspectorActions.findFirst({ where: eq(S.inspectorActions.id, ask.id) }))!).toMatchObject({ status: "accepted", result: { quoteId: q.id } });
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, callLeadId), eq(S.activityLog.action, "quote_prepared_by_inspector")) })).toBeTruthy();
+    // Read again: the card is not asked again, and the rental rule is not asked for either.
+    const again = await actionsOf(out.inspectionId);
+    expect(again.filter((a) => a.type === "ASK_CHRIS" && a.status === "awaiting_approval")).toHaveLength(0);
+    // Only one playbook candidate, however many readings.
+    expect(await db.query.brainCandidates.findMany({ where: eq(S.brainCandidates.title, `Playbook: ${playbookTitle}`) })).toHaveLength(1);
+  });
+
+  it("merging a duplicate lead moves everything filed on it, fills the blanks, archives it, and both timelines say so", async () => {
+    const [a] = await db.insert(S.leads).values({ name: `Dup A ${RUN}`, phone: "021 555 0101", status: "new", source: "phone", service: "CCTV" }).returning();
+    const [b] = await db.insert(S.leads).values({ name: `Dup B ${RUN}`, email: `dup+${RUN}@example.com`, site: "3 Dup Lane", status: "contacted", source: "email", service: "CCTV" }).returning();
+    leadIds.push(a.id, b.id);
+    const e = await email({ from: `dup+${RUN}@example.com`, name: "Dup B", subject: "Dup", text: "hello" });
+    await db.update(S.emails).set({ leadId: b.id }).where(eq(S.emails.id, e.id));
+    const [t] = await db.insert(S.tasks).values({ title: `Dup task ${RUN}`, leadId: b.id, kind: "task" }).returning();
+    const res = await mergeLeads(b.id, a.id, chris.userId);
+    expect(res.moved).toMatchObject({ emails: 1, tasks: 1 });
+    expect(res.filled.sort()).toEqual(["email", "site"]);
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, a.id) }))!).toMatchObject({ email: `dup+${RUN}@example.com`, site: "3 Dup Lane", phone: "021 555 0101", status: "new" });
+    expect((await db.query.leads.findFirst({ where: eq(S.leads.id, b.id) }))!.archivedAt).toBeTruthy();
+    expect((await db.query.tasks.findFirst({ where: eq(S.tasks.id, t.id) }))!.leadId).toBe(a.id);
+    expect((await db.query.emails.findFirst({ where: eq(S.emails.id, e.id) }))!.leadId).toBe(a.id);
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, a.id), eq(S.activityLog.action, "lead_merged_in")) })).toBeTruthy();
+    expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, b.id), eq(S.activityLog.action, "lead_merged_away")) })).toBeTruthy();
+    await expect(mergeLeads(a.id, b.id, chris.userId)).rejects.toThrow(/archived/);
   });
 });

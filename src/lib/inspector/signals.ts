@@ -15,7 +15,7 @@ import { contacts, events, jobs, leads, quotes } from "@/db/schema";
 import { datePartsIn, zonedToUtc } from "@/lib/calendar/ics";
 import { TZ } from "./dates";
 import { SIGNAL_WEIGHTS } from "./identity";
-import { normalisePhone, phonesIn } from "./text";
+import { digitsFitInside, normalisePhone, phonesIn } from "./text";
 import type { IdentitySignal, InspectorInput } from "./types";
 
 /** A recording counts as part of an appointment from 30 minutes before it starts to an hour after it ends. */
@@ -127,6 +127,31 @@ export async function collectSignals(input: InspectorInput, extra: { emails?: st
     for (const c of await db.query.contacts.findMany({ where: sql`${digitsSql(contacts.phone)} in (${p}, ${alt})`, columns: { id: true }, limit: 3 })) await pushContact(c.id, sig("phone", `phone ${p}`));
     for (const l of await db.query.leads.findMany({ where: and(sql`${digitsSql(leads.phone)} in (${p}, ${alt})`, isNull(leads.archivedAt)), columns: { id: true }, limit: 3 })) await pushLead(l.id, sig("phone", `phone ${p}`));
   }
+  // A number said with a digit or two missing (read out at the end of a call): the stored numbers it
+  // fits inside, by prefix and suffix, are candidates to confirm, never a match on their own.
+  const partial = [...phones].filter((p) => p.length >= 7 && p.length <= 9 && p.startsWith("0"));
+  for (const p of partial) {
+    const like = `${p.slice(0, 3)}%${p.slice(-2)}`;
+    const alt = `64${p.slice(1, 3)}%${p.slice(-2)}`;
+    const fits = (stored: string | null) => {
+      const d = normalisePhone(stored ?? "");
+      return d.length >= 9 && digitsFitInside(p, d);
+    };
+    for (const c of await db.query.contacts.findMany({ where: or(sql`${digitsSql(contacts.phone)} like ${like}`, sql`${digitsSql(contacts.phone)} like ${alt}`), columns: { id: true, phone: true }, limit: 10 })) if (fits(c.phone)) await pushContact(c.id, sig("partial_phone", `number said as ${p} fits ${c.phone}`));
+    for (const l of await db.query.leads.findMany({ where: and(or(sql`${digitsSql(leads.phone)} like ${like}`, sql`${digitsSql(leads.phone)} like ${alt}`), isNull(leads.archivedAt)), columns: { id: true, phone: true }, limit: 10 })) if (fits(l.phone)) await pushLead(l.id, sig("partial_phone", `number said as ${p} fits ${l.phone}`));
+  }
+  // The other way round: a full number written on a form fits a short one on file (the lead made
+  // from a call where the number was read out with a digit missing). Same rule: a candidate to confirm.
+  for (const p of [...phones].filter((x) => x.length >= 10)) {
+    const like = `${p.slice(0, 3)}%${p.slice(-2)}`;
+    const alt = p.startsWith("0") ? `64${p.slice(1, 3)}%${p.slice(-2)}` : `0${p.slice(2, 4)}%${p.slice(-2)}`;
+    const fits = (stored: string | null) => {
+      const d = normalisePhone(stored ?? "");
+      return d.length >= 7 && d.length < p.length && digitsFitInside(d, p);
+    };
+    for (const c of await db.query.contacts.findMany({ where: or(sql`${digitsSql(contacts.phone)} like ${like}`, sql`${digitsSql(contacts.phone)} like ${alt}`), columns: { id: true, phone: true }, limit: 10 })) if (fits(c.phone)) await pushContact(c.id, sig("partial_phone", `number ${p} fits the ${c.phone} on file`));
+    for (const l of await db.query.leads.findMany({ where: and(or(sql`${digitsSql(leads.phone)} like ${like}`, sql`${digitsSql(leads.phone)} like ${alt}`), isNull(leads.archivedAt)), columns: { id: true, phone: true }, limit: 10 })) if (fits(l.phone)) await pushLead(l.id, sig("partial_phone", `number ${p} fits the ${l.phone} on file`));
+  }
   // A quote or job number mentioned.
   const qrefs = quoteRefsIn(all);
   if (qrefs.length) {
@@ -194,5 +219,17 @@ export async function collectSignals(input: InspectorInput, extra: { emails?: st
     for (const l of await db.query.leads.findMany({ where: and(or(sql`lower(${leads.name}) = lower(${n})`, sql`lower(coalesce(${leads.company}, '')) = lower(${n})`), isNull(leads.archivedAt)), columns: { id: true }, limit: 3 })) await pushLead(l.id, sig("name", `name ${n}`));
   }
   for (const co of companies) for (const c of await db.query.contacts.findMany({ where: sql`lower(coalesce(${contacts.company}, '')) = lower(${co})`, columns: { id: true }, limit: 3 })) await pushContact(c.id, sig("company", `company ${co}`));
+  // On a call, a first name alone ("it was Gina") against a lead from the last fortnight (a website
+  // form, an earlier call): a candidate to confirm, so the call is proposed onto it rather than
+  // making a second lead. Never a match by itself.
+  if (input.sourceType === "recording") {
+    const firstNames = new Set((extra.names ?? []).map((n) => n.trim().split(/\s+/)[0]?.toLowerCase() ?? "").filter((n) => n.length >= 3 && !/^(speaker|chris)$/.test(n)));
+    const since = new Date(input.at.getTime() - 14 * 86400000);
+    for (const fn of firstNames) {
+      for (const l of await db.query.leads.findMany({ where: and(gte(leads.createdAt, since), isNull(leads.archivedAt), ne(leads.status, "lost"), or(sql`lower(${leads.name}) = ${fn}`, sql`lower(${leads.name}) like ${`${fn} %`}`)), columns: { id: true, name: true }, limit: 3 })) {
+        await pushLead(l.id, sig("recent_lead", `${l.name}, a lead from the last fortnight, is also a ${fn[0].toUpperCase()}${fn.slice(1)}`));
+      }
+    }
+  }
   return out;
 }

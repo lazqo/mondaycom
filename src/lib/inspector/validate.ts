@@ -30,7 +30,7 @@ import { AUTHORITY, lacksRecord } from "@/lib/hermes/authority";
 import { AUTONOMY_DEFAULTS, dialFor, type AutonomySettings } from "@/lib/hermes/autonomy";
 import { BUSINESS_CONTEXT_LABELS } from "./labels";
 import { resolveDue, clockTime } from "./dates";
-import { normalisePhone, toNumber } from "./text";
+import { applySpelling, normalisePhone, spelledWordsIn, toNumber } from "./text";
 import type { Commitment, ExtractedFact, FactKey, IdentityResult, InspectorInput, Known, MissingInfo, PlannedAction, Understanding } from "./types";
 
 export type ValidateContext = {
@@ -230,6 +230,7 @@ export function normaliseFact(key: FactKey, raw: string | number | boolean): { v
       if (/residential|home|house|domestic/.test(str)) return { value: "residential", display: "Residential" };
       return null;
     case "job_type":
+      if (/rent|hire|temporary|short[- ]term/.test(str)) return { value: "rental", display: "Rental / temporary" };
       if (/repair|fault|service/.test(str)) return { value: "repair", display: "Repair / service" };
       if (/upgrade|replace|existing/.test(str)) return { value: "upgrade", display: "Upgrade of an existing system" };
       if (/new/.test(str)) return { value: "new", display: "New installation" };
@@ -297,6 +298,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
 
   // ---- EVIDENCE: a fact needs provenance (a quote, or a structured ref that supports it) and a usable value ----
   const facts: ExtractedFact[] = [];
+  const spelled = spelledWordsIn(`${input.text}\n${input.utterances.map((u) => u.text).join("\n")}`);
   for (const f of h.facts) {
     const p = provenance(f, input, ctx.known, hay, { key: f.key, value: f.value });
     if (!p.ok) {
@@ -309,8 +311,23 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
       continue;
     }
     if (facts.some((x) => x.key === f.key)) continue;
+    // A name or street the speaker spelled out letter by letter: the spelling wins over the
+    // transcriber's word ("Houston" heard, E U S T O N said → Euston).
+    let value = n.value;
+    let display = n.display;
+    if ((f.key === "site_address" || f.key === "contact_name" || f.key === "company") && typeof value === "string" && spelled.length) {
+      const fix = applySpelling(value, spelled);
+      if (fix) {
+        value = fix.value;
+        display = fix.value;
+        advisories.push({ rule: "spelled_out", message: `${f.key === "site_address" ? "Street" : "Name"} taken from the spelling: “${fix.from}” was spelled out as ${fix.to.toUpperCase()}.` });
+      }
+    }
+    // An NZ mobile said with digits missing cannot be dialled: say so, and the identity rules treat
+    // it as a partial number (a candidate to confirm) rather than a new one.
+    if (f.key === "phone" && typeof value === "string" && /^02/.test(value) && value.length < 10) advisories.push({ rule: "short_phone", message: `The number ${display} has only ${value.length} digits; an NZ mobile has 10 or 11. It may have been read out with digits missing.` });
     // Cited but not verbatim: proposed for Chris (below the fill-in confidence), never filled in.
-    facts.push({ key: f.key, value: n.value, display: n.display, evidence: p.shown.slice(0, 500), confidence: p.cited ? Math.min(f.confidence, 0.69) : f.confidence });
+    facts.push({ key: f.key, value, display, evidence: p.shown.slice(0, 500), confidence: p.cited ? Math.min(f.confidence, 0.69) : f.confidence });
   }
   if (rejectedFacts.length) hard.push({ rule: "fact_evidence", message: `Not used (${rejectedFacts.map((r) => `${r.key}: ${r.reason}`).join("; ")}).`, effect: "facts rejected" });
   const low = facts.filter((f) => f.confidence < 0.7);
@@ -465,6 +482,37 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
   // Questions for Chris: a card each, answered on Home. Nothing internal waits for an answer, and a
   // question Chris has already answered for this item is never asked again.
   const answered = ctx.answers ?? [];
+  // Prices Chris stated himself on a recording: a card he confirms (never recorded by Hermes), which
+  // then prepares the quote. On an email they are ignored: only Chris's own voice sets a price.
+  const statedDone = answered.some((a) => a.key === `stated_pricing:${input.sourceId}`);
+  const statedItems = input.sourceType === "recording" && !statedDone ? h.stated_pricing.filter((i) => !i.evidence || evidenceFound(i.evidence, hay)) : [];
+  if (h.stated_pricing.length && input.sourceType !== "recording") advisories.push({ rule: "stated_pricing_ignored", message: "Prices in an email are never taken as Get Secure's; only Chris's own words on a recording are." });
+  else if (statedDone) advisories.push({ rule: "stated_pricing_done", message: "The prices stated on this call were confirmed by Chris and the quote prepared." });
+  else if (h.stated_pricing.length > statedItems.length) advisories.push({ rule: "stated_pricing_evidence", message: "Some stated prices were not found in the transcript and were left out." });
+  if (statedItems.length) {
+    planned.push(
+      act("ASK_CHRIS", "approval", "stated_pricing", "You stated these prices on the recording; confirm them and the quote is prepared for your approval.", {
+        key: `stated_pricing:${input.sourceId}`,
+        kind: "stated_pricing",
+        question: `Record the prices you stated (${statedItems.map((i) => `${i.description} $${i.amount}${i.unit === "per_month" ? "/month" : ""}`).join(", ")}) and prepare the quote?`,
+        items: statedItems,
+        unblocks: ["PREPARE_QUOTE"],
+        learn: false,
+      }),
+    );
+  }
+  // Rental, hire or temporary work is not the Brain's installed-system design: it is priced by
+  // Get Secure's rental rule. Without one, Hermes asks (and the answer is learnt).
+  const rental = facts.some((f) => f.key === "job_type" && f.value === "rental") || /\b(rent(al|ed|ing)?|hire|temporary camera)\b/i.test(`${h.summary} ${facts.map((f) => f.display).join(" ")}`);
+  if (rental) {
+    const before = planned.length;
+    planned = planned.filter((p) => p.type !== "RUN_BUSINESS_BRAIN" && p.type !== "PREPARE_QUOTE");
+    if (planned.length < before) advisories.push({ rule: "rental_not_brain", message: "Rental or temporary work: the Business Brain designs installed systems, so it did not run; the rental rule or Chris's stated prices price it." });
+    const learnt = (ctx.answers ?? []).some((a) => /rental/i.test(String(a.key ?? "")));
+    if (!statedItems.length && !statedDone && !learnt && !h.questions.some((q) => /rental/i.test(q.key))) {
+      planned.push(act("ASK_CHRIS", "approval", "rental_pricing", "Rental work is priced by Get Secure's rental rule, which the CRM does not have yet.", { key: "rental_pricing", kind: "text", question: "What do we charge for a short-term camera rental: per month (data included), the install, and which kit?", why: "Rental is not the Business Brain's installed-system design. Your answer is kept as the rental rule for every future reading.", unblocks: ["PREPARE_QUOTE"], learn: true }));
+    }
+  }
   for (const q of h.questions) {
     const already = answered.find((a) => a.key === q.key || a.question.trim().toLowerCase() === q.question.trim().toLowerCase());
     if (already) {
@@ -473,7 +521,7 @@ export function validateHermes(h: HermesResult, ctx: ValidateContext): Validatio
     }
     planned.push(act("ASK_CHRIS", "approval", "hermes_question", q.why || q.question, { key: q.key, question: q.question, kind: q.kind, options: q.options, unblocks: q.unblocks, learn: q.learn }));
   }
-  if (h.run_business_brain && !planned.some((p) => p.type === "RUN_BUSINESS_BRAIN")) planned.push(...planFor("RUN_BUSINESS_BRAIN", h, ctx, { known, missing, service, commitments, business, hard }));
+  if (h.run_business_brain && !rental && !planned.some((p) => p.type === "RUN_BUSINESS_BRAIN")) planned.push(...planFor("RUN_BUSINESS_BRAIN", h, ctx, { known, missing, service, commitments, business, hard }));
   planned = dedupe(planned);
 
   // ---- GUARDRAIL: customer work is closed only with evidence (a cited record, or work already open) ----

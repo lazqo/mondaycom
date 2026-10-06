@@ -17,6 +17,15 @@ describe("tierOf", () => {
     expect(tierOf("javascript:alert(1)", ctx)).toBeNull();
   });
 
+  it("a retailer Get Secure buys from is its own tier (6): a retail price, never a trade cost, and not capped like the general web", () => {
+    const retail = { ...ctx, retailHosts: ["pbtech.co.nz", "bunnings.co.nz"] };
+    expect(tierOf("https://www.pbtech.co.nz/product/tapo-c520ws", retail)).toBe(6);
+    expect(tierOf("https://www.bunnings.co.nz/tp-link-tapo-c520ws_p0345", retail)).toBe(6);
+    expect(tierOf("https://www.pbtech.co.nz/product/x", ctx)).toBe(5); // not on the list: general web
+    const g = gradeFindings({ summary: "", findings: [{ claim: "Tapo C520WS $179 at PB Tech", confidence: 0.9, knowledge: "new", sources: [{ url: "https://www.pbtech.co.nz/product/tapo-c520ws" }] }] }, retail);
+    expect(g[0]).toMatchObject({ bestTier: 6, confidence: 0.9, knowledge: "new" });
+  });
+
   it("drops unsourced claims, caps general-web-only claims, and only CRM-backed claims are approved knowledge", () => {
     const g = gradeFindings(
       {

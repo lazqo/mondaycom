@@ -159,8 +159,14 @@ function inspectorItem(action: string, d: Record<string, unknown>, leadId: strin
       return { kind: "site_visit", title: `Booking pencilled${d.startsAt ? ` for ${formatDateTime(String(d.startsAt))}` : ""}`, meta: d.via === "hermes_proposal" ? "proposed by Hermes, accepted by you" : null, body: d.title ? String(d.title) : null };
     case "question_answered":
       return { kind: "inspector", title: `Answered Hermes: ${String(d.question ?? "")}`, body: String(d.answer ?? ""), meta: d.learned ? "remembered for every future reading" : null };
+    case "lead_merged_in":
+      return { kind: "inspector", title: `Merged in: ${String(d.fromName ?? "another lead")}`, meta: Object.entries((d.moved as Record<string, number>) ?? {}).map(([k, n]) => `${n} ${k}`).join(", ") || null };
+    case "lead_filled_from_email":
+      return { kind: "inspector", title: "Contact details filled in from the email Chris filed here", meta: [d.email ? `email ${String(d.email)}` : null, d.phone ? `phone ${String(d.phone)}` : null].filter(Boolean).join(", ") || null };
+    case "lead_merged_away":
+      return { kind: "inspector", title: `Merged into ${String(d.intoName ?? "another lead")}`, meta: "this lead is archived" };
     case "lead_created_by_hermes":
-      return { kind: "inspector", title: "Hermes created this lead from the email", meta: typeof d.confidence === "number" ? `${Math.round(d.confidence * 100)}% sure` : null, body: d.reason ? String(d.reason) : null };
+      return { kind: "inspector", title: `Hermes created this lead from the ${d.recordingId ? "conversation" : "email"}`, meta: typeof d.confidence === "number" ? `${Math.round(d.confidence * 100)}% sure` : null, body: d.reason ? String(d.reason) : null };
     case "lead_reversed_by_hermes":
       return { kind: "inspector", title: "Hermes: not a lead (marked lost; reopen to undo)", body: d.reason ? String(d.reason) : null };
     case "email_filed_by_hermes":

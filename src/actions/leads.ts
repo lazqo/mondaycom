@@ -14,6 +14,7 @@ import { recordFeedback } from "@/lib/inspector/feedback";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { nextNumber } from "@/lib/numbering";
 import { isWebsiteLeadSender, WEBSITE_SENDER_MESSAGE } from "@/lib/email/website-lead";
+import { mergeLeads } from "@/lib/leads/merge";
 
 const optionalText = z
   .string()
@@ -345,4 +346,32 @@ export async function activeLeadCount() {
     .from(leads)
     .where(and(isNull(leads.archivedAt), sql`${leads.status} not in ('won','lost')`));
   return n;
+}
+
+/** Leads by name, phone digits, email or site, for the merge picker (open leads first). */
+export async function searchLeads(q: string, excludeId?: string | null) {
+  await requireUser();
+  const term = `%${q.trim()}%`;
+  const digits = q.replace(/\D/g, "");
+  if (!q.trim()) return [];
+  const rows = await db
+    .select({ id: leads.id, name: leads.name, phone: leads.phone, email: leads.email, site: leads.site, status: leads.status, createdAt: leads.createdAt })
+    .from(leads)
+    .where(and(isNull(leads.archivedAt), or(sql`${leads.name} ilike ${term}`, sql`${leads.email} ilike ${term}`, sql`${leads.site} ilike ${term}`, digits.length >= 5 ? sql`regexp_replace(coalesce(${leads.phone}, ''), '\\D', '', 'g') like ${`%${digits}%`}` : sql`false`)))
+    .limit(10);
+  return rows.filter((r) => r.id !== excludeId);
+}
+
+/** Merge this lead into another: everything moves across, blanks are filled, this one is archived. */
+export async function mergeLeadInto(sourceId: string, targetId: string): Promise<ActionResult<{ moved: Record<string, number>; filled: string[] }>> {
+  const user = await requireUser();
+  try {
+    const r = await mergeLeads(sourceId, targetId, user.id);
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${sourceId}`);
+    revalidatePath(`/leads/${targetId}`);
+    return ok(r);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
 }

@@ -119,7 +119,7 @@ export type Understanding = {
 
 // ---------------- identity ----------------
 
-export type IdentitySignal = { kind: "thread" | "linked" | "email" | "phone" | "calendar" | "quote_ref" | "job_ref" | "address" | "company" | "name"; detail: string; weight: number };
+export type IdentitySignal = { kind: "thread" | "linked" | "email" | "phone" | "partial_phone" | "calendar" | "quote_ref" | "job_ref" | "address" | "company" | "name" | "recent_lead"; detail: string; weight: number };
 
 export type IdentityCandidate = {
   leadId: string | null;

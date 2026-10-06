@@ -10,7 +10,7 @@
  * guardrails. When Hermes cannot be reached the item waits in the queue and is retried; after the
  * retries it goes to Chris as "Hermes could not read it", with nothing invented.
  */
-import { and, asc, desc, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { brainCandidates, commitments, contacts, emailThreads, emails, events, facts, inspections, inspectorActions, inspectorFeedback, inspectorRuns, jobs, leads, quotes, recordings, tasks, users, type ExtractedLead } from "@/db/schema";
 import { logActivity } from "@/lib/activity";
@@ -27,8 +27,13 @@ import { validateHermes, type Validation, SERVICE_DISPLAY, evidenceFound, source
 import { askHermes, type HermesStatus } from "@/lib/hermes/inspector";
 import { hermesAutonomy } from "@/lib/hermes/autonomy";
 import { crmKnown, crmState, emailInput, recordingInput, staffNames } from "./sources";
-import { digitSequence, normalisePhone } from "./text";
+import { digitSequence, digitsFitInside, normalisePhone } from "./text";
+import { parseWebsiteLead, personalEmail } from "@/lib/email/website-lead";
 import { recordSupplierPrice } from "@/lib/brain/store";
+import { computeTotals } from "@/lib/quotes";
+import { createDraft } from "@/lib/drafts/workflow";
+import { nextNumber } from "@/lib/numbering";
+import { loadPolicies } from "@/lib/brain/store";
 import { bookEvent } from "@/lib/calendar/book";
 import { TZ } from "./dates";
 import { createTask } from "./work";
@@ -102,7 +107,11 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
     // a record. Hermes never decides who it is; it only points the CRM at the number.
     if (identity.status !== "matched" && identity.status !== "not_applicable") {
       const phone = phoneReadByHermes(h, input);
-      const again = phone ? decideIdentity(mergeCandidates(await collectSignals(input, { phones: [phone] })), { allowNew: false }) : null;
+      // On a call, the name Hermes read ("it was Gina") can point at a lead from the last fortnight;
+      // a number said with digits missing can fit inside a stored one. Both are candidates to
+      // confirm (the call is then proposed onto that lead), never a match on their own.
+      const saidName = input.sourceType === "recording" ? ((h.facts.find((f) => f.key === "contact_name")?.value as string | undefined) ?? h.counterparty.name ?? null) : null;
+      const again = phone || saidName ? decideIdentity(mergeCandidates(await collectSignals(input, { phones: phone ? [phone] : [], names: saidName ? [saidName] : [] })), { allowNew: false }) : null;
       if (again?.status === "matched" && again.chosen?.signals.some((x) => x.kind === "phone")) {
         identity = { ...again, reason: `${again.reason} The number was read by Hermes from the words.` };
         leadId = again.chosen.leadId;
@@ -110,6 +119,8 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
         contactId = again.chosen.contactId ?? state.contactId;
         known = await crmKnown(leadId, contactId);
         jobId = state.jobId;
+      } else if (again && again.status !== "matched" && again.candidates.length > identity.candidates.length) {
+        identity = { ...again, status: "needs_review", reason: `${again.reason} Someone the CRM already has may be this person: Chris confirms.` };
       }
     }
     const citable = ((hermes.contextRefs as { citable?: string[] }).citable ?? []) as string[];
@@ -286,6 +297,23 @@ export async function inspect(sourceType: SourceType, sourceId: string, opts: { 
       actions: actions.filter((a) => !["ADD_INTERNAL_NOTE", "NO_ACTION", "OUTSTANDING"].includes(a.type)).map((a) => ({ type: a.type, status: a.status, note: typeof a.result?.inHand === "string" ? a.result.inHand : a.status === "blocked" && typeof a.result?.reason === "string" ? a.result.reason : null })),
     };
     if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: null, action: "inspected", detail });
+  // A playbook Hermes proposes (a way of handling this kind of enquiry): a Business Brain candidate
+  // for Chris; approved, it is in every future reading's approvedLearnings.
+  if (hermes.status === "ok" && hermes.result?.playbook) {
+    const pb = hermes.result.playbook;
+    const exists = await db.query.brainCandidates.findFirst({ where: and(eq(brainCandidates.kind, "workflow"), sql`lower(${brainCandidates.title}) = lower(${`Playbook: ${pb.title}`})`, inArray(brainCandidates.status, ["proposed", "accepted"])), columns: { id: true } });
+    if (!exists) {
+      await db.insert(brainCandidates).values({
+        kind: "workflow",
+        title: `Playbook: ${pb.title}`,
+        detail: [`When: ${pb.applies_when}`, pb.steps.length ? `Steps: ${pb.steps.map((x, i) => `${i + 1}. ${x}`).join(" ")}` : null, pb.options.length ? `Options: ${pb.options.join("; ")}` : null, pb.pricing_rule ? `Pricing: ${pb.pricing_rule}` : null].filter(Boolean).join("\n"),
+        payload: { playbook: pb, from: { sourceType, sourceId } },
+        sources: [{ kind: sourceType, id: sourceId }],
+        confidence: hermes.result.confidence.toFixed(3),
+        proposedBy: "agent:hermes",
+      });
+    }
+  }
     else if (contactId) await logActivity({ entity: "contact", entityId: contactId, actorId: null, action: "inspected", detail });
   }
   const brain = actions.filter((a) => a.type === "RUN_BUSINESS_BRAIN" || a.type === "PREPARE_QUOTE" || (a.type === "PROPOSE_SITE_VISIT" && a.rule === "business_brain_site_visit"));
@@ -330,6 +358,7 @@ export async function answerQuestion(actionId: string, answer: string, actor: Ac
   if (!ins) throw new Error("The reading this question came from is gone.");
   const p = a.payload as { key?: string; question?: string; kind?: string; learn?: boolean; items?: PricingItem[] };
   if (p.kind === "pricing") return answerPricing(a, ins, p.items ?? [], text, actor);
+  if (p.kind === "stated_pricing") return answerStatedPricing(a, ins, text, actor);
   await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result: { answer: text } }).where(eq(inspectorActions.id, actionId));
   await recordFeedback({ inspectionId: ins.id, leadId: a.leadId, contactId: a.contactId, kind: "question_answered", subject: p.key ?? null, value: { key: p.key ?? "", question: p.question ?? "", answer: text, kind: p.kind ?? "text", learn: !!p.learn }, userId: actor.userId });
   if (p.learn && p.question) {
@@ -353,6 +382,68 @@ export async function answerQuestion(actionId: string, answer: string, actor: Ac
 }
 
 type PricingItem = { productId: string; model: string; key: string; suppliers: { id: string; name: string }[]; supplierId: string | null };
+
+type StatedLine = { description: string; quantity: number; unitPrice: number; unit: string; kind: string };
+
+/**
+ * Chris confirms the prices he stated on a recording: they become a quote waiting for his approval
+ * (never sent) and, when the lead has an email address, the options email he promised, as a draft.
+ * Hermes recorded nothing; the amounts are Chris's own words, confirmed by his click.
+ */
+async function answerStatedPricing(a: typeof inspectorActions.$inferSelect, ins: typeof inspections.$inferSelect, answer: string, actor: Actor): Promise<InspectOutcome> {
+  assertApprover(actor);
+  if (!a.leadId) throw new Error("The call has no lead to quote against yet: decide who it is first.");
+  let parsed: { items?: Partial<StatedLine>[]; gstIncluded?: boolean; title?: string };
+  try {
+    parsed = JSON.parse(answer) as typeof parsed;
+  } catch {
+    throw new Error("Confirm the prices on the card.");
+  }
+  const gst = (await loadPolicies()).gstRate.value;
+  const lines: StatedLine[] = (parsed.items ?? [])
+    .map((x) => ({ description: String(x.description ?? "").trim(), quantity: Number(x.quantity ?? 1), unitPrice: Number(x.unitPrice), unit: String(x.unit ?? "each"), kind: String(x.kind ?? "other") }))
+    .filter((x) => x.description && Number.isFinite(x.unitPrice) && x.unitPrice > 0 && x.unitPrice < 1_000_000 && Number.isFinite(x.quantity) && x.quantity > 0);
+  if (!lines.length) throw new Error("Keep at least one line with a price.");
+  const ex = (v: number) => (parsed.gstIncluded ? Math.round((v / (1 + gst)) * 100) / 100 : v);
+  const lead = (await db.query.leads.findFirst({ where: eq(leads.id, a.leadId) }))!;
+  const lineItems = lines.map((l) => ({ description: `${l.description}${l.unit === "per_month" ? " (per month)" : l.unit === "per_hour" ? " (per hour)" : ""}`, quantity: l.quantity, unitPrice: ex(l.unitPrice) }));
+  const taxRate = Math.round(gst * 10000) / 100;
+  const totals = computeTotals(lineItems, taxRate);
+  const title = parsed.title?.trim() || `${lines.some((l) => l.kind === "rental") ? "Camera rental" : lead.service ?? "Quote"} for ${lead.name}`;
+  const quoteId = await db.transaction(async (tx) => {
+    const number = await nextNumber(tx, "quotes");
+    const [row] = await tx
+      .insert(quotes)
+      .values({ number, title, contactId: lead.contactId, leadId: lead.id, status: "needs_review", origin: "manual", taxRate: taxRate.toFixed(2), lineItems, subtotal: totals.subtotal, total: totals.total, notes: `Prices as stated by Chris on the recorded call, confirmed on Home.` })
+      .returning({ id: quotes.id, number: quotes.number });
+    return row;
+  });
+  const summary = lines.map((l) => `${l.description}: $${l.unitPrice.toFixed(2)}${l.unit === "per_month" ? "/month" : ""}${parsed.gstIncluded ? " inc GST" : " ex GST"}`).join("; ");
+  let draftId: string | null = null;
+  if (lead.email) {
+    const first = lead.name.split(/\s+/)[0];
+    const body = [
+      `Hi ${first},`,
+      "",
+      "Thanks for your time on the phone. As discussed, here are the options:",
+      "",
+      ...lines.map((l) => `- ${l.description}`),
+      "",
+      `Quote Q-${quoteId.number} sets out the pricing. Have a look and let me know which option suits, and I can book it in.`,
+      "",
+      "Thanks,",
+      "Chris",
+      "Get Secure",
+    ].join("\n");
+    const thread = lead.emailThreadId ? await db.query.emailThreads.findFirst({ where: eq(emailThreads.id, lead.emailThreadId), columns: { id: true, subject: true } }) : null;
+    const d = await createDraft({ kind: "email", leadId: lead.id, contactId: lead.contactId, threadId: thread?.id ?? null, to: [lead.email], subject: thread?.subject ? (/^re:/i.test(thread.subject) ? thread.subject : `Re: ${thread.subject}`) : `Your options from Get Secure`, body }, actor, { submit: true });
+    draftId = d.id;
+  }
+  await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date(), result: { answer: summary, quoteId: quoteId.id, quoteNumber: quoteId.number, draftId } }).where(eq(inspectorActions.id, a.id));
+  await recordFeedback({ inspectionId: ins.id, leadId: a.leadId, contactId: a.contactId, kind: "question_answered", subject: "stated_pricing", value: { key: `stated_pricing:${ins.sourceId}`, question: "stated pricing", answer: summary, kind: "stated_pricing", quoteId: quoteId.id }, userId: actor.userId });
+  await logActivity({ entity: "lead", entityId: a.leadId, actorId: actor.userId, action: "quote_prepared_by_inspector", detail: { quoteId: quoteId.id, quoteNumber: quoteId.number, draftId, inspectionId: ins.id, from: "stated_pricing", summary } });
+  return inspect(ins.sourceType as SourceType, ins.sourceId, { force: true });
+}
 
 /**
  * Chris answers a pricing question: each cost goes through the catalogue's own price path AS CHRIS
@@ -698,10 +789,29 @@ export async function confirmIdentity(inspectionId: string, choice: { leadId?: s
   if (ins.sourceType === "recording") {
     await db.update(recordings).set({ status: "attached", leadId, contactId, matchedBy: label, updatedAt: new Date() }).where(eq(recordings.id, ins.sourceId));
   } else {
-    const e = await db.query.emails.findFirst({ where: eq(emails.id, ins.sourceId), columns: { threadId: true } });
+    const e = await db.query.emails.findFirst({ where: eq(emails.id, ins.sourceId), columns: { threadId: true, fromAddress: true, subject: true, textBody: true } });
     await db.update(emails).set({ leadId, contactId }).where(eq(emails.id, ins.sourceId));
     if (e) await db.update(emailThreads).set({ leadId, contactId, updatedAt: new Date() }).where(eq(emailThreads.id, e.threadId));
-    if (leadId) await logActivity({ entity: "lead", entityId: leadId, actorId: actor.userId, action: "email_linked", detail: { threadId: e?.threadId, via: "Inspector review" } });
+    if (leadId) {
+      await logActivity({ entity: "lead", entityId: leadId, actorId: actor.userId, action: "email_linked", detail: { threadId: e?.threadId, via: "Inspector review" } });
+      // The lead made from a call has no email (and often a number with a digit missing): the
+      // email Chris just filed on it fills those blanks, so the quote and the reply can reach them.
+      const lead = await db.query.leads.findFirst({ where: eq(leads.id, leadId), columns: { email: true, phone: true, emailThreadId: true } });
+      if (lead && e) {
+        const web = parseWebsiteLead({ subject: e.subject ?? "", text: e.textBody ?? "", fromAddress: e.fromAddress })?.extraction;
+        const address = personalEmail(web?.email ?? null) ?? personalEmail(e.fromAddress);
+        const fullPhone = web?.phone && normalisePhone(web.phone).length >= 10 ? web.phone : null;
+        const shortOnFile = !lead.phone || normalisePhone(lead.phone).length < 10;
+        const patch: Partial<typeof leads.$inferInsert> = {};
+        if (!lead.email && address) patch.email = address;
+        if (fullPhone && shortOnFile && (!lead.phone || digitsFitInside(normalisePhone(lead.phone), normalisePhone(fullPhone)))) patch.phone = fullPhone;
+        if (!lead.emailThreadId) patch.emailThreadId = e.threadId;
+        if (Object.keys(patch).length) {
+          await db.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, leadId));
+          await logActivity({ entity: "lead", entityId: leadId, actorId: actor.userId, action: "lead_filled_from_email", detail: { ...patch, emailId: ins.sourceId } });
+        }
+      }
+    }
   }
   await db.update(inspectorActions).set({ status: "accepted", decidedById: actor.userId, decidedAt: new Date() }).where(and(eq(inspectorActions.inspectionId, inspectionId), eq(inspectorActions.status, "awaiting_approval"), inArray(inspectorActions.type, ["NEEDS_REVIEW", "LINK_RECORDING"])));
   await db.update(inspections).set({ reviewedById: actor.userId, reviewedAt: new Date() }).where(eq(inspections.id, inspectionId));

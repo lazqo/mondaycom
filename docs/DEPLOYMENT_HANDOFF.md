@@ -708,6 +708,19 @@ routing** and reads Get Secure's trade price from the logged-in product page. Ev
   failed price sync, whether IT Plus shows prices ex or inc GST, recent runs and their results,
   and each listing's price history.
 
+**How prices are approved (Run F).** The top of the Supplier pricing tab is Chris's choice for
+every connected supplier. With "Approve logged-in supplier prices automatically" on, a price read
+while logged in, for a product already matched and priced at that supplier, becomes the approved
+trade cost at once when the change is within the threshold ("Hold a change bigger than N% for
+review", default 20). The first price ever seen for a product, a bigger jump, and any public or
+retail price still wait for Chris. A refresh never changes a quote already prepared (a reprice
+picks the new cost up). The switch is off by default, and every change to it is logged. The same
+card lists the retailers Get Secure buys from when no supplier stocks an item (PB Tech, Noel
+Leeming, Harvey Norman and Bunnings by default): the research profile may quote their retail
+price, picture and availability as a retail price, never as a trade cost. Each further supplier
+needs its own connector (IT Plus is the only one built); the approval rule above then applies to
+it without more work.
+
 What it will and won't do:
 
 - **When a price is recorded**: the session is verified as logged in, the page's SKU is the listing
@@ -1453,6 +1466,24 @@ are in code. The per-class table (level and confidence per class) is under Advan
 there makes the position Custom. Each awaiting card and question shows Hermes's confidence as a
 word (sure / fairly sure / guessing), and "Why Hermes waited this week" under the dial lists the
 readings the dial held in the last 7 days, by class, with their reason.
+
+**One person, one lead; the prices Chris said; playbooks (Run F).** A website form is filed on
+an open lead with the same phone number (0 or +64, digits only), the same email, or a number on
+file with digits missing that fits inside the form's number (a lead from a call in the last
+month); it fills that lead's blanks (email, the full number, the site) and never makes a second
+lead. A name alone never matches. On a call, a number read out with a digit or two missing, or a
+first name that matches a lead from the last fortnight, is a candidate Chris confirms (never a
+match on its own); a number under ten digits is flagged. When a caller spells a street or name
+letter by letter, the spelling replaces the transcriber's word in the fact. Two leads can be
+merged from the lead page (Details → "Merge into another lead…"): everything moves, blanks are
+filled, the duplicate is archived, both timelines say so. A rental, hire or temporary job never
+runs the Business Brain: it is priced by the prices Chris stated on the call or by the rental
+rule (Hermes asks once; the answer is kept). The prices Chris stated on a recording (never from
+an email; only words in the transcript) come to Home as an editable card: "Record and prepare the
+quote" records them as a quote that needs Chris's approval (ex GST) and drafts the options email
+to the customer with no prices in it, referring to the quote number; nothing is sent. Hermes may
+propose a playbook for a kind of enquiry (when it applies, steps, options, pricing rule as Chris
+stated it) as a Business Brain candidate; approved, it is in every future reading's lessons.
 
 ## 18. Leads: Next action and Lost reason
 

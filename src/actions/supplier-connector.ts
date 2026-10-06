@@ -6,6 +6,8 @@ import { requireAdmin } from "@/lib/auth";
 import { humanFromUser } from "@/lib/guard/actor";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { mapSupplierListing, runSupplierConnector, type SyncResult, type SyncScope } from "@/lib/brain/suppliers/connector";
+import { getSupplierPricingSettings, saveSupplierPricingSettings, type SupplierPricingSettings } from "@/lib/brain/supplier-settings";
+import { logActivity } from "@/lib/activity";
 
 const uuid = z.string().uuid();
 
@@ -46,6 +48,33 @@ export async function mapSupplierListingAction(supplierId: string, productId: st
     await mapSupplierListing(uuid.parse(supplierId), uuid.parse(productId), { sku, url }, humanFromUser(user));
     revalidatePath("/settings/brain");
     return ok(undefined);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+const pricingSchema = z.object({
+  autoApprove: z.boolean(),
+  jumpPct: z.coerce.number().min(0).max(100),
+  retailers: z.array(z.string().max(120)).max(30),
+});
+
+/**
+ * How connected-supplier prices are approved and which retailers count as valid research sources.
+ * Auto-approval only ever applies to a price read logged in, for a product Chris already matched,
+ * within the jump threshold; a first-seen product, a bigger jump and any retail price still wait.
+ */
+export async function saveSupplierPricingSettingsAction(raw: unknown): Promise<ActionResult<SupplierPricingSettings>> {
+  try {
+    const user = await requireAdmin();
+    if (!user.canApprove) return fail("Only Chris can change how supplier prices are approved");
+    const parsed = pricingSchema.safeParse(raw);
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Check the values");
+    const before = await getSupplierPricingSettings();
+    const next = await saveSupplierPricingSettings(parsed.data);
+    await logActivity({ entity: "user", entityId: user.id, actorId: user.id, action: "supplier_pricing_settings_changed", detail: { before, after: next } });
+    revalidatePath("/settings/brain");
+    return ok(next);
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));
   }

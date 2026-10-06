@@ -268,8 +268,17 @@ export async function recordSupplierPrice(
     syncRunId?: string | null;
   },
   actor: Actor,
-  opts: { bulk?: boolean } = {},
-): Promise<{ offerId: string; held: boolean; changedPct: number | null; unchanged: boolean }> {
+  opts: {
+    bulk?: boolean;
+    /**
+     * Settings → Business Brain → Pricing: a price from a connected supplier, logged in, for a product
+     * already matched and priced there, is approved at once when it moved no more than jumpPct. A
+     * first price (the match is new) and a bigger move still wait for Chris. Never for a public price.
+     */
+    autoApprove?: boolean;
+    jumpPct?: number;
+  } = {},
+): Promise<{ offerId: string; held: boolean; changedPct: number | null; unchanged: boolean; autoApproved?: boolean }> {
   if (actor.kind === "agent") throw new GuardrailError("Agents cannot enter supplier prices.");
   const policies = await loadPolicies();
   const gst = policies.gstRate.value;
@@ -318,8 +327,11 @@ export async function recordSupplierPrice(
     }
     // An approver typing a price is the review. Anyone else: first price waits for approval, a big
     // move is held as pending, a small one applies but keeps its approval only if it had one. An
-    // import or connector sync never changes an approved cost: any change to one is held for Chris.
-    const hold = !approver && (significant || (automated && old != null && offer.priceApproved));
+    // import or connector sync never changes an approved cost: any change to one is held for Chris,
+    // unless he has switched on auto-approval for logged-in supplier prices and the move is within
+    // his threshold (the product was already matched and priced there, so only the figure changed).
+    const autoOk = !!opts.autoApprove && automated && input.priceSource === "authenticated_web" && old != null && changedPct != null && Math.abs(changedPct) <= (opts.jumpPct ?? 0);
+    const hold = !approver && !autoOk && (significant || (automated && old != null && offer.priceApproved));
     const patch = {
       supplierSku: input.supplierSku ?? offer.supplierSku,
       sourceUrl: input.sourceUrl ?? offer.sourceUrl,
@@ -335,7 +347,7 @@ export async function recordSupplierPrice(
             pendingCostExGst: null,
             lastCheckedAt: new Date(),
             priceSource: input.priceSource ?? "manual",
-            priceApproved: approver ? true : old == null ? false : offer.priceApproved,
+            priceApproved: approver || autoOk ? true : old == null ? false : offer.priceApproved,
           }),
     };
     await tx.update(supplierProducts).set(patch).where(eq(supplierProducts.id, offer.id));
@@ -348,11 +360,11 @@ export async function recordSupplierPrice(
       priceSource: input.priceSource ?? "manual",
       stock: input.stock ?? null,
       syncRunId: input.syncRunId ?? null,
-      reviewStatus: approver ? "approved" : "not_reviewed",
+      reviewStatus: approver ? "approved" : autoOk ? "auto_approved" : "not_reviewed",
       reviewedById: approver ? actorId(actor) : null,
-      reviewedAt: approver ? new Date() : null,
+      reviewedAt: approver || autoOk ? new Date() : null,
     });
-    return { offerId: offer.id, held: hold, changedPct, unchanged: false };
+    return { offerId: offer.id, held: hold, changedPct, unchanged: false, autoApproved: autoOk };
   });
 }
 

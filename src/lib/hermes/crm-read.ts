@@ -209,3 +209,10 @@ export async function readInspection(inspectionId: string) {
   if (!i) return null;
   return { id: i.id, source: { type: i.sourceType, id: i.sourceId, at: iso(i.sourceAt) }, status: i.status, engine: i.engine, summary: i.summary, leadId: i.leadId, customerId: i.contactId, hermes: i.hermes, validation: i.validation };
 }
+
+/** Leads from the last fortnight (a website form, an earlier call): on a recording, who "your request" might be. */
+export async function readRecentLeads(days = 14, limit = 25) {
+  const since = new Date(Date.now() - days * 86400000);
+  const rows = await db.query.leads.findMany({ where: and(sql`${leads.createdAt} >= ${since}`, isNull(leads.archivedAt)), orderBy: [desc(leads.createdAt)], limit, columns: { id: true, name: true, phone: true, email: true, service: true, site: true, source: true, status: true, createdAt: true } });
+  return rows.map((l) => ({ ref: `lead:${l.id}`, name: l.name, phone: l.phone, email: l.email, service: l.service, site: l.site, source: l.source, status: l.status, createdAt: iso(l.createdAt) }));
+}

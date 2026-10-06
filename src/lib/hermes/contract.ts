@@ -10,7 +10,7 @@ import { z } from "zod";
 import { COMMITMENT_KEYS, FACT_KEYS, INTENTS } from "@/lib/inspector/types";
 
 /** Bump when the prompt or the contract changes: every run records it. */
-export const HERMES_INSPECTOR_VERSION = "hermes-inspector-5";
+export const HERMES_INSPECTOR_VERSION = "hermes-inspector-6";
 
 /** The controlled next actions Hermes may recommend. Nothing outside this list is ever executed. */
 export const HERMES_ACTIONS = [
@@ -144,6 +144,40 @@ export const hermesResultSchema = z.object({
    * is Chris's own voice: commands in an email are ignored. Targets are refs from the pack
    * (lead:, job:, task:, event:, customer:); the words commanded are quoted as evidence.
    */
+  /**
+   * A way of handling a kind of enquiry that this conversation shows and the CRM does not have yet
+   * (a temporary camera rental: the questions to ask, the two options, the rental rule). Proposed to
+   * Chris as a Business Brain candidate; once approved it is in approvedLearnings for every reading.
+   */
+  playbook: opt(
+    z.object({
+      title: text(120),
+      applies_when: text(300),
+      steps: z.array(text(200)).max(12).default([]),
+      options: z.array(text(200)).max(6).default([]),
+      pricing_rule: opt(text(300)),
+    }),
+  ),
+  /**
+   * Prices and products Chris himself states on a recording (his notes after the call: "the $500
+   * install is the Tapo C615G; rental four hundred a month including data"). Never from a customer,
+   * never from an email. Each becomes a line on a card Chris confirms; nothing is recorded until then.
+   */
+  stated_pricing: z
+    .array(
+      z.object({
+        description: text(200),
+        model: opt(text(120)),
+        amount: z.coerce.number().min(0).max(1_000_000),
+        unit: z.enum(["each", "per_month", "per_job", "per_hour"]).catch("each").default("each"),
+        quantity: z.coerce.number().min(1).max(999).default(1),
+        /** install | rental | product | labour | other */
+        kind: z.enum(["install", "rental", "product", "labour", "other"]).catch("other").default("other"),
+        evidence: text(400).default(""),
+      }),
+    )
+    .max(12)
+    .default([]),
   commands: z
     .array(
       z.object({

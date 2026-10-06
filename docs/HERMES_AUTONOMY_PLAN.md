@@ -474,10 +474,50 @@ the readings the dial held in the last 7 days, by class, with the last five and 
 - Home is the brief and the Decisions queue only; today's calendar and next steps in one strip;
   everything else is a link. Technicians see Schedule and My day only.
 
+### Run F: the Gina case — one person, one lead, the prices Chris said, and suppliers that approve themselves
+A real call and form (6 October) showed six things at once: the same person became two leads
+(the call, then the website form), the transcriber heard "Houston" when the caller spelled
+E U S T O N, the number was read out with a digit missing and so matched nothing, the Business
+Brain was run on a camera *rental*, the prices Chris stated on the call were never used, and the
+options email he promised was never prepared. Chris also asked why he must approve every supplier
+price by hand when the CRM holds the trade logins. *Delivered:*
+
+- **Match by the number, never the name.** A website form is filed on an open lead with the same
+  number (0 or +64, digits only) or the same email, or a number on file with digits missing that
+  fits inside the form's number (a call in the last month), and it fills that lead's blanks
+  (email, the full number, the site). A second lead is never made for the same number. On a call,
+  a number read out with a digit or two missing is a *candidate* to confirm (never a match on its
+  own), and a first name said on a call against a lead from the last fortnight is a candidate too.
+  A number with fewer than ten digits is flagged on the reading.
+- **Spelled letters win.** When a caller spells a name or street letter by letter, the spelling
+  replaces the transcriber's word in the fact ("Houston" → Euston) and the reading says so.
+- **Merge.** Any two leads can be merged from the lead page: everything filed on the duplicate
+  moves, blanks are filled, the duplicate is archived, both timelines say so.
+- **Rental is not the Brain's.** A rental, hire or temporary job never runs the Business Brain.
+  It is priced by Chris's stated prices or by Get Secure's rental rule; without either, Hermes
+  asks once and the answer is kept as the rule.
+- **The prices Chris said become the quote.** Hermes lists the prices Chris himself stated on a
+  recording (never from an email, and only words found in the transcript). They appear on Home as
+  an editable card; one click records them as a quote (ex GST, needing Chris's approval like any
+  quote) and drafts the options email to the customer, with no prices in it, referring to the
+  quote. Nothing is sent.
+- **Playbooks.** When Hermes sees a kind of enquiry Get Secure handles without a playbook, it
+  proposes one (when it applies, the steps, the options, the pricing rule as Chris stated it) as a
+  Business Brain candidate. Approved, it is in every future reading's approved lessons.
+- **Supplier prices approve themselves, within a limit.** Settings → Business Brain → Supplier
+  pricing has a switch: a price read logged in from a connected supplier, for a product already
+  matched and priced there, is approved at once when the change is within Chris's threshold
+  (default 20%). The first price ever seen for a product, a bigger jump, and any public or retail
+  price still wait for a click. A refresh never changes a quote already prepared. Off by default.
+- **Retailers Get Secure buys from.** The same page lists the retailers (PB Tech, Noel Leeming,
+  Harvey Norman, Bunnings by default) that research may price a product from when no supplier
+  stocks it (Tapo, say). A retail price is recorded as a retail price with the retailer, the link
+  and the picture, never as a trade cost, and only ever enters a quote as a line Chris approves.
+
 ### Order and dependencies
 A is independent and first. B needs A's booking/command actions. C needs nothing from B but is
-better after it (next steps show in the inbox row). D is small and can ride with C. E last, so it
-is built on the final data model. Each run ends with unit, integration and e2e tests, the hermes
+better after it (next steps show in the inbox row). D is small and can ride with C. F came from
+the first real call and form and is delivered. E last, so it is built on the final data model. Each run ends with unit, integration and e2e tests, the hermes
 invariants extended, the handoff updated, and CI green.
 
 ## 7. What I need from Chris before Phase 2

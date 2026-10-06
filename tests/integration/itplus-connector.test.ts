@@ -17,8 +17,9 @@ import { startItPlusMock, type MockState } from "../support/itplus-mock";
 process.env.SUPPLIER_SYNC_DELAY_MS = "0";
 
 const { db } = await import("@/db");
-const { drafts, installationPackages, leads, productPriceHistory, products, quotes, cctvKits, supplierConnectors, supplierCredentials, supplierProducts, supplierSyncRuns, suppliers, users } =
+const { appSettings, drafts, installationPackages, leads, productPriceHistory, products, quotes, cctvKits, supplierConnectors, supplierCredentials, supplierProducts, supplierSyncRuns, suppliers, users } =
   await import("@/db/schema");
+const { saveSupplierPricingSettings, SUPPLIER_PRICING_DEFAULTS } = await import("@/lib/brain/supplier-settings");
 const { encryptSecret } = await import("@/lib/crypto");
 const brain = await import("@/lib/brain/store");
 const { applyReferenceCatalogue, resetReferenceMarker } = await import("@/lib/brain/reference/apply");
@@ -127,6 +128,7 @@ afterAll(async () => {
   else await db.delete(supplierCredentials).where(eq(supplierCredentials.supplierId, itPlusId));
   if (savedConn) await db.update(supplierConnectors).set(savedConn).where(eq(supplierConnectors.supplierId, itPlusId));
   await db.delete(users).where(inArray(users.id, [chris.userId, staff.userId]));
+  await db.delete(appSettings).where(eq(appSettings.key, "supplier_pricing"));
   resetReferenceMarker();
 });
 
@@ -308,6 +310,42 @@ describe("IT Plus connector", () => {
     await brain.repriceQuote(quoteId!, staff);
     const repriced = (await db.query.quotes.findFirst({ where: eq(quotes.id, quoteId!) }))!;
     expect((repriced.internalCosting as { lines: { model: string | null; unitCostExGst: number | null }[] }).lines.find((l) => l.model === "TP-Link VIGI InSight S455(2.8mm)")?.unitCostExGst).toBe(158.9);
+    await expectNoSecrets(r);
+  });
+
+  it("auto-approval on: a logged-in price for an already-matched product applies at once within the threshold; a first price, a big jump and the prepared quote still wait for Chris", async () => {
+    await saveSupplierPricingSettings({ autoApprove: true, jumpPct: 20 });
+    const before = (await db.query.quotes.findFirst({ where: eq(quotes.id, quoteIds[0]) }))!;
+    // The NVR has never been priced here before: delete its listing so the refresh sees it for the first time.
+    await db.delete(supplierProducts).where(and(eq(supplierProducts.supplierId, itPlusId), eq(supplierProducts.productId, ids.nvr)));
+    trade("S455-2.8").trade = 162.1; // +2% on the approved 158.9
+    trade("VJB-240").trade = 40; // +55% on 25.8
+    const r = await runSupplierConnector(itPlusId, { kind: "catalogue" }, chris);
+    const item = (productId: string) => r.items.find((i) => i.productId === productId)!;
+    expect(item(ids.camera)).toMatchObject({ outcome: "approved", costExGst: 162.1, previousCostExGst: 158.9 });
+    expect(item(ids.jb)).toMatchObject({ outcome: "held", previousCostExGst: 25.8 });
+    // The NVR, seen for the first time (its listing was removed): recorded, but not approved.
+    const fresh = await runSupplierConnector(itPlusId, { kind: "product", productId: ids.nvr }, chris);
+    expect(fresh.items.find((i) => i.productId === ids.nvr)).toMatchObject({ outcome: "recorded", costExGst: 165 });
+    const cam = (await offer(ids.camera))!;
+    expect(cam).toMatchObject({ priceApproved: true, pendingCostExGst: null, priceSource: "authenticated_web" });
+    expect(Number(cam.costExGst)).toBe(162.1);
+    const hist = await db.select().from(productPriceHistory).where(eq(productPriceHistory.supplierProductId, cam.id));
+    expect(hist.find((h) => h.newCostExGst === "162.10")).toMatchObject({ reviewStatus: "auto_approved" });
+    const jb = (await offer(ids.jb))!;
+    expect(Number(jb.costExGst)).toBe(25.8);
+    expect(Number(jb.pendingCostExGst)).toBe(40);
+    const nvr = (await offer(ids.nvr))!;
+    expect(nvr.priceApproved).toBe(false);
+    // The quote prepared earlier is untouched by the refresh.
+    const after = (await db.query.quotes.findFirst({ where: eq(quotes.id, quoteIds[0]) }))!;
+    expect(after.internalCosting).toEqual(before.internalCosting);
+    // Switched off again: the next small change is held like before.
+    await saveSupplierPricingSettings({ autoApprove: false });
+    trade("S455-2.8").trade = 163;
+    const r2 = await runSupplierConnector(itPlusId, { kind: "product", productId: ids.camera }, chris);
+    expect(r2.items.find((i) => i.productId === ids.camera)).toMatchObject({ outcome: "held", costExGst: 163, previousCostExGst: 162.1 });
+    expect(SUPPLIER_PRICING_DEFAULTS.autoApprove).toBe(false);
     await expectNoSecrets(r);
   });
 

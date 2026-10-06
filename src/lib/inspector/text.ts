@@ -164,3 +164,53 @@ export function toNumber(word: string): number | null {
   if (/^\d+$/.test(word)) return Number(word);
   return WORD_NUMBERS[word.toLowerCase()] ?? null;
 }
+
+/**
+ * Words a speaker spelled out letter by letter ("Houston, E U S T O N" → "EUSTON"): the spelling is
+ * the truth over the transcriber's word. Three or more single letters in a row.
+ */
+export function spelledWordsIn(text: string): string[] {
+  const out = new Set<string>();
+  // Each letter stands alone: "That's E U S T O N" spells EUSTON, not SEUSTON.
+  for (const m of text.matchAll(/(?<![A-Za-z'’])([A-Za-z](?:[\s.,-]+[A-Za-z]){2,})(?![A-Za-z'’])/g)) {
+    const word = m[1].replace(/[^A-Za-z]/g, "").toUpperCase();
+    if (word.length >= 3 && !/^([A-Z])\1+$/.test(word)) out.add(word);
+  }
+  return [...out];
+}
+
+function editDistance(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return dp[a.length][b.length];
+}
+
+/**
+ * A value with any word the speaker spelled differently corrected to the spelling: "Houston Road"
+ * with EUSTON spelled → "Euston Road". Returns null when nothing changes.
+ */
+export function applySpelling(value: string, spelled: string[]): { value: string; from: string; to: string } | null {
+  for (const sp of spelled) {
+    const words = value.split(/(\s+)/);
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (!/^[A-Za-z]{3,}$/.test(w) || w.toUpperCase() === sp) continue;
+      const d = editDistance(w.toUpperCase(), sp);
+      if (d >= 1 && d <= Math.max(2, Math.floor(sp.length / 3))) {
+        const cased = sp[0] + sp.slice(1).toLowerCase();
+        words[i] = cased;
+        return { value: words.join(""), from: w, to: cased };
+      }
+    }
+  }
+  return null;
+}
+
+/** The digits of `said` appear, in order, inside `stored` (a number read out with a digit or two dropped). */
+export function digitsFitInside(said: string, stored: string): boolean {
+  if (said.length < 7 || said.length > stored.length || stored.length - said.length > 3) return false;
+  let i = 0;
+  for (const ch of stored) if (ch === said[i]) i++;
+  return i === said.length;
+}

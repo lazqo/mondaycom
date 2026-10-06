@@ -12,7 +12,7 @@ import type { ActionType } from "@/lib/inspector/types";
 import type { AwaitingItem } from "@/queries/inspector";
 
 type PricingItem = { productId: string; model: string; key: string; suppliers: { id: string; name: string }[]; supplierId: string | null };
-type Payload = { key?: string; question?: string; kind?: "text" | "number" | "yes_no" | "choice" | "pricing"; options?: string[]; why?: string; unblocks?: string[]; learn?: boolean; items?: PricingItem[] };
+type Payload = { key?: string; question?: string; kind?: "text" | "number" | "yes_no" | "choice" | "pricing" | "stated_pricing"; options?: string[]; why?: string; unblocks?: string[]; learn?: boolean; items?: PricingItem[] };
 
 /** Trade costs for the unpriced products in a design: entered and approved as Chris, then the quote follows. */
 function PricingForm({ items, pending, onSend }: { items: PricingItem[]; pending: boolean; onSend: (json: string) => void }) {
@@ -101,6 +101,8 @@ export function AskCard({ item, canApprove }: { item: AwaitingItem; canApprove: 
         <div className="flex flex-wrap items-center gap-1.5">
           {kind === "pricing" ? (
             <PricingForm items={p.items ?? []} pending={pending} onSend={send} />
+          ) : kind === "stated_pricing" ? (
+            <StatedPricingForm items={(p.items as unknown as StatedItem[] | undefined) ?? []} pending={pending} onSend={send} />
           ) : kind === "yes_no" ? (
             <>
               <Button size="sm" disabled={pending} data-testid={`answer-yes-${a.id}`} onClick={() => send("Yes")}>
@@ -143,6 +145,64 @@ export function AskCard({ item, canApprove }: { item: AwaitingItem; canApprove: 
       ) : (
         <Badge className="bg-gray-100 text-gray-600">Waiting for Chris</Badge>
       )}
+    </div>
+  );
+}
+
+type StatedItem = { description: string; model?: string | null; amount: number; unit: string; quantity: number; kind: string; evidence?: string };
+
+/** The prices Chris stated on the call, editable; confirming prepares the quote (and the options email) for his approval. */
+function StatedPricingForm({ items, pending, onSend }: { items: StatedItem[]; pending: boolean; onSend: (v: string) => void }) {
+  const [rows, setRows] = React.useState(items.map((i) => ({ description: i.model ? `${i.description} (${i.model})` : i.description, quantity: i.quantity || 1, unitPrice: i.amount, unit: i.unit || "each", kind: i.kind || "other", keep: true })));
+  const [gst, setGst] = React.useState(true);
+  const set = (n: number, patch: Partial<(typeof rows)[number]>) => setRows(rows.map((r, i) => (i === n ? { ...r, ...patch } : r)));
+  return (
+    <div className="w-full space-y-2" data-testid="stated-pricing">
+      <table className="w-full text-xs">
+        <thead className="text-gray-500">
+          <tr>
+            <th className="py-1 text-left font-medium">Line</th>
+            <th className="py-1 text-left font-medium">Qty</th>
+            <th className="py-1 text-left font-medium">Price</th>
+            <th className="py-1 text-left font-medium">Per</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className={r.keep ? undefined : "opacity-40"}>
+              <td className="py-1 pr-2">
+                <Input value={r.description} onChange={(e) => set(i, { description: e.target.value })} aria-label={`Line ${i + 1}`} className="h-8" />
+              </td>
+              <td className="py-1 pr-2">
+                <Input type="number" min={1} value={r.quantity} onChange={(e) => set(i, { quantity: Number(e.target.value) })} aria-label={`Quantity ${i + 1}`} className="h-8 w-16" />
+              </td>
+              <td className="py-1 pr-2">
+                <Input type="number" min={0} step="0.01" value={r.unitPrice} onChange={(e) => set(i, { unitPrice: Number(e.target.value) })} aria-label={`Price ${i + 1}`} className="h-8 w-24" data-testid={`stated-price-${i}`} />
+              </td>
+              <td className="py-1 pr-2">
+                <select value={r.unit} onChange={(e) => set(i, { unit: e.target.value })} aria-label={`Unit ${i + 1}`} className="h-8 rounded border border-gray-300 text-xs">
+                  <option value="each">each</option>
+                  <option value="per_month">month</option>
+                  <option value="per_job">job</option>
+                  <option value="per_hour">hour</option>
+                </select>
+              </td>
+              <td className="py-1">
+                <button type="button" className="text-gray-400 hover:text-gray-700" onClick={() => set(i, { keep: !r.keep })} title={r.keep ? "Leave this line out" : "Put it back"}>
+                  {r.keep ? "✕" : "↺"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <label className="flex items-center gap-2 text-xs text-gray-700">
+        <input type="checkbox" checked={gst} onChange={(e) => setGst(e.target.checked)} /> These prices include GST
+      </label>
+      <Button size="sm" disabled={pending || !rows.some((r) => r.keep && r.unitPrice > 0)} data-testid="stated-pricing-confirm" onClick={() => onSend(JSON.stringify({ items: rows.filter((r) => r.keep), gstIncluded: gst }))}>
+        Record and prepare the quote
+      </Button>
     </div>
   );
 }

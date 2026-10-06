@@ -14,6 +14,7 @@ import { db } from "@/db";
 import { products, supplierConnectors, supplierCredentials, supplierProducts, supplierSyncRuns, suppliers } from "@/db/schema";
 import { type Actor, GuardrailError } from "@/lib/guard/actor";
 import { recordSupplierPrice } from "../store";
+import { getSupplierPricingSettings } from "@/lib/brain/supplier-settings";
 import { getSupplierCredential, SUPPLIER_SYNC_PROCESS } from "./credentials";
 import {
   brandWordsFor,
@@ -34,7 +35,7 @@ import { ConnectorError, redact, WebSession } from "./web-session";
 
 export type SyncScope = { kind: "test" } | { kind: "product"; productId: string } | { kind: "selected"; productIds: string[] } | { kind: "catalogue" };
 
-export type SyncOutcome = "recorded" | "updated" | "held" | "confirmed" | "no_match" | "ambiguous" | "not_read" | "error";
+export type SyncOutcome = "recorded" | "updated" | "approved" | "held" | "confirmed" | "no_match" | "ambiguous" | "not_read" | "error";
 
 export type SyncItem = {
   productId: string;
@@ -256,6 +257,7 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
     }
 
     // 4. Record what could be read with confidence.
+    const pricing = await getSupplierPricingSettings();
     for (const { t, entry, page } of pages) {
       const base = { productId: t.productId, product: t.label, sku: entry.sku, url: entry.url, stock: page.stock, priceText: page.priceText };
       if (page.amount == null) {
@@ -282,13 +284,13 @@ export async function runSupplierConnector(supplierId: string, scope: SyncScope,
             syncRunId: runId,
           },
           SYSTEM,
-          { bulk: true },
+          { bulk: true, autoApprove: pricing.autoApprove, jumpPct: pricing.jumpPct },
         );
         const offer = await db.query.supplierProducts.findFirst({ where: eq(supplierProducts.id, r.offerId), columns: { costExGst: true, pendingCostExGst: true } });
         const recordedEx = r.held ? num(offer?.pendingCostExGst) : num(offer?.costExGst);
         items.push({
           ...base,
-          outcome: r.unchanged ? "confirmed" : r.held ? "held" : t.oldCost == null ? "recorded" : "updated",
+          outcome: r.unchanged ? "confirmed" : r.held ? "held" : t.oldCost == null ? "recorded" : r.autoApproved ? "approved" : "updated",
           costExGst: recordedEx,
           previousCostExGst: t.oldCost,
           shownAmount: page.amount,

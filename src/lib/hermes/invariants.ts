@@ -32,6 +32,17 @@ const BRAIN_FIELD: Partial<Record<FactKey, string>> = { camera_count: "cameraCou
 
 export const INVARIANTS: Invariant[] = [
   {
+    key: "stated_prices_only_from_chris",
+    title: "A price is recorded only from Chris's own words on a recording, confirmed by his click; prices in an email are never taken",
+    applies: (c) => c.hermes.stated_pricing.length > 0 || c.validation.plan.some((p) => p.rule === "stated_pricing"),
+    check: (c) => {
+      const cards = c.validation.plan.filter((p) => p.rule === "stated_pricing");
+      if (c.ctx.input.sourceType !== "recording" && cards.length) return "stated prices from an email became a card";
+      if (cards.some((p) => p.type !== "ASK_CHRIS" || p.mode !== "approval")) return "stated prices were planned as automatic work";
+      return null;
+    },
+  },
+  {
     key: "question_never_blocks",
     title: "A question for Chris waits as a card; it never holds up internal work or becomes a review",
     applies: (c) => c.validation.plan.some((p) => p.type === "ASK_CHRIS"),

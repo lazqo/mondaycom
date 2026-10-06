@@ -8,10 +8,12 @@ import {
   refreshSupplierCatalogueAction,
   refreshSupplierProductAction,
   refreshSupplierSelectedAction,
+  saveSupplierPricingSettingsAction,
   testSupplierConnectionAction,
 } from "@/actions/supplier-connector";
 import { Badge, Button, Card, CardHeader, FormError, Select } from "@/components/ui";
 import type { PriceFreshness } from "@/lib/brain/types";
+import type { SupplierPricingSettings } from "@/lib/brain/supplier-settings";
 import type { SyncItem, SyncResult } from "@/lib/brain/suppliers/connector";
 
 export type ConnectorView = {
@@ -63,6 +65,7 @@ const STATUS: Record<string, [string, string]> = {
 const OUTCOME: Record<string, [string, string]> = {
   recorded: ["New price · awaiting approval", "bg-amber-100 text-amber-800"],
   updated: ["Price updated · awaiting approval", "bg-amber-100 text-amber-800"],
+  approved: ["Price updated · approved (logged-in, within threshold)", "bg-green-100 text-green-800"],
   held: ["Change held for review", "bg-amber-100 text-amber-800"],
   confirmed: ["Unchanged · re-checked", "bg-green-100 text-green-800"],
   no_match: ["Not listed at supplier", "bg-gray-200 text-gray-700"],
@@ -393,7 +396,65 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
   );
 }
 
-export function SupplierPricing({ connectors, canApprove }: { connectors: ConnectorView[]; canApprove: boolean }) {
+/** Chris's choices: whether logged-in supplier prices approve themselves, the jump that still waits, and the retailers research may price from. */
+function PricingSettingsCard({ settings, canApprove }: { settings: SupplierPricingSettings; canApprove: boolean }) {
+  const router = useRouter();
+  const [auto, setAuto] = React.useState(settings.autoApprove);
+  const [jump, setJump] = React.useState(String(settings.jumpPct));
+  const [retailers, setRetailers] = React.useState(settings.retailers.join("\n"));
+  const [pending, start] = React.useTransition();
+  const [err, setErr] = React.useState<string | null>(null);
+  const [saved, setSaved] = React.useState(false);
+  const save = () =>
+    start(async () => {
+      setErr(null);
+      setSaved(false);
+      const res = await saveSupplierPricingSettingsAction({ autoApprove: auto, jumpPct: Number(jump), retailers: retailers.split(/[\n,]+/).map((r) => r.trim()).filter(Boolean) });
+      if (!res.ok) return setErr(res.error);
+      setSaved(true);
+      router.refresh();
+    });
+  return (
+    <Card>
+      <CardHeader title="How supplier prices are approved" />
+      <div className="space-y-3 px-4 pb-4 pt-3 text-sm">
+        <p className="text-xs text-gray-600">Applies to every connected supplier. A refresh never changes a quote already prepared.</p>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-1" checked={auto} disabled={!canApprove} onChange={(e) => setAuto(e.target.checked)} data-testid="supplier-auto-approve" />
+          <span>
+            <span className="font-medium text-gray-900">Approve logged-in supplier prices automatically</span>
+            <span className="block text-xs text-gray-600">
+              A price read while logged in to a connected supplier, for a product already matched there, becomes the approved trade cost at once. The first price ever seen for a product,
+              a change bigger than the threshold, and any public or retail price still wait for {canApprove ? "you" : "Chris"}.
+            </span>
+          </span>
+        </label>
+        <label className="flex flex-wrap items-center gap-2 text-xs text-gray-700">
+          Hold a change bigger than
+          <input type="number" min={0} max={100} className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm" value={jump} disabled={!canApprove} onChange={(e) => setJump(e.target.value)} aria-label="Jump threshold percent" data-testid="supplier-jump-pct" />
+          % for review
+        </label>
+        <label className="block text-xs text-gray-700">
+          Retailers Get Secure buys from when no supplier stocks an item (one per line). Research may quote their retail price as a retail price, never as a trade cost.
+          <textarea className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 font-mono text-xs" rows={4} value={retailers} disabled={!canApprove} onChange={(e) => setRetailers(e.target.value)} aria-label="Retailers" data-testid="supplier-retailers" />
+        </label>
+        {canApprove ? (
+          <div className="flex items-center gap-2">
+            <Button size="sm" disabled={pending} onClick={save} data-testid="supplier-pricing-save">
+              Save
+            </Button>
+            {saved ? <span className="text-xs text-green-700">Saved.</span> : null}
+            {err ? <FormError message={err} /> : null}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500">Only Chris can change these.</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+export function SupplierPricing({ connectors, canApprove, settings }: { connectors: ConnectorView[]; canApprove: boolean; settings: SupplierPricingSettings }) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-600">
@@ -401,6 +462,7 @@ export function SupplierPricing({ connectors, canApprove }: { connectors: Connec
         never shown here, logged, or given to any agent. Only the price on a logged-in product page is used as cost — never a public or RRP price — and anything the connector
         can&apos;t read with confidence is reported, not recorded. Prices are stored ex GST.
       </p>
+      <PricingSettingsCard settings={settings} canApprove={canApprove} />
       {connectors.length === 0 ? <p className="text-sm text-gray-500">No supplier has an automated connector yet.</p> : null}
       {connectors.map((c) => (
         <ConnectorCard key={c.supplierId} c={c} canApprove={canApprove} />

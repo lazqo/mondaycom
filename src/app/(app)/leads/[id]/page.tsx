@@ -17,6 +17,7 @@ import { buildJourney } from "@/lib/journey";
 import { LEAD_SOURCE_LABELS, LEAD_URGENCY_META } from "@/lib/constants";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { LeadForm } from "@/components/leads/lead-form";
+import { MergeLead } from "@/components/leads/merge-lead";
 import { ConvertLeadButton } from "@/components/leads/convert-lead-dialog";
 import { StatusPill } from "@/components/leads/cells";
 import { JOB_STATUS_META, QUOTE_STATUS_META } from "@/lib/constants";
@@ -112,6 +113,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <CardHeader title="Details" />
             <div className="p-4">
               <LeadForm lead={lead} users={users} suggestion={step && step.kind !== "typed" && step.kind !== "closed" ? step.what : null} />
+              {!lead.archivedAt ? (
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <MergeLead leadId={lead.id} leadName={lead.name} />
+                </div>
+              ) : null}
             </div>
           </Card>
           <Card>

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, max, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, max, ne, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, emailThreads, emails, jobs, leads, users, type ExtractedLead } from "@/db/schema";
 import { env } from "@/lib/env";
@@ -6,6 +6,7 @@ import { OPEN_JOB_STATUSES } from "@/lib/constants";
 import { logActivity } from "@/lib/activity";
 import { isAutomatedMail } from "./parse";
 import { isWebsiteLeadSender, parseWebsiteLead, personalEmail } from "./website-lead";
+import { digitsFitInside, normalisePhone } from "@/lib/inspector/text";
 
 
 export type ProcessOutcome = {
@@ -79,6 +80,28 @@ async function classifyEmail(emailId: string, opts: { force?: boolean } = {}): P
       const enquirerContact = enquirerEmail
         ? await db.query.contacts.findFirst({ where: sql`lower(${contacts.email}) = ${enquirerEmail}`, columns: { id: true } })
         : null;
+      // The same person may already be an open lead: they rang first (a lead from the call, often
+      // with no email and a number read out with a digit missing) and then filled in the form. The
+      // form is filed on that lead and fills its blanks, never a second lead. Matched by the
+      // number (0 or +64, digits only) or the email address; a name alone never matches.
+      const open = await findOpenLeadForEnquirer({ email: enquirerEmail, phone: website.extraction.phone ?? null });
+      if (open) {
+        await db.transaction(async (tx) => {
+          await tx.update(emails).set({ classification: "lead", leadId: open.id, contactId: open.contactId, classifiedAt: new Date() }).where(eq(emails.id, emailId));
+          await tx.update(emailThreads).set({ leadId: open.id, contactId: open.contactId, updatedAt: new Date() }).where(eq(emailThreads.id, email.threadId));
+          const patch: Partial<typeof leads.$inferInsert> = {};
+          if (!open.email && enquirerEmail) patch.email = enquirerEmail;
+          if (open.phoneUpgrade) patch.phone = open.phoneUpgrade;
+          if (!open.site && website.extraction.site_address) patch.site = website.extraction.site_address;
+          if (!open.emailThreadId) patch.emailThreadId = email.threadId;
+          if (!open.sourceEmailId) patch.sourceEmailId = emailId;
+          if (Object.keys(patch).length) await tx.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, open.id));
+          await touchLead(tx, open.id, email.receivedAt);
+          await logActivity({ entity: "lead", entityId: open.id, actorId: null, action: "email_linked", detail: { threadId: email.threadId, subject: email.subject, via: `website form matched on ${open.matchedBy}` } });
+          if (Object.keys(patch).length) await logActivity({ entity: "lead", entityId: open.id, actorId: null, action: "lead_filled_from_email", detail: { ...patch, emailId, matchedBy: open.matchedBy } });
+        });
+        return { emailId, classification: "lead", leadId: open.id, contactId: open.contactId, detail: `website enquiry form, filed on the open lead (${open.matchedBy})` };
+      }
       const leadId = await createLeadFromEmail(emailId, {
         actorId: null,
         overrides: website.extraction,
@@ -169,6 +192,38 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 /** YYYY-MM-DD for an instant in the app's timezone (date columns must not drift with UTC). */
 export function dateInAppTz(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: env.APP_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+const digitsOf = (col: unknown) => sql`regexp_replace(coalesce(${col}, ''), '\\D', '', 'g')`;
+
+/**
+ * An open lead that is the same person as a website enquirer: the same email address, the same
+ * phone number, or a number on file with digits missing that fits inside the one on the form
+ * (from a call in the last month). Never by name.
+ */
+export async function findOpenLeadForEnquirer(who: { email: string | null; phone: string | null }): Promise<{ id: string; contactId: string | null; email: string | null; site: string | null; emailThreadId: string | null; sourceEmailId: string | null; phoneUpgrade: string | null; matchedBy: string } | null> {
+  const cols = { id: leads.id, contactId: leads.contactId, email: leads.email, phone: leads.phone, site: leads.site, emailThreadId: leads.emailThreadId, sourceEmailId: leads.sourceEmailId, createdAt: leads.createdAt };
+  const openOnly = and(isNull(leads.archivedAt), notInArray(leads.status, ["lost", "won"]));
+  const digits = normalisePhone(who.phone ?? "");
+  if (digits.length >= 8) {
+    const alt = digits.startsWith("0") ? `64${digits.slice(1)}` : digits;
+    const [exact] = await db.select(cols).from(leads).where(and(openOnly, sql`${digitsOf(leads.phone)} in (${digits}, ${alt})`)).orderBy(desc(leads.createdAt)).limit(1);
+    if (exact) return { ...exact, phoneUpgrade: null, matchedBy: `phone ${who.phone}` };
+    const since = new Date(Date.now() - 31 * 86400000);
+    const like = `${digits.slice(0, 3)}%${digits.slice(-2)}`;
+    const altLike = digits.startsWith("0") ? `64${digits.slice(1, 3)}%${digits.slice(-2)}` : like;
+    const shorts = await db.select(cols).from(leads).where(and(openOnly, gte(leads.createdAt, since), or(sql`${digitsOf(leads.phone)} like ${like}`, sql`${digitsOf(leads.phone)} like ${altLike}`))).orderBy(desc(leads.createdAt)).limit(10);
+    const fit = shorts.find((l) => {
+      const d = normalisePhone(l.phone ?? "");
+      return d.length >= 7 && d.length < digits.length && digitsFitInside(d, digits);
+    });
+    if (fit) return { ...fit, phoneUpgrade: who.phone, matchedBy: `the number ${who.phone}, which the ${fit.phone} on file (read out with digits missing) fits inside` };
+  }
+  if (who.email) {
+    const [byEmail] = await db.select(cols).from(leads).where(and(openOnly, sql`lower(${leads.email}) = ${who.email.toLowerCase()}`)).orderBy(desc(leads.createdAt)).limit(1);
+    if (byEmail) return { ...byEmail, phoneUpgrade: null, matchedBy: `email ${who.email}` };
+  }
+  return null;
 }
 
 async function touchLead(tx: Tx, leadId: string, at: Date) {

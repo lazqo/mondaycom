@@ -23,6 +23,7 @@ import { applyReferenceCatalogue } from "@/lib/brain/reference/apply";
 import { POLICY_DESCRIPTIONS, POLICY_KEYS } from "@/lib/brain/policy";
 import { applyStarterContent } from "@/lib/proposals/content";
 import { priceFreshness } from "@/lib/brain/pricing";
+import { getSupplierPricingSettings } from "@/lib/brain/supplier-settings";
 import { BrainSettings } from "@/components/brain/brain-settings";
 import type { ConnectorView } from "@/components/brain/supplier-pricing";
 import type { SyncItem } from "@/lib/brain/suppliers/connector";
@@ -56,11 +57,13 @@ export default async function BrainSettingsPage({ searchParams }: { searchParams
   const label = new Map(productRows.map((p) => [p.id, `${p.manufacturer} ${p.model}`]));
   const now = new Date();
   const connectors = tab === "pricing" ? await loadConnectors(productRows, offers, policies, now) : [];
+  const pricingSettings = await getSupplierPricingSettings();
 
   return (
     <BrainSettings
       tab={tab}
       connectors={connectors}
+      pricingSettings={pricingSettings}
       canApprove={!!user.canApprove}
       policies={policyRows
         .filter(({ p }) => order.has(p.key))

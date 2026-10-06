@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { ProductProposalContent, type ProductQuoteContent } from "./product-proposal-content";
 import { KitSettings, type KitProductOption, type KitView } from "./kit-settings";
 import { SupplierPricing, type ConnectorView } from "./supplier-pricing";
+import type { SupplierPricingSettings } from "@/lib/brain/supplier-settings";
 
 const STATUS_STYLE: Record<KnowledgeStatus, string> = {
   industry_fact: "bg-sky-100 text-sky-800",
@@ -1061,6 +1062,7 @@ export function BrainSettings({
   kits,
   kitProducts,
   connectors,
+  pricingSettings,
 }: {
   tab: string;
   canApprove: boolean;
@@ -1073,6 +1075,7 @@ export function BrainSettings({
   kits: KitView[];
   kitProducts: KitProductOption[];
   connectors: ConnectorView[];
+  pricingSettings: SupplierPricingSettings;
 }) {
   const [adding, setAdding] = React.useState(false);
   return (
@@ -1147,7 +1150,7 @@ export function BrainSettings({
         </>
       ) : null}
 
-      {tab === "pricing" ? <SupplierPricing connectors={connectors} canApprove={canApprove} /> : null}
+      {tab === "pricing" ? <SupplierPricing connectors={connectors} canApprove={canApprove} settings={pricingSettings} /> : null}
 
       {tab === "kits" ? <KitSettings kits={kits} products={kitProducts} canApprove={canApprove} /> : null}
 
