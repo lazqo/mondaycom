@@ -1433,6 +1433,17 @@ was lost or archived or whose job was cancelled, and resolves old rule reminders
 has cleared. Hermes sees the current step as `crm.lead.nextStep` in its context pack and is told
 to give a task or follow-up only when its reading changes what should happen next.
 
+**The inbox says what each email is and what to do (Run C).** Every inbound email shows a
+category from Hermes's reading (Customer, Existing work, Supplier, Provider, Accounting, Marketing,
+Internal, Other; bulk mail is Marketing from its headers before Hermes sees it) and one headline
+for the state of play: "Needs you: <the question>", "Decide: pencil in the site visit", "Hermes
+asks: …", "New lead · Task: …", "Task: …", "Promise kept: …", "Nothing to do · <reason>", "Not a
+lead (you decided)". The tabs are the categories plus Needs attention, which lists only what waits
+on Chris. The row carries the one click it waits on; a proposal that needs a time slot links to
+its card on Home. The filing labels (lead, not a lead, existing) still drive the mechanics and are
+shown under the headline on the thread page. The Accounting tab is the list Money (Phase 4) will
+read.
+
 ## 18. Leads: Next action and Lost reason
 
 The Leads table has a **Next action** column beside Status (also shown on Kanban cards and the lead

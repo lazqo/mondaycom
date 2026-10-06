@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getThread, nextReviewThread } from "@/queries/email";
+import { triageForEmail } from "@/queries/inbox-triage";
+import { TriageCell } from "@/components/inbox/triage-cell";
 import { db } from "@/db";
 import { leads } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -24,6 +26,7 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
   const created = sp.created ? await db.query.leads.findFirst({ where: eq(leads.id, sp.created), columns: { id: true, name: true } }) : null;
   const inbound = thread.emails.filter((e) => e.direction === "inbound");
   const latestInbound = inbound[inbound.length - 1] ?? null;
+  const triage = latestInbound ? await triageForEmail(latestInbound.id) : null;
   const reviewable = inbound.find((e) => e.classification === "needs_review" || e.classification === "error" || e.classification === "pending") ?? latestInbound;
   const lastMsg = thread.emails[thread.emails.length - 1];
   const replyTo = latestInbound ? [latestInbound.fromAddress, ...latestInbound.cc.map((c) => c.address).filter((a) => a !== thread.mailbox.emailAddress)] : [];
@@ -76,10 +79,14 @@ export default async function ThreadPage({ params, searchParams }: { params: Pro
             ) : null}
           </p>
         </div>
-        {latestInbound ? (
-          <Badge className={`${EMAIL_CLASSIFICATION_META[latestInbound.classification].bg} ${EMAIL_CLASSIFICATION_META[latestInbound.classification].text}`}>
-            {EMAIL_CLASSIFICATION_META[latestInbound.classification].label}
-          </Badge>
+        {latestInbound && triage ? (
+          <div className="max-w-md rounded-md border border-gray-200 bg-white px-3 py-2" data-testid="thread-triage">
+            <TriageCell triage={triage} />
+            <p className="mt-1 text-xs text-gray-400">
+              Filed as{" "}
+              <Badge className={`${EMAIL_CLASSIFICATION_META[latestInbound.classification].bg} ${EMAIL_CLASSIFICATION_META[latestInbound.classification].text}`}>{EMAIL_CLASSIFICATION_META[latestInbound.classification].label}</Badge>
+            </p>
+          </div>
         ) : null}
       </div>
 

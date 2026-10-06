@@ -440,6 +440,15 @@ or a cancelled job. Hermes's pack carries `crm.lead.nextStep`.
   filing labels ("Not a lead", "Known customer") stop being the headline.
 - Filters by category; "Needs attention" only when Hermes says so, with the reason.
 - Accounting mail (statements, invoices, remittances) gets its own list that feeds Money (Phase 4).
+*Delivered.* Each inbox row shows the category from Hermes's business context (bulk mail is
+"Marketing" from its headers before Hermes) and one headline for the state of play: "Needs you:
+<the question>", "Decide: pencil in the site visit", "Hermes asks: …", "New lead · Task: …",
+"Task: …", "Promise kept: …", "Nothing to do · <reason>", "Not a lead (you decided)". Tabs are the
+categories plus "Needs attention" (only rows that wait on Chris, with the reason); the old filter
+keys still land on the right tab. The row carries the one click: lead / not a lead for a review,
+the proposal's own button when accepting needs no choice, otherwise a link to the card on Home.
+The thread page shows the same line, with the filing label underneath. The Accounting tab is the
+list Money will read.
 
 ### Run D: a dial Chris can reason about
 Three positions, **Careful / Normal / Autonomous**, with presets for every class; the per-class

@@ -107,22 +107,29 @@ test.describe("Titan-style email ingestion", () => {
     await page.getByTestId("sync-now").click();
     await expect(page.getByText(/stored \d+|new,/)).toBeVisible({ timeout: 30_000 });
 
-    // Inbox shows sender, subject, received time, Hermes's verdict, linked lead. Bulk mail is filed
-    // at once; the rest a moment later, once Hermes has read it.
+    // Inbox shows sender, subject, received time, what it is and what to do, linked lead. Bulk mail
+    // is filed at once; the rest a moment later, once Hermes has read it.
     const ajaxRow = page.locator("tr", { hasText: ajax.subject });
     const vagueRow = page.locator("tr", { hasText: vague.subject });
     await eventually(page, "/inbox", async () => {
-      await expect(ajaxRow.getByText("New lead", { exact: true })).toBeVisible({ timeout: 1000 });
-      await expect(vagueRow.getByText("Needs review")).toBeVisible({ timeout: 1000 });
+      await expect(ajaxRow.getByTestId("triage-headline")).toHaveText("New lead", { timeout: 1000 });
+      await expect(vagueRow.getByTestId("triage-headline")).toContainText(/^Needs you:/, { timeout: 1000 });
     });
+    await expect(ajaxRow.getByTestId("triage")).toHaveAttribute("data-category", "customer");
     await expect(ajaxRow).toContainText("Dean Walker");
+    await expect(ajaxRow).toContainText(/Task: Ring about the Ajax alarm/);
     await expect(ajaxRow.getByRole("link", { name: /Dean Walker/ })).toBeVisible();
     const newsRow = page.locator("tr", { hasText: newsletter.subject });
-    await expect(newsRow.getByText("Not a lead")).toBeVisible();
+    await expect(newsRow.getByTestId("triage")).toHaveAttribute("data-category", "marketing");
+    await expect(newsRow.getByTestId("triage-headline")).toHaveText("Filed: bulk mail");
 
-    // Not-lead mail is searchable but stays out of Leads.
-    await page.goto(`/inbox?filter=not_lead&q=${encodeURIComponent(RUN)}`);
+    // Marketing has its own tab; what needs Chris has another, with the reason.
+    await page.goto(`/inbox?filter=marketing&q=${encodeURIComponent(RUN)}`);
     await expect(page.locator("tr", { hasText: newsletter.subject })).toBeVisible();
+    await expect(page.locator("tr", { hasText: ajax.subject })).toHaveCount(0);
+    await page.goto(`/inbox?filter=attention&q=${encodeURIComponent(RUN)}`);
+    await expect(page.locator("tr", { hasText: vague.subject })).toBeVisible();
+    await expect(page.locator("tr", { hasText: ajax.subject })).toHaveCount(0);
 
     // Leads board: the Ajax lead exists in "New" with extracted columns; the newsletter and vague email do not.
     await page.goto("/leads");
@@ -146,7 +153,7 @@ test.describe("Titan-style email ingestion", () => {
 
   test("a Needs review email can be accepted as a lead by a person", async ({ page }) => {
     await login(page);
-    await page.goto(`/inbox?filter=needs_review&q=${encodeURIComponent(RUN)}`);
+    await page.goto(`/inbox?filter=attention&q=${encodeURIComponent(RUN)}`);
     await page.locator("tr", { hasText: "question" }).getByRole("link").first().click();
     await expect(page.getByRole("heading", { name: /question/ })).toBeVisible();
     await page.getByRole("button", { name: "Edit & create" }).click();
@@ -169,16 +176,17 @@ test.describe("Titan-style email ingestion", () => {
     await page.getByTestId("sync-now").click();
     await expect(page.getByText(/new,/)).toBeVisible({ timeout: 30_000 });
     const row = page.locator("tr", { hasText: vague2.subject });
-    await eventually(page, `/inbox?filter=needs_review&q=${encodeURIComponent(RUN)}`, async () => expect(row).toBeVisible({ timeout: 1000 }));
+    await eventually(page, `/inbox?filter=attention&q=${encodeURIComponent(RUN)}`, async () => expect(row).toBeVisible({ timeout: 1000 }));
     await row.locator("[data-testid^=row-reject-]").click();
     await expect(page.locator("tr", { hasText: vague2.subject })).toHaveCount(0);
-    await page.goto(`/inbox?filter=not_lead&q=${encodeURIComponent(RUN)}`);
-    await expect(page.locator("tr", { hasText: vague2.subject })).toBeVisible();
+    // Decided: it stays under its category, with the decision as the headline.
+    await page.goto(`/inbox?filter=customer&q=${encodeURIComponent(RUN)}`);
+    await expect(page.locator("tr", { hasText: vague2.subject }).getByTestId("triage-headline")).toHaveText("Not a lead (you decided)");
   });
 
   test("a reply is sent through SMTP and kept on the CRM thread", async ({ page }) => {
     await login(page);
-    await page.goto(`/inbox?filter=lead&q=${encodeURIComponent(RUN)}`);
+    await page.goto(`/inbox?filter=customer&q=${encodeURIComponent(RUN)}`);
     const row = page.locator("tr", { hasText: "Ajax alarm system for new build" }).first();
     await row.getByRole("link").first().click();
     await page.getByTestId("reply-open").click();
