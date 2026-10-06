@@ -1545,7 +1545,7 @@ describe("Run F: a rental call with stated prices, then the same person's websit
     expect(await db.query.activityLog.findFirst({ where: and(eq(S.activityLog.entityId, callLeadId), eq(S.activityLog.action, "lead_filled_from_email")) })).toBeTruthy();
     expect(await db.query.leads.findMany({ where: like(S.leads.name, `${first}%`) })).toHaveLength(1);
     // A form from someone else with a number that merely shares the prefix still makes its own lead.
-    const other = `${full.slice(0, 3)}9${full.slice(4)}`;
+    const other = `${full.slice(0, 3)}${(Number(full[3]) + 1) % 10}${full.slice(4)}`; // one digit different, same prefix and suffix
     const e2 = await email({ from: "noreply@updates.getsecure.co.nz", name: "Get Secure Website", subject: "New Lead · Contact form", text: [`OTHER PERSON ${RUN}`, "", `Phone ${other} Email other+${RUN}@example.com Service CCTV`, "", "MESSAGE", "", "Four cameras please.", "", "Sent from the Get Secure website."].join("\n") });
     const out2 = await processEmail(e2.id);
     expect(out2.leadId).not.toBe(callLeadId);
