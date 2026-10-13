@@ -51,43 +51,31 @@ export default async function HermesSettingsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Hermes</h1>
-        <p className="text-sm text-gray-600">Hermes reads every email and Plaud conversation, decides what it is and what should happen, and does the internal work. Here you set how far it goes on its own. Nothing customer-facing is ever sent, confirmed, priced or discounted without you: that is fixed in code, not a setting.</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader title="Connection" action={<Badge className={connected ? "bg-[#00c875] text-white" : "bg-[#e2445c] text-white"}>{connected ? "Connected" : "Not connected"}</Badge>} />
-          <div className="space-y-1 p-4 text-sm text-gray-700">
-            <p>{connected ? `Inspector profile at ${process.env.HERMES_API_URL}${process.env.HERMES_MODEL ? ` (${process.env.HERMES_MODEL})` : ""}.` : "Set HERMES_API_URL and HERMES_API_KEY on the server (docs/DEPLOYMENT_HANDOFF.md section 17). Until then every new email waits for you on Home."}</p>
-            <p>Research profile: {research ? "connected" : "not connected (research requests become tasks)"}.</p>
-            <p>CRM tools: {mcpTokensMisconfigured() ? "OFF: HERMES_MCP_TOKEN and HERMES_RESEARCH_MCP_TOKEN are the same value. Give the research profile its own token." : process.env.HERMES_MCP_TOKEN ? "on" : "off (HERMES_MCP_TOKEN not set)"}.</p>
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Last 7 days" />
-          <div className="space-y-1 p-4 text-sm text-gray-700" data-testid="hermes-stats">
-            <p>
-              {Number(stats.runs)} readings, {Number(stats.ok)} usable{Number(stats.runs) ? ` (${Math.round((Number(stats.ok) / Number(stats.runs)) * 100)}%)` : ""}, {Math.round(Number(stats.avgMs) / 100) / 10}s each on average.
-            </p>
-            <p>Last reading: {last ? `${formatDateTime(last.createdAt)} · ${last.status}${last.model ? ` · ${last.model}` : ""}${last.error ? ` · ${last.error.slice(0, 120)}` : ""}` : "none yet"}.</p>
-            <p>Queue: {Number(queue.waiting)} waiting{Number(queue.retrying) ? `, ${Number(queue.retrying)} retrying` : ""}.</p>
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Never, whatever the dial says" />
-          <ul className="list-disc space-y-0.5 p-4 pl-8 text-xs text-gray-700">
-            {[...HARD_GUARDRAILS.customer_facing, ...HARD_GUARDRAILS.commercial.slice(0, 2), ...HARD_GUARDRAILS.identity.slice(0, 1), ...HARD_GUARDRAILS.secrets].map((g) => (
-              <li key={g}>{g}</li>
-            ))}
-          </ul>
-        </Card>
+        <p className="text-sm text-gray-600">Hermes reads every email and call and does the internal work. You set how far it goes; it never sends, confirms, prices or discounts anything itself.</p>
       </div>
 
       <Card>
+        <CardHeader title="Status" action={<Badge className={connected ? "bg-[#00c875] text-white" : "bg-[#e2445c] text-white"}>{connected ? "Connected" : "Not connected"}</Badge>} />
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 p-4 text-sm text-gray-700 sm:grid-cols-2" data-testid="hermes-stats">
+          <p>{connected ? `Inspector profile${process.env.HERMES_MODEL ? ` (${process.env.HERMES_MODEL})` : ""} · research ${research ? "connected" : "not connected"} · CRM tools ${mcpTokensMisconfigured() ? "OFF (the two tokens are the same value)" : process.env.HERMES_MCP_TOKEN ? "on" : "off"}.` : "Set HERMES_API_URL and HERMES_API_KEY on the server (handoff section 17). Until then every new email waits for you on Home."}</p>
+          <p>
+            Last 7 days: {Number(stats.runs)} readings, {Number(stats.ok)} usable{Number(stats.runs) ? ` (${Math.round((Number(stats.ok) / Number(stats.runs)) * 100)}%)` : ""}, {Math.round(Number(stats.avgMs) / 100) / 10}s each. Queue: {Number(queue.waiting)} waiting{Number(queue.retrying) ? `, ${Number(queue.retrying)} retrying` : ""}.
+          </p>
+          <p className="sm:col-span-2 text-xs text-gray-500">Last reading: {last ? `${formatDateTime(last.createdAt)} · ${last.status}${last.error ? ` · ${last.error.slice(0, 120)}` : ""}` : "none yet"}.</p>
+          <details className="sm:col-span-2 text-xs text-gray-600">
+            <summary className="cursor-pointer">Never, whatever the dial says</summary>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {[...HARD_GUARDRAILS.customer_facing, ...HARD_GUARDRAILS.commercial.slice(0, 2), ...HARD_GUARDRAILS.identity.slice(0, 1), ...HARD_GUARDRAILS.secrets].map((g) => (
+                <li key={g}>{g}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
+      </Card>
+
+      <Card>
         <CardHeader title="How far Hermes goes on its own" />
-        <p className="px-4 pt-3 text-xs text-gray-600">
-          Pick a position. Careful waits for you more; Normal is what the CRM assumes; Autonomous lets Hermes act on less certainty. Whatever the position, a quote, a reply or a booking is never sent or confirmed by Hermes. Under Advanced, each class has its own level (“Do it”, “Do it, then ask me”, “Ask me first”, “Never”) and the confidence it needs; below that confidence the action waits for you with Hermes’s plan attached.
-        </p>
+        <p className="px-4 pt-3 text-xs text-gray-600">Careful waits for you more, Normal is the default, Autonomous acts on less certainty. None of them lets Hermes send or confirm anything.</p>
         <HermesAutonomyForm initial={autonomy} />
         <div className="border-t border-gray-100 px-4 py-3 text-sm" data-testid="why-waited">
           <p className="font-medium text-gray-900">Why Hermes waited this week</p>

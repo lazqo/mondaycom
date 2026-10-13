@@ -289,6 +289,7 @@ test.describe("CCTV Business Brain", () => {
                 values ('new', ${name}, 'residential', 'good', 4, 'single', ${sql.json(comps as never)}, ${sql.json(evidence as never)}, 'Used in 4 of the last 5 similar quotes.', 0.8, 'crm:pattern')`;
     await login(page);
     await page.goto("/settings/brain");
+    await page.getByTestId("brain-more").click();
     await page.getByTestId("brain-packages-tab").click();
     await expect(page.getByRole("heading", { name: "Proposed packages", exact: true })).toBeVisible();
     const approve = page.getByTestId("package-candidate").filter({ hasText: `Approve me ${RUN}` });
@@ -313,6 +314,7 @@ test.describe("CCTV Business Brain", () => {
   test("Research: Chris can ask Hermes and review candidate Business Brain updates (nothing applied automatically)", async ({ page }) => {
     await login(page);
     await page.goto("/settings/brain");
+    await page.getByTestId("brain-more").click();
     await page.getByTestId("brain-research-tab").click();
     await expect(page.getByRole("heading", { name: "Research", exact: true })).toBeVisible();
     await expect(page.getByTestId("brain-candidates")).toContainText("Candidate Business Brain updates");

@@ -1042,13 +1042,18 @@ function MaterialsForm({ m, canApprove }: { m: MaterialsView; canApprove: boolea
 // ---------- page ----------
 
 const TABS = [
+  { key: "pricing", label: "Prices" },
+  { key: "products", label: "Products" },
+  { key: "suppliers", label: "Suppliers" },
   { key: "policies", label: "Rules" },
-  { key: "products", label: "Products & prices" },
-  { key: "suppliers", label: "Suppliers & routing" },
-  { key: "pricing", label: "Supplier pricing" },
-  { key: "kits", label: "Kits" },
-  { key: "packages", label: "Installation & materials" },
 ] as const;
+/** Touched rarely: under "More". */
+const MORE: { key: string; label: string; href: string; testId?: string }[] = [
+  { key: "kits", label: "Kits", href: "/settings/brain?tab=kits" },
+  { key: "packages", label: "Installation & materials", href: "/settings/brain?tab=packages" },
+  { key: "proposed", label: "Proposed packages", href: "/settings/brain/packages", testId: "brain-packages-tab" },
+  { key: "research", label: "Research", href: "/settings/brain/research", testId: "brain-research-tab" },
+];
 
 export function BrainSettings({
   tab,
@@ -1082,23 +1087,26 @@ export function BrainSettings({
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Business Brain</h1>
-        <p className="text-sm text-gray-600">
-          The rules, products, prices and installation packages the CCTV assessment uses. Every record shows where it came from. Only{" "}
-          {canApprove ? "you" : "Chris"} can mark anything Get Secure approved, and nothing here is filled in by AI.
-        </p>
+        <p className="text-sm text-gray-600">What the quotes are built from. Every record shows where it came from; only {canApprove ? "you" : "Chris"} can approve anything.</p>
       </div>
-      <div className="flex gap-1 border-b border-gray-200 text-sm">
+      <div className="flex items-center gap-1 border-b border-gray-200 text-sm">
         {TABS.map((t) => (
           <Link key={t.key} href={`/settings/brain?tab=${t.key}`} className={cn("-mb-px border-b-2 px-3 py-2", tab === t.key ? "border-brand-600 font-medium text-brand-700" : "border-transparent text-gray-600 hover:text-gray-900")}>
             {t.label}
           </Link>
         ))}
-        <Link href="/settings/brain/packages" className="-mb-px border-b-2 border-transparent px-3 py-2 text-gray-600 hover:text-gray-900" data-testid="brain-packages-tab">
-          Proposed packages
-        </Link>
-        <Link href="/settings/brain/research" className="-mb-px border-b-2 border-transparent px-3 py-2 text-gray-600 hover:text-gray-900" data-testid="brain-research-tab">
-          Research
-        </Link>
+        <details className="relative -mb-px ml-auto">
+          <summary className={cn("cursor-pointer list-none border-b-2 px-3 py-2", MORE.some((m) => m.key === tab) ? "border-brand-600 font-medium text-brand-700" : "border-transparent text-gray-600 hover:text-gray-900")} data-testid="brain-more">
+            More ▾
+          </summary>
+          <div className="absolute right-0 z-10 mt-1 w-56 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+            {MORE.map((m) => (
+              <Link key={m.key} href={m.href} className={cn("block px-3 py-1.5 hover:bg-gray-50", tab === m.key ? "font-medium text-brand-700" : "text-gray-700")} data-testid={m.testId}>
+                {m.label}
+              </Link>
+            ))}
+          </div>
+        </details>
       </div>
 
       {tab === "policies" ? (

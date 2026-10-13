@@ -523,6 +523,14 @@ guest "POA" pages never used, CAPTCHA / two-factor stops, credential-free failur
 matching only. The auto-approval switch and threshold from Run F apply to all four. Chris enters
 each trade login once under Suppliers & routing and presses Test connection.
 
+### Run H: a tidier interface
+*Delivered.* The sidebar carries one Settings entry; a Settings page lists the three pages touched
+often (Hermes, Business Brain, Next steps) and the five set up once. Business Brain opens on
+Prices and shows four tabs (Prices, Products, Suppliers, Rules) with Kits, Installation &
+materials, Proposed packages and Research under More. Each supplier card is one status line, its
+runs folded away, with the wording cut to what a person needs. The Hermes page is one status card
+and the dial. Nothing behind the screens changed.
+
 ### Order and dependencies
 A is independent and first. B needs A's booking/command actions. C needs nothing from B but is
 better after it (next steps show in the inbox row). D is small and can ride with C. F came from

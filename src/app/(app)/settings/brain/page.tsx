@@ -35,7 +35,7 @@ const num = (v: string | null) => (v != null ? Number(v) : null);
 
 export default async function BrainSettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const user = await requireAdmin();
-  const { tab = "policies" } = await searchParams;
+  const { tab = "pricing" } = await searchParams;
   await ensurePolicies();
   await applyReferenceCatalogue();
   await applyStarterContent().catch(() => {});

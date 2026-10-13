@@ -218,39 +218,24 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
     <Card data-testid="supplier-connector" data-connector={c.connector}>
       <CardHeader title={`${c.supplier} · trade login connector`} action={<Badge className={cls} data-testid="connector-status">{st}</Badge>} />
       <div className="space-y-4 p-4 text-sm">
-        {c.statusDetail ? <p className="text-gray-700">{c.statusDetail}</p> : null}
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2" data-testid="connector-facts">
-          <div className="flex gap-2">
-            <dt className="w-44 text-gray-500">Trade login</dt>
-            <dd>{c.hasLogin ? `Stored, encrypted${c.loginUpdatedAt ? ` (updated ${c.loginUpdatedAt})` : ""}` : "Not stored — add it under Suppliers & routing"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-44 text-gray-500">Prices shown by supplier</dt>
-            <dd>{c.priceBasisSeen ? `${c.priceBasisSeen} GST (seen on logged-in pages)` : "not seen yet"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-44 text-gray-500">Last successful login</dt>
-            <dd data-testid="last-login-ok">{c.lastLoginOkAt ?? "never"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-44 text-gray-500">Last failed login</dt>
-            <dd data-testid="last-login-failed">
-              {c.lastLoginFailedAt ?? "never"}
-              {c.lastLoginFailedAt && c.lastLoginFailure ? <span className="block text-red-700">{c.lastLoginFailure}</span> : null}
-            </dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-44 text-gray-500">Last successful price sync</dt>
-            <dd data-testid="last-sync-ok">{c.lastSyncOkAt ?? "never"}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-44 text-gray-500">Last failed price sync</dt>
-            <dd>
-              {c.lastSyncFailedAt ?? "never"}
-              {c.lastSyncFailedAt && c.lastSyncFailure ? <span className="block text-red-700">{c.lastSyncFailure}</span> : null}
-            </dd>
-          </div>
-        </dl>
+        <p className="text-xs text-gray-600" data-testid="connector-facts">
+          {c.hasLogin ? "Login stored" : "No login stored: add it under Suppliers"}
+          {" · last login "}
+          <span data-testid="last-login-ok">{c.lastLoginOkAt ?? "never"}</span>
+          {c.lastLoginFailedAt && (!c.lastLoginOkAt || c.lastLoginFailedAt > c.lastLoginOkAt) ? (
+            <span className="text-red-700" data-testid="last-login-failed">
+              {" "}
+              (failed {c.lastLoginFailedAt}{c.lastLoginFailure ? `: ${c.lastLoginFailure}` : ""})
+            </span>
+          ) : (
+            <span className="hidden" data-testid="last-login-failed">{c.lastLoginFailedAt ?? "never"}</span>
+          )}
+          {" · last price sync "}
+          <span data-testid="last-sync-ok">{c.lastSyncOkAt ?? "never"}</span>
+          {c.lastSyncFailedAt && (!c.lastSyncOkAt || c.lastSyncFailedAt > c.lastSyncOkAt) && c.lastSyncFailure ? <span className="text-red-700"> ({c.lastSyncFailure})</span> : null}
+          {c.priceBasisSeen ? ` · prices ${c.priceBasisSeen} GST` : ""}
+        </p>
+        {c.statusDetail && c.status !== "connected" ? <p className="text-sm text-red-700">{c.statusDetail}</p> : null}
 
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="secondary" disabled={pending || !c.hasLogin} onClick={() => go("test", () => testSupplierConnectionAction(c.supplierId))} data-testid="test-connection">
@@ -268,14 +253,13 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
           >
             {busy === "selected" ? "Refreshing…" : `Refresh selected (${selected.size})`}
           </Button>
-          <span className="text-xs text-gray-500">Logs in with the stored login. New or changed prices wait for {canApprove ? "your" : "Chris's"} approval; prepared quotes are never changed.</span>
         </div>
         <FormError message={error} />
         {result ? <RunResult supplierId={c.supplierId} result={result} canMap /> : null}
 
         <div>
-          <p className="mb-1 text-xs font-semibold text-gray-700">Products with an {c.supplier} listing</p>
-          {c.listings.length === 0 ? <p className="text-xs text-gray-500">None yet. Refresh a product below to find its {c.supplier} listing.</p> : null}
+          <p className="mb-1 text-xs font-semibold text-gray-700">Products priced at {c.supplier}</p>
+          {c.listings.length === 0 ? <p className="text-xs text-gray-500">None yet. Pick a product below to find its listing.</p> : null}
           {c.listings.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs" data-testid="connector-listings">
@@ -364,7 +348,7 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
-          <span className="text-xs text-gray-600">Find and price another product at {c.supplier}:</span>
+          <span className="text-xs text-gray-600">Price another product:</span>
           <Select value={pick} onChange={(e) => setPick(e.target.value)} className="h-8 w-80 text-xs" aria-label="Product to refresh">
             <option value="">Choose product…</option>
             {c.unlisted.map((p) => (
@@ -379,8 +363,10 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
         </div>
 
         {c.runs.length ? (
-          <div className="border-t border-gray-100 pt-3" data-testid="connector-runs">
-            <p className="mb-1 text-xs font-semibold text-gray-700">Recent runs</p>
+          <details className="border-t border-gray-100 pt-3" data-testid="connector-runs">
+            <summary className="cursor-pointer text-xs font-semibold text-gray-700">
+              Recent runs ({c.runs.length}) · last {last.startedAt} <span className={last.status === "failed" ? "text-red-700" : last.status === "partial" ? "text-amber-700" : "text-green-700"}>{last.status}</span>
+            </summary>
             {c.runs.map((r) => (
               <p key={r.id} className="text-xs text-gray-700">
                 {r.startedAt} · {r.kind === "test" ? "test connection" : r.kind === "catalogue" ? "priced catalogue" : r.kind === "selected" ? "selected products" : "one product"} ·{" "}
@@ -395,13 +381,13 @@ function ConnectorCard({ c, canApprove }: { c: ConnectorView; canApprove: boolea
                 {r.error ? <span className="block text-red-700">{r.error}</span> : null}
               </p>
             ))}
-            {!result && last && last.items.length ? (
+            {!result && last.items.length ? (
               <details className="mt-2">
                 <summary className="cursor-pointer text-xs text-gray-600">Results of the last run</summary>
                 <RunResult supplierId={c.supplierId} result={{ status: last.status, error: null, items: last.items }} canMap />
               </details>
             ) : null}
-          </div>
+          </details>
         ) : null}
       </div>
     </Card>
@@ -430,15 +416,12 @@ function PricingSettingsCard({ settings, canApprove }: { settings: SupplierPrici
     <Card>
       <CardHeader title="How supplier prices are approved" />
       <div className="space-y-3 px-4 pb-4 pt-3 text-sm">
-        <p className="text-xs text-gray-600">Applies to every connected supplier. A refresh never changes a quote already prepared.</p>
+        <p className="text-xs text-gray-600">For every connected supplier. A refresh never changes a quote already prepared.</p>
         <label className="flex items-start gap-2">
           <input type="checkbox" className="mt-1" checked={auto} disabled={!canApprove} onChange={(e) => setAuto(e.target.checked)} data-testid="supplier-auto-approve" />
           <span>
             <span className="font-medium text-gray-900">Approve logged-in supplier prices automatically</span>
-            <span className="block text-xs text-gray-600">
-              A price read while logged in to a connected supplier, for a product already matched there, becomes the approved trade cost at once. The first price ever seen for a product,
-              a change bigger than the threshold, and any public or retail price still wait for {canApprove ? "you" : "Chris"}.
-            </span>
+            <span className="block text-xs text-gray-600">For products already matched and priced. A first price, a jump over the threshold, or any retail price still waits for {canApprove ? "you" : "Chris"}.</span>
           </span>
         </label>
         <label className="flex flex-wrap items-center gap-2 text-xs text-gray-700">
@@ -447,7 +430,7 @@ function PricingSettingsCard({ settings, canApprove }: { settings: SupplierPrici
           % for review
         </label>
         <label className="block text-xs text-gray-700">
-          Retailers Get Secure buys from when no supplier stocks an item (one per line). Research may quote their retail price as a retail price, never as a trade cost.
+          Retailers you buy from when no supplier stocks an item (one per line). Research quotes their price as retail, never as cost.
           <textarea className="mt-1 w-full rounded-md border border-gray-300 px-2 py-1 font-mono text-xs" rows={4} value={retailers} disabled={!canApprove} onChange={(e) => setRetailers(e.target.value)} aria-label="Retailers" data-testid="supplier-retailers" />
         </label>
         {canApprove ? (
@@ -469,11 +452,7 @@ function PricingSettingsCard({ settings, canApprove }: { settings: SupplierPrici
 export function SupplierPricing({ connectors, canApprove, settings }: { connectors: ConnectorView[]; canApprove: boolean; settings: SupplierPricingSettings }) {
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gray-600">
-        Trade prices read from suppliers&apos; logged-in websites using the encrypted login stored under Suppliers &amp; routing. The login, passwords and session cookies are
-        never shown here, logged, or given to any agent. Only the price on a logged-in product page is used as cost — never a public or RRP price — and anything the connector
-        can&apos;t read with confidence is reported, not recorded. Prices are stored ex GST.
-      </p>
+      <p className="text-xs text-gray-600">Trade prices read from each supplier&apos;s logged-in website with the login stored under Suppliers. Public and RRP prices are never used; anything unclear is reported, not recorded.</p>
       <PricingSettingsCard settings={settings} canApprove={canApprove} />
       {connectors.length === 0 ? <p className="text-sm text-gray-500">No supplier has an automated connector yet.</p> : null}
       {connectors.map((c) => (

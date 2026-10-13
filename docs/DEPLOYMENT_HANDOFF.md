@@ -718,7 +718,7 @@ CAPTCHA, two-factor and challenge pages stop the run; failure reasons are fixed 
 carries the username, password or a cookie. Matching: an exact model/SKU match on the listing's
 code, its model field, or the model written as one word of its name (SWL's own codes are stock
 numbers, so its listings match on the name); anything closer than that is offered for Chris to
-choose. Everything is run from **Settings → Business Brain → Supplier pricing**, one card per
+choose. Everything is run from **Settings → Business Brain → Prices**, one card per
 supplier:
 
 - **Test connection** — logs in and checks one mapped product page shows a price. Records nothing.
@@ -740,7 +740,7 @@ sharing a login; nothing from the account header or a form is in it. A wrong lis
 undone with **Change listing** on the product's row: the next refresh searches again and offers
 the choices (the old cost stays in history, no longer approved).
 
-**How prices are approved (Run F).** The top of the Supplier pricing tab is Chris's choice for
+**How prices are approved (Run F).** The top of the Prices tab is Chris's choice for
 every connected supplier. With "Approve logged-in supplier prices automatically" on, a price read
 while logged in, for a product already matched and priced at that supplier, becomes the approved
 trade cost at once when the change is within the threshold ("Hold a change bigger than N% for
